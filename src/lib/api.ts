@@ -1,5 +1,6 @@
 import type { AuthResult, Item, ItemList, MediaSegment, MediaSource, PlaybackInfo, PublicInfo, PublicUser } from "./types"
-import { getDeviceId, getServer, getToken, loadPrefs } from "./storage"
+import { jellyfinFetchUrl, mediaUrl, playbackUrl } from "./media"
+import { getDeviceId, getToken, loadPrefs } from "./storage"
 
 export class ApiError extends Error {
   status: number
@@ -50,7 +51,7 @@ export async function jf<T>(path: string, init?: RequestInit): Promise<T> {
 
   let response: Response
   try {
-    response = await fetch(`/jf${path}`, {
+    response = await fetch(jellyfinFetchUrl(path), {
       ...init,
       headers,
       cache: "no-store",
@@ -271,7 +272,7 @@ export function audioUrl(itemId: string) {
   const params = new URLSearchParams({ audioCodec: "aac", maxStreamingBitrate: "192000" })
   const token = getToken()
   if (token) params.set("api_key", token)
-  return `/jf/Audio/${itemId}/stream.aac?${params}`
+  return mediaUrl(`/Audio/${itemId}/stream.aac?${params}`)
 }
 
 export function channels(userId: string) {
@@ -424,25 +425,6 @@ function directContainer(source: MediaSource) {
   return ["mp4", "m4v", "mov", "webm", "mp3", "aac", "m4a", "flac", "ogg", "oga"].includes((source.Container || "").toLowerCase())
 }
 
-function withApiKey(url: string) {
-  const token = getToken()
-  if (!token || /[?&]api_key=/.test(url)) return url
-  return `${url}${url.includes("?") ? "&" : "?"}api_key=${encodeURIComponent(token)}`
-}
-
-function proxyUrl(url: string) {
-  if (url.startsWith("/")) return withApiKey(`/jf${url}`)
-  const server = getServer()
-  try {
-    const parsed = new URL(url)
-    const origin = new URL(server)
-    if (parsed.host === origin.host) return withApiKey(`/jf${parsed.pathname}${parsed.search}`)
-  } catch {
-    /* relative enough already */
-  }
-  return withApiKey(url)
-}
-
 export interface SubtitleChoice {
   index: number
   label: string
@@ -472,8 +454,8 @@ function subtitleChoices(itemId: string, source: MediaSource): SubtitleChoice[] 
     .map((stream) => {
       const label = stream.DisplayTitle || stream.Language || stream.Title || `Subtitle ${stream.Index ?? ""}`
       if (stream.IsTextSubtitleStream && stream.Index != null) {
-        const delivery = stream.DeliveryUrl ? proxyUrl(stream.DeliveryUrl) : undefined
-        const built = withApiKey(`/jf/Videos/${itemId}/${source.Id}/Subtitles/${stream.Index}/Stream.vtt`)
+        const delivery = stream.DeliveryUrl ? playbackUrl(stream.DeliveryUrl) : undefined
+        const built = mediaUrl(`/Videos/${itemId}/${source.Id}/Subtitles/${stream.Index}/Stream.vtt`)
         return { index: stream.Index, label, src: delivery || built, burn: false }
       }
       return { index: stream.Index ?? 0, label, burn: true }
@@ -517,8 +499,8 @@ export async function openPlayback(options: {
     const hasVideo = Boolean(streamByType(source, "Video"))
     if (friendly && source.SupportsDirectPlay !== false && directContainer(source)) {
       const kind = hasVideo ? "Videos" : "Audio"
-      const url = withApiKey(
-        `/jf/${kind}/${options.itemId}/stream?Static=true&MediaSourceId=${encodeURIComponent(source.Id)}`,
+      const url = mediaUrl(
+        `/${kind}/${options.itemId}/stream?Static=true&MediaSourceId=${encodeURIComponent(source.Id)}`,
       )
       return {
         playSessionId: probe.PlaySessionId,
@@ -540,7 +522,7 @@ export async function openPlayback(options: {
       return {
         playSessionId: probe.PlaySessionId,
         mediaSourceId: source.Id,
-        url: withApiKey(`/jf/Videos/${options.itemId}/stream.mp4?${params}`),
+        url: mediaUrl(`/Videos/${options.itemId}/stream.mp4?${params}`),
         mode: "remux",
         offsetTicks: options.startTicks,
         subtitles: subtitleChoices(options.itemId, source),
@@ -563,7 +545,7 @@ export async function openPlayback(options: {
   return {
     playSessionId: live.PlaySessionId,
     mediaSourceId: source.Id,
-    url: proxyUrl(source.TranscodingUrl),
+    url: playbackUrl(source.TranscodingUrl),
     mode: "hls",
     offsetTicks: options.startTicks,
     subtitles: subtitleChoices(options.itemId, source),

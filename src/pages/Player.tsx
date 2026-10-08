@@ -6,7 +6,7 @@ import { ChevronIcon, PauseIcon, PlayIcon, VolumeIcon } from "../components/Icon
 import * as api from "../lib/api"
 import type { PlaybackPlan } from "../lib/api"
 import { episodeCode, formatClock, secondsToTicks, ticksToSeconds } from "../lib/format"
-import { isBackKey, moveFocus } from "../lib/remote"
+import { isBackKey, moveFocus, remoteKey } from "../lib/remote"
 import { backdropSrc, primarySrc, trickplayUrl } from "../lib/images"
 import { pickTrickplay, segmentAt, segmentEnd, segmentKey, segmentLabel } from "../lib/segments"
 import type { Chapter, Item, MediaSegment, SegmentType, TrickplayInfo } from "../lib/types"
@@ -470,30 +470,31 @@ export function PlayerPage() {
   }
 
   function onKey(event: KeyboardEvent) {
+    const key = remoteKey(event)
     const target = event.target as HTMLElement
     if (target.matches("input, select, textarea") && !isBackKey(event)) return
     const onControl = Boolean(target.closest("button, a"))
-    if (onControl && event.key.startsWith("Arrow")) {
+    if (onControl && key.startsWith("Arrow")) {
       event.preventDefault()
       event.stopPropagation()
-      moveFocus(event.key)
+      moveFocus(key)
       return
     }
-    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+    if (key === "ArrowUp" || key === "ArrowDown") {
       event.preventDefault()
       document.querySelector<HTMLElement>(".controls button")?.focus()
       return
     }
-    if (event.key === " " || event.key === "k" || (event.key === "Enter" && !onControl)) {
+    if (key === " " || key === "k" || (key === "Enter" && !onControl)) {
       event.preventDefault()
       toggle()
-    } else if (event.key === "ArrowRight") {
+    } else if (key === "ArrowRight") {
       event.preventDefault()
       seekTo(positionRef.current + prefs.skipForward)
-    } else if (event.key === "ArrowLeft") {
+    } else if (key === "ArrowLeft") {
       event.preventDefault()
       seekTo(Math.max(0, positionRef.current - prefs.skipBack))
-    } else if (event.key === "f") {
+    } else if (key === "f") {
       event.preventDefault()
       void toggleFullscreen()
     } else if (event.key === "m") {
@@ -671,7 +672,8 @@ export function PlayerPage() {
                   seekTo(value)
                 }}
                 onKeyUp={(event) => {
-                  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
+                  const key = remoteKey(event)
+                  if (key !== "ArrowLeft" && key !== "ArrowRight") return
                   const value = Number((event.target as HTMLInputElement).value)
                   setScrub(null)
                   seekTo(value)

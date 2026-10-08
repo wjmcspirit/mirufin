@@ -1,3 +1,4 @@
+import { mediaUrl } from "./media"
 import { getToken } from "./storage"
 import type { Item } from "./types"
 
@@ -17,13 +18,13 @@ export function imageUrl(
   if (options?.maxWidth) params.set("maxWidth", String(options.maxWidth))
   if (options?.maxHeight) params.set("maxHeight", String(options.maxHeight))
   if (options?.tag) params.set("tag", options.tag)
-  return `/jf/Items/${itemId}/Images/${imageType}?${withKey(params)}`
+  return mediaUrl(`/Items/${itemId}/Images/${imageType}?${withKey(params)}`)
 }
 
 export function userImageUrl(userId: string, tag?: string) {
   const params = new URLSearchParams({ quality: "90", maxWidth: "160" })
   if (tag) params.set("tag", tag)
-  return `/jf/Users/${userId}/Images/Primary?${withKey(params)}`
+  return mediaUrl(`/Users/${userId}/Images/Primary?${withKey(params)}`)
 }
 
 export function primarySrc(item: Item, maxWidth = 400) {
@@ -78,5 +79,5 @@ export function logoSrc(item: Item) {
 export function trickplayUrl(itemId: string, width: number, index: number, mediaSourceId?: string) {
   const params = new URLSearchParams()
   if (mediaSourceId) params.set("mediaSourceId", mediaSourceId)
-  return `/jf/Videos/${itemId}/Trickplay/${width}/${index}.jpg?${withKey(params)}`
+  return mediaUrl(`/Videos/${itemId}/Trickplay/${width}/${index}.jpg?${withKey(params)}`)
 }

@@ -1,7 +1,22 @@
 const FOCUSABLE = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])"
 
+const DPAD: Record<number, string> = {
+  19: "ArrowUp",
+  20: "ArrowDown",
+  21: "ArrowLeft",
+  22: "ArrowRight",
+  23: "Enter",
+  66: "Enter",
+}
+
+export function remoteKey(event: { key: string; keyCode?: number }) {
+  if (event.key && event.key !== "Unidentified") return event.key
+  return DPAD[event.keyCode ?? -1] || event.key
+}
+
 export function isBackKey(event: { key: string; keyCode?: number }) {
-  return event.key === "Escape" || event.key === "BrowserBack" || event.key === "GoBack" || event.key === "Back" || event.keyCode === 461 || event.keyCode === 10009
+  const key = remoteKey(event)
+  return key === "Escape" || key === "BrowserBack" || key === "GoBack" || key === "Back" || event.keyCode === 4 || event.keyCode === 461 || event.keyCode === 10009
 }
 
 function visible(node: HTMLElement) {

@@ -2,3 +2,7 @@ node_modules
 dist
 *.local
 .DS_Store
+android/keystore.properties
+android/*.jks
+android/app/release
+*.apk

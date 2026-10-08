@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Mirufin</string>
+    <string name="title_activity_main">Mirufin</string>
+    <string name="package_name">app.mirufin.tv</string>
+    <string name="custom_url_scheme">app.mirufin.tv</string>
+</resources>

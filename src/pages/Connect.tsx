@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react"
 import { useNavigate } from "react-router-dom"
 import { discoverServers, type FoundServer } from "../lib/discover"
+import { useLocalProxy } from "../lib/media"
 import { useSession } from "../session"
 
 const DEFAULT_SERVER = "http://127.0.0.1:8096"
@@ -8,7 +9,7 @@ const DEFAULT_SERVER = "http://127.0.0.1:8096"
 export function ConnectPage() {
   const { connect } = useSession()
   const navigate = useNavigate()
-  const [address, setAddress] = useState(DEFAULT_SERVER)
+  const [address, setAddress] = useState(useLocalProxy() ? DEFAULT_SERVER : "")
   const [servers, setServers] = useState<FoundServer[]>([])
   const [scanning, setScanning] = useState(true)
   const [error, setError] = useState("")
@@ -87,7 +88,8 @@ export function ConnectPage() {
           <input
             value={address}
             onChange={(event) => setAddress(event.target.value)}
-            placeholder={DEFAULT_SERVER}
+            placeholder={useLocalProxy() ? DEFAULT_SERVER : "http://192.168.0.10:8096"}
+            autoFocus={!useLocalProxy()}
             autoCapitalize="off"
             autoCorrect="off"
             spellCheck={false}
