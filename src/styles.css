@@ -750,6 +750,21 @@ select {
 .search-group { margin-top: 12px; }
 .search-group h2 { margin-bottom: 12px; }
 
+.update-pop {
+  position: fixed;
+  z-index: 80;
+  right: 28px;
+  bottom: 28px;
+  width: min(440px, calc(100vw - 56px));
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+  border-radius: 18px;
+  background: #121318;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+.update-pop h2 { font-size: 28px; }
 .settings { max-width: 720px; display: grid; gap: 18px; }
 .setting {
   padding: 20px;

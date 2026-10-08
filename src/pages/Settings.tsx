@@ -1,7 +1,8 @@
+import { Capacitor } from "@capacitor/core"
 import { useEffect, useState } from "react"
 import * as api from "../lib/api"
 import type { SegmentType, SkipMode } from "../lib/types"
-import { APP_VERSION, isNewerVersion, latestRelease, releaseDownload } from "../lib/version"
+import { APP_VERSION, installRelease, isNewerVersion, latestRelease } from "../lib/version"
 import { usePrefs, useSession } from "../session"
 
 const SEGMENTS: { id: SegmentType; label: string }[] = [
@@ -30,6 +31,7 @@ export function SettingsPage() {
   const { prefs, setPrefs } = usePrefs()
   const [message, setMessage] = useState("")
   const [available, setAvailable] = useState("")
+  const [updating, setUpdating] = useState("")
 
   useEffect(() => {
     let cancel = false
@@ -60,11 +62,24 @@ export function SettingsPage() {
           <p className="eyebrow">Beta</p>
           <h1>Settings</h1>
           <p className="hint">This is a beta version of Mirufin. Version {APP_VERSION}.</p>
-          {available && (
-            <p className="hint">
-              Version {available} is ready. In Downloader, open <span className="mono">{releaseDownload(available)}</span>
-            </p>
+          {available && Capacitor.isNativePlatform() && (
+            <div className="actions">
+              <button
+                className="btn btn-primary"
+                type="button"
+                disabled={Boolean(updating)}
+                onClick={() => {
+                  setUpdating("Downloading…")
+                  void installRelease(available, (percent) => setUpdating(percent > 0 ? `Downloading ${percent}%` : "Downloading…"))
+                    .then(() => setUpdating(""))
+                    .catch((caught) => setUpdating(caught instanceof Error ? caught.message : "The update could not be installed."))
+                }}
+              >
+                {updating || `Install version ${available}`}
+              </button>
+            </div>
           )}
+          {available && !Capacitor.isNativePlatform() && <p className="hint">Version {available} is ready on the TV.</p>}
         </div>
       </header>
       <section className="setting">

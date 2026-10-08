@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react"
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom"
 import { RemoteNav } from "./components/RemoteNav"
 import { Shell } from "./components/Shell"
+import { UpdatePrompt } from "./components/UpdatePrompt"
 import * as api from "./lib/api"
 import { discoverServers } from "./lib/discover"
 import { normalizeServer } from "./lib/storage"
@@ -27,6 +28,7 @@ export function App() {
   return (
     <>
       <RemoteNav />
+      <UpdatePrompt />
       <ServerDiscovery />
       <Routes>
       <Route path="/connect" element={<ConnectPage />} />

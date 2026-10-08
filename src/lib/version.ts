@@ -1,4 +1,6 @@
-export const APP_VERSION = "0.1.3"
+import { Capacitor, registerPlugin } from "@capacitor/core"
+
+export const APP_VERSION = "0.1.4"
 
 const REPO = "wjmcspirit/mirufin"
 
@@ -25,6 +27,27 @@ export function isNewerVersion(latest: string, current = APP_VERSION) {
 export function releaseDownload(version: string) {
   const tag = version.startsWith("v") ? version : `v${version}`
   return `https://github.com/${REPO}/releases/download/${tag}/mirufin.apk`
+}
+
+interface UpdateProgress {
+  percent: number
+}
+
+interface UpdaterPlugin {
+  install(options: { url: string }): Promise<void>
+  addListener(event: "progress", listener: (event: UpdateProgress) => void): Promise<{ remove: () => Promise<void> }>
+}
+
+const Updater = registerPlugin<UpdaterPlugin>("Updater")
+
+export async function installRelease(version: string, onProgress?: (percent: number) => void) {
+  if (!Capacitor.isNativePlatform()) throw new Error("Updates install from the TV app.")
+  const listener = await Updater.addListener("progress", (event) => onProgress?.(event.percent))
+  try {
+    await Updater.install({ url: releaseDownload(version) })
+  } finally {
+    await listener.remove()
+  }
 }
 
 export async function latestRelease() {
