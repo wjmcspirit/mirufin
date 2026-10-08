@@ -10,15 +10,24 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(DiscoveryPlugin.class);
         super.onCreate(savedInstanceState);
+        prepareWebView();
     }
 
     @Override
     public void onResume() {
         super.onResume();
+        prepareWebView();
+    }
+
+    private void prepareWebView() {
         if (getBridge() == null || getBridge().getWebView() == null) return;
         WebSettings settings = getBridge().getWebView().getSettings();
-        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        settings.setUseWideViewPort(true);
+        settings.setLoadWithOverviewMode(false);
+        settings.setTextZoom(100);
+        settings.setSupportZoom(false);
         settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         getBridge().getWebView().setFocusable(true);
         getBridge().getWebView().setFocusableInTouchMode(true);
         getBridge().getWebView().requestFocus();

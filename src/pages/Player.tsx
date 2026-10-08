@@ -1,3 +1,4 @@
+import { Capacitor } from "@capacitor/core"
 import Hls from "hls.js"
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react"
 import { useNavigate, useParams, useSearchParams } from "react-router-dom"
@@ -243,7 +244,7 @@ export function PlayerPage() {
       if (hlsSource && video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = nextPlan.url
       } else if (hlsSource && Hls.isSupported()) {
-        hls = new Hls({ enableWorker: true, backBufferLength: 30 })
+        hls = new Hls({ enableWorker: !Capacitor.isNativePlatform(), backBufferLength: 30 })
         hls.on(Hls.Events.ERROR, (_event, data) => {
           if (!data.fatal || cancel) return
           setError("The transcoded stream stopped. Try playback again.")

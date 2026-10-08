@@ -16,7 +16,7 @@ export function MediaImage({ src, alt, className }: { src: string | null; alt: s
       </div>
     )
   }
-  return <img src={src} alt={alt} className={className} loading="lazy" draggable={false} onError={() => setFailed(true)} />
+  return <img src={src} alt={alt} className={className} draggable={false} onError={() => setFailed(true)} />
 }
 
 export function PosterCard({ item, layout, href, remaining = false }: { item: Item; layout: "poster" | "wide"; href: string; remaining?: boolean }) {
