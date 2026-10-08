@@ -1,6 +1,7 @@
 import type { AuthResult, Item, ItemList, MediaSegment, MediaSource, PlaybackInfo, PublicInfo, PublicUser } from "./types"
 import { jellyfinFetchUrl, mediaUrl, playbackUrl } from "./media"
 import { getDeviceId, getToken, loadPrefs } from "./storage"
+import { APP_VERSION } from "./version"
 
 export class ApiError extends Error {
   status: number
@@ -24,7 +25,7 @@ export function authHeader() {
     'Client="Mirufin"',
     'Device="Mirufin"',
     `DeviceId="${getDeviceId()}"`,
-    'Version="0.1.0"',
+    `Version="${APP_VERSION}"`,
   ]
   if (token) parts.push(`Token="${token}"`)
   return `MediaBrowser ${parts.join(", ")}`

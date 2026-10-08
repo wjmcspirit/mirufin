@@ -1,6 +1,7 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import * as api from "../lib/api"
 import type { SegmentType, SkipMode } from "../lib/types"
+import { APP_VERSION, isNewerVersion, latestRelease, releaseDownload } from "../lib/version"
 import { usePrefs, useSession } from "../session"
 
 const SEGMENTS: { id: SegmentType; label: string }[] = [
@@ -28,6 +29,19 @@ export function SettingsPage() {
   const { serverUrl, serverName, serverVersion, userName, logout, disconnect } = useSession()
   const { prefs, setPrefs } = usePrefs()
   const [message, setMessage] = useState("")
+  const [available, setAvailable] = useState("")
+
+  useEffect(() => {
+    let cancel = false
+    latestRelease()
+      .then((tag) => {
+        if (!cancel && tag && isNewerVersion(tag)) setAvailable(tag.replace(/^v/i, ""))
+      })
+      .catch(() => {})
+    return () => {
+      cancel = true
+    }
+  }, [])
 
   async function testConnection() {
     setMessage("")
@@ -45,7 +59,12 @@ export function SettingsPage() {
         <div>
           <p className="eyebrow">Beta</p>
           <h1>Settings</h1>
-          <p className="hint">This is a beta version of Mirufin.</p>
+          <p className="hint">This is a beta version of Mirufin. Version {APP_VERSION}.</p>
+          {available && (
+            <p className="hint">
+              Version {available} is ready. In Downloader, open <span className="mono">{releaseDownload(available)}</span>
+            </p>
+          )}
         </div>
       </header>
       <section className="setting">
