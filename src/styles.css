@@ -33,9 +33,24 @@ a { color: inherit; text-decoration: none; }
 img { max-width: 100%; display: block; }
 ::selection { background: rgba(62, 200, 255, 0.35); }
 
-:focus-visible, html.remote :focus {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
+:focus {
+  outline: none;
+}
+.nav:focus {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+.card:focus .card-art img,
+.card:focus-visible .card-art img {
+  transform: scale(1.04);
+}
+.card:focus .play-fab,
+.card:focus-visible .play-fab {
+  opacity: 1;
+  transform: translate(-50%, -50%);
+}
+.btn:focus {
+  filter: brightness(1.12);
 }
 
 h1, h2, h3 {

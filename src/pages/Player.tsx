@@ -7,7 +7,7 @@ import { ChevronIcon, PauseIcon, PlayIcon, VolumeIcon } from "../components/Icon
 import * as api from "../lib/api"
 import type { PlaybackPlan } from "../lib/api"
 import { episodeCode, formatClock, secondsToTicks, ticksToSeconds } from "../lib/format"
-import { isBackKey, moveFocus, remoteKey } from "../lib/remote"
+import { isBackKey, remoteKey } from "../lib/remote"
 import { backdropSrc, primarySrc, trickplayUrl } from "../lib/images"
 import { pickTrickplay, segmentAt, segmentEnd, segmentKey, segmentLabel } from "../lib/segments"
 import type { Chapter, Item, MediaSegment, SegmentType, TrickplayInfo } from "../lib/types"
@@ -419,14 +419,21 @@ export function PlayerPage() {
     const video = videoRef.current
     if (!video || !request) return
     touchUser()
+    wake()
     setEnded(false)
-    const ticks = secondsToTicks(Math.max(0, seconds))
+    const next = Math.max(0, seconds)
+    if (Number.isFinite(video.duration) && video.duration > 0) {
+      video.currentTime = Math.min(next, video.duration)
+      setPosition(video.currentTime)
+      return
+    }
+    const ticks = secondsToTicks(next)
     if (plan?.mode === "hls") {
       setRequest({ ...request, startTicks: ticks, forceTranscode: true, nonce: request.nonce + 1 })
       return
     }
-    video.currentTime = seconds
-    setPosition(seconds)
+    video.currentTime = next
+    setPosition(next)
   }
 
   function chooseSubtitle(index: number | null, burn: boolean) {
@@ -473,28 +480,38 @@ export function PlayerPage() {
   function onKey(event: KeyboardEvent) {
     const key = remoteKey(event)
     const target = event.target as HTMLElement
-    if (target.matches("input, select, textarea") && !isBackKey(event)) return
-    const onControl = Boolean(target.closest("button, a"))
-    if (onControl && key.startsWith("Arrow")) {
+    if (target.matches("input, select, textarea") && key !== "ArrowUp" && key !== "ArrowDown" && !isBackKey(event)) return
+    const control = target.closest<HTMLElement>("button, a, input")
+    const onControl = Boolean(control && control.closest(".chrome, .next-up, .pop-menu, .skip-prompt, .center-play"))
+    if ((key === "ArrowLeft" || key === "ArrowRight") && onControl && control) {
       event.preventDefault()
       event.stopPropagation()
-      moveFocus(key)
+      const controls = [...document.querySelectorAll<HTMLElement>(".chrome button, .chrome input, .next-up button, .pop-menu button")].filter((item) => item.getClientRects().length > 0)
+      const index = controls.indexOf(control)
+      const next = controls[index + (key === "ArrowRight" ? 1 : -1)]
+      next?.focus()
       return
     }
-    if (key === "ArrowUp" || key === "ArrowDown") {
+    if (key === "ArrowUp") {
       event.preventDefault()
-      document.querySelector<HTMLElement>(".controls button")?.focus()
+      wake()
+      if (!onControl) document.querySelector<HTMLElement>(".seek-row input")?.focus()
+      return
+    }
+    if (key === "ArrowDown" && onControl) {
+      event.preventDefault()
+      rootRef.current?.focus()
+      setChrome(false)
       return
     }
     if (key === " " || key === "k" || (key === "Enter" && !onControl)) {
       event.preventDefault()
       toggle()
-    } else if (key === "ArrowRight") {
+    } else if (key === "ArrowRight" || key === "ArrowLeft") {
       event.preventDefault()
-      seekTo(positionRef.current + prefs.skipForward)
-    } else if (key === "ArrowLeft") {
-      event.preventDefault()
-      seekTo(Math.max(0, positionRef.current - prefs.skipBack))
+      wake()
+      const step = key === "ArrowRight" ? 10 : -10
+      seekTo(Math.max(0, positionRef.current + step))
     } else if (key === "f") {
       event.preventDefault()
       void toggleFullscreen()
