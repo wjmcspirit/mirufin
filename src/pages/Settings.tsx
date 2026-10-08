@@ -43,8 +43,9 @@ export function SettingsPage() {
     <div className="settings">
       <header className="page-head">
         <div>
-          <p className="eyebrow">Mirufin</p>
+          <p className="eyebrow">Beta</p>
           <h1>Settings</h1>
+          <p className="hint">This is a beta version of Mirufin.</p>
         </div>
       </header>
       <section className="setting">

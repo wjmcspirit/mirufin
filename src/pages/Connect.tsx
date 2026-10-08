@@ -23,7 +23,7 @@ export function ConnectPage() {
       .then(async (found) => {
         if (cancel) return
         setServers(found)
-        if (found.length !== 1) return
+        if (found.length !== 1 || !useLocalProxy()) return
         setPending(true)
         try {
           await connectRef.current(found[0].address)
@@ -41,6 +41,11 @@ export function ConnectPage() {
       cancel = true
     }
   }, [navigate])
+
+  useEffect(() => {
+    if (scanning || useLocalProxy() || servers.length === 0) return
+    document.querySelector<HTMLElement>(".server-choice")?.focus()
+  }, [scanning, servers])
 
   async function useServer(nextAddress: string) {
     setPending(true)
@@ -89,7 +94,6 @@ export function ConnectPage() {
             value={address}
             onChange={(event) => setAddress(event.target.value)}
             placeholder={useLocalProxy() ? DEFAULT_SERVER : "http://192.168.0.10:8096"}
-            autoFocus={!useLocalProxy()}
             autoCapitalize="off"
             autoCorrect="off"
             spellCheck={false}

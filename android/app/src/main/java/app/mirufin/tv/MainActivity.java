@@ -1,10 +1,17 @@
 package app.mirufin.tv;
 
+import android.os.Bundle;
 import android.webkit.WebSettings;
 
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(DiscoveryPlugin.class);
+        super.onCreate(savedInstanceState);
+    }
+
     @Override
     public void onResume() {
         super.onResume();
