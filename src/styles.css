@@ -25,7 +25,7 @@
 }
 
 * { box-sizing: border-box; }
-html, body, #root { min-height: 100%; }
+html, body, #root { height: var(--app-height, 100%); min-height: var(--app-height, 100%); }
 html { scrollbar-width: none; }
 html::-webkit-scrollbar,
 body::-webkit-scrollbar { display: none; width: 0; height: 0; }
@@ -380,8 +380,8 @@ h1, h2, h3 {
 .shell {
   display: grid;
   grid-template-columns: 232px minmax(0, 1fr);
-  height: 100vh;
-  height: 100dvh;
+  height: var(--app-height, 100dvh);
+  max-height: var(--app-height, 100dvh);
   min-height: 0;
   overflow: hidden;
   isolation: isolate;
@@ -1128,7 +1128,7 @@ h1, h2, h3 {
 .letter-rail {
   position: sticky;
   top: 12px;
-  height: calc(100vh - 28px);
+  height: calc(var(--app-height, 100dvh) - 28px);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -1701,7 +1701,7 @@ input[type="range"]::-webkit-slider-thumb {
 .mode-pill { margin-left: auto; }
 
 @media (max-width: 860px) {
-  .shell { grid-template-columns: 1fr; height: auto; min-height: 100vh; overflow: visible; }
+  .shell { grid-template-columns: 1fr; height: auto; max-height: none; min-height: 100vh; overflow: visible; }
   .side {
     position: sticky;
     top: 0;

@@ -9,12 +9,14 @@ import "./styles.css"
 function fitTelevision() {
   if (!Capacitor.isNativePlatform()) return
   const apply = () => {
-    const width = window.innerWidth
-    const zoom = width > 0 && width < 1500 ? width / 1500 : 1
-    document.documentElement.style.zoom = zoom < 0.99 ? String(zoom) : ""
+    document.documentElement.style.zoom = ""
+    const height = window.innerHeight
+    if (height > 0) document.documentElement.style.setProperty("--app-height", `${height}px`)
   }
   apply()
   window.addEventListener("resize", apply)
+  window.setTimeout(apply, 250)
+  window.setTimeout(apply, 1000)
 }
 
 fitTelevision()
