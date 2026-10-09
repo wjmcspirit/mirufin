@@ -28,6 +28,15 @@ export function HeartIcon(props: IconProps) {
   )
 }
 
+export function CalendarIcon(props: IconProps) {
+  return (
+    <Base {...props}>
+      <rect x="4" y="5" width="16" height="15" rx="2" />
+      <path d="M4 10h16M8 3.5v3M16 3.5v3" />
+    </Base>
+  )
+}
+
 export function SearchIcon(props: IconProps) {
   return (
     <Base {...props}>

@@ -33,6 +33,7 @@ export function HomePage() {
   const [nextItems, setNextItems] = useState<Item[]>([])
   const [upcomingItems, setUpcomingItems] = useState<Item[]>([])
   const [airedItems, setAiredItems] = useState<Item[]>([])
+  const [soonItems, setSoonItems] = useState<Item[]>([])
   const [rows, setRows] = useState<LatestRow[]>([])
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
   const [error, setError] = useState("")
@@ -41,11 +42,12 @@ export function HomePage() {
     setStatus("loading")
     const run = async () => {
       const library = await api.views(userId)
-      const [resumeList, nextList, playedList, airedList, latestRows] = await Promise.all([
+      const [resumeList, nextList, playedList, airedList, soonList, latestRows] = await Promise.all([
         settle(api.resume(userId), { Items: [] }),
         settle(api.nextUp(userId), { Items: [] }),
         settle(api.playedEpisodes(userId), { Items: [] }),
         settle(api.airedRecently(userId), { Items: [] }),
+        settle(api.upcomingPremieres(userId, { startOffset: 1, days: 14, limit: 18 }), { Items: [] }),
         Promise.all(
           (library.Items || []).map(async (view) => ({
             view,
@@ -59,6 +61,7 @@ export function HomePage() {
       setNextItems(nextList.Items || [])
       setUpcomingItems(following)
       setAiredItems(airedList.Items || [])
+      setSoonItems(soonList.Items || [])
       setRows(latestRows)
       setStatus("ready")
     }
@@ -143,6 +146,15 @@ export function HomePage() {
             <Row key={section.id} className={`size-${section.size}`} title="Next up">
               {upcomingItems.map((item) => (
                 <PosterCard key={item.Id} item={item} layout={layout} href={`/play/${item.Id}?resume=0`} />
+              ))}
+            </Row>
+          )
+        }
+        if (section.id === "soon" && soonItems.length > 0) {
+          return (
+            <Row key={section.id} className={`size-${section.size}`} title="Coming up">
+              {soonItems.map((item) => (
+                <PosterCard key={item.Id} item={item} layout={layout} href={`/item/${item.Id}`} />
               ))}
             </Row>
           )

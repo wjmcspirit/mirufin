@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { useParams, useSearchParams } from "react-router-dom"
 import { PosterCard } from "../components/Cards"
 import { Hero } from "../components/Hero"
+import { Row } from "../components/Row"
 import { FilterIcon, SortIcon, ViewIcon } from "../components/Icons"
 import { Loading, Problem } from "../components/Status"
 import { usePinnedArt, useStage } from "../components/Stage"
@@ -52,6 +53,8 @@ export function LibraryPage() {
   const [upcoming, setUpcoming] = useState<Item[]>([])
   const [addedInfo, setAddedInfo] = useState<Record<string, { note: string; episodeId: string; resume: boolean }>>({})
   const [addedMore, setAddedMore] = useState(false)
+  const [onNow, setOnNow] = useState<Record<string, string>>({})
+  const [saved, setSaved] = useState<Item[]>([])
   const toolsRef = useRef<HTMLDivElement>(null)
   const shownLibrary = useRef("")
   const shownMovie = useRef<Item | null>(null)
@@ -71,6 +74,8 @@ export function LibraryPage() {
     setQuiet({})
     setRecent([])
     setUpcoming([])
+    setOnNow({})
+    setSaved([])
   }, [known, id])
 
   const search = params.toString()
@@ -150,8 +155,18 @@ export function LibraryPage() {
     }
     const run = async () => {
       if (library?.CollectionType === "livetv") {
-        const result = await api.channels(userId)
+        const [result, programs, recorded] = await Promise.all([
+          api.channels(userId),
+          api.onNow(userId),
+          api.recordings(userId),
+        ])
         if (cancel) return
+        const airing: Record<string, string> = {}
+        for (const program of programs.Items || []) {
+          if (program.ChannelId && program.Name && !airing[program.ChannelId]) airing[program.ChannelId] = program.Name
+        }
+        setOnNow(airing)
+        setSaved(recorded.Items || [])
         setItems(result.Items || [])
         setTotal(result.TotalRecordCount || result.Items?.length || 0)
         setAppliedKey(listKey)
@@ -520,6 +535,13 @@ export function LibraryPage() {
           </div>
         )}
       </header>
+      {live && saved.length > 0 && (
+        <Row title="Recordings">
+          {saved.map((entry) => (
+            <PosterCard key={entry.Id} item={entry} layout="wide" href={`/play/${entry.Id}?resume=0`} />
+          ))}
+        </Row>
+      )}
       {items.length === 0 ? (
         <div className="problem">
           <p>{filter || genreId || studioId || letter ? "Nothing in this library matches." : "This library is empty."}</p>
@@ -532,7 +554,7 @@ export function LibraryPage() {
               item={entry}
               layout={layout}
               href={entry.Type === "TvChannel" ? `/play/${entry.Id}?resume=0` : `/item/${entry.Id}`}
-              note={addedInfo[entry.Id]?.note || ""}
+              note={onNow[entry.Id] || addedInfo[entry.Id]?.note || ""}
             />
           ))}
         </div>

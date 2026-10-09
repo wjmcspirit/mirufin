@@ -13,7 +13,7 @@ export function latestTitle(view: Item) {
 }
 
 function freshRow(id: string): HomeRowSetting {
-  const builtIn = id === "continue" || id === "next" || id === "aired"
+  const builtIn = id === "continue" || id === "next" || id === "aired" || id === "soon"
   return {
     id,
     visible: true,
@@ -23,7 +23,7 @@ function freshRow(id: string): HomeRowSetting {
 }
 
 export function mergeHomeRows(saved: HomeRowSetting[], libraryIds: string[]) {
-  const known = new Set(["continue", "next", "aired", ...libraryIds.map(libraryRowId)])
+  const known = new Set(["continue", "next", "aired", "soon", ...libraryIds.map(libraryRowId)])
   const ordered: HomeRowSetting[] = []
   const seen = new Set<string>()
   for (const row of saved) {
@@ -34,8 +34,9 @@ export function mergeHomeRows(saved: HomeRowSetting[], libraryIds: string[]) {
   for (const id of known) {
     if (seen.has(id)) continue
     const row = freshRow(id)
-    if (id === "aired") {
-      const after = ordered.findIndex((entry) => entry.id === "next")
+    if (id === "aired" || id === "soon") {
+      const anchor = id === "soon" ? "aired" : "next"
+      const after = ordered.findIndex((entry) => entry.id === anchor)
       ordered.splice(after >= 0 ? after + 1 : ordered.length, 0, row)
     } else ordered.push(row)
     seen.add(id)
@@ -47,6 +48,7 @@ export function sectionTitle(id: string, views: Item[]) {
   if (id === "continue") return "Continue watching"
   if (id === "next") return "Next up"
   if (id === "aired") return "New this week"
+  if (id === "soon") return "Coming up"
   const view = views.find((entry) => libraryRowId(entry.Id) === id)
   return view ? latestTitle(view) : "Row"
 }

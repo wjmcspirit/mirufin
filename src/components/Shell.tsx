@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { NavLink, Outlet } from "react-router-dom"
 import { usePrefs, useSession } from "../session"
-import { ChevronIcon, HeartIcon, HomeIcon, LibraryIcon, SearchIcon, SettingsIcon } from "./Icons"
+import { CalendarIcon, ChevronIcon, HeartIcon, HomeIcon, LibraryIcon, SearchIcon, SettingsIcon } from "./Icons"
 import { Screensaver } from "./Screensaver"
 import { StageProvider } from "./Stage"
 
@@ -47,6 +47,10 @@ export function Shell() {
           <NavLink to="/search" title="Search" className={({ isActive }) => (isActive ? "nav active" : "nav")}>
             <SearchIcon size={icon} />
             <span>Search</span>
+          </NavLink>
+          <NavLink to="/calendar" title="Calendar" className={({ isActive }) => (isActive ? "nav active" : "nav")}>
+            <CalendarIcon size={icon} />
+            <span>Calendar</span>
           </NavLink>
           {libraries.length > 0 && <p className="side-label">Library</p>}
           {libraries.map((library) => (

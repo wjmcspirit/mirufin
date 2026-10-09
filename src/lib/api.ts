@@ -168,6 +168,48 @@ export function nextUp(userId: string, seriesId?: string, limit = 18) {
   return jf<ItemList>(`/Shows/NextUp?${params}`)
 }
 
+export function upcomingPremieres(userId: string, options?: { startOffset?: number; days?: number; limit?: number }) {
+  const start = new Date()
+  start.setDate(start.getDate() + (options?.startOffset ?? 0))
+  const end = new Date()
+  end.setDate(end.getDate() + (options?.days ?? 21))
+  const params = new URLSearchParams({
+    Recursive: "true",
+    IncludeItemTypes: "Episode",
+    SortBy: "PremiereDate,SeriesName,ParentIndexNumber,IndexNumber",
+    SortOrder: "Ascending",
+    MinPremiereDate: dayStamp(start),
+    MaxPremiereDate: dayStamp(end),
+    Limit: String(options?.limit ?? 80),
+    Fields: `${CARD_FIELDS},PremiereDate,SeriesName,SeriesId,ParentIndexNumber,IndexNumber`,
+    EnableImageTypes: CARD_IMAGES,
+    ImageTypeLimit: "1",
+  })
+  return jf<ItemList>(`/Users/${userId}/Items?${params}`)
+}
+
+export function onNow(userId: string) {
+  const params = new URLSearchParams({
+    userId,
+    IsAiring: "true",
+    Limit: "40",
+    SortBy: "StartDate",
+    Fields: `${CARD_FIELDS},ChannelName,ChannelId,StartDate`,
+  })
+  return jf<ItemList>(`/LiveTv/Programs?${params}`).catch(() => ({ Items: [] as Item[] }))
+}
+
+export function recordings(userId: string) {
+  const params = new URLSearchParams({
+    userId,
+    Limit: "24",
+    Fields: CARD_FIELDS,
+    EnableImageTypes: CARD_IMAGES,
+    ImageTypeLimit: "1",
+  })
+  return jf<ItemList>(`/LiveTv/Recordings?${params}`).catch(() => ({ Items: [] as Item[] }))
+}
+
 export function airedRecently(userId: string) {
   const start = new Date()
   start.setDate(start.getDate() - 7)
@@ -343,7 +385,14 @@ export function episodes(userId: string, seriesId: string, seasonId?: string) {
 }
 
 export function similar(userId: string, itemId: string) {
-  return jf<ItemList>(`/Items/${itemId}/Similar?userId=${userId}&Limit=14&Fields=${CARD_FIELDS}`)
+  const params = new URLSearchParams({
+    userId,
+    Limit: "16",
+    Fields: CARD_FIELDS,
+    EnableImageTypes: CARD_IMAGES,
+    ImageTypeLimit: "1",
+  })
+  return jf<ItemList>(`/Items/${itemId}/Similar?${params}`)
 }
 
 export function children(userId: string, parentId: string, playlist = false) {

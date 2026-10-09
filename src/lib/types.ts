@@ -119,6 +119,9 @@ export interface Item {
   SeriesName?: string
   SeriesId?: string
   SeasonId?: string
+  ChannelId?: string
+  ChannelName?: string
+  StartDate?: string
   ParentId?: string
   SeasonName?: string
   IndexNumber?: number

@@ -253,7 +253,7 @@ function ItemBody({ item }: { item: Item }) {
     <>
       <Extras itemId={item.Id} />
       <PeopleRows people={item.People} />
-      <Similar itemId={item.Id} />
+      <Similar item={item} />
     </>
   )
 }
@@ -303,7 +303,7 @@ function SeriesBody({ series }: { series: Item }) {
       {seasonId && <EpisodeList seriesId={series.Id} seasonId={seasonId} nextId={nextEpisode?.Id || ""} />}
       {seasonId && <Extras itemId={seasonId} />}
       <PeopleRows people={series.People} />
-      <Similar itemId={series.Id} />
+      <Similar item={series} />
     </div>
   )
 }
@@ -654,16 +654,19 @@ function People({ title, people }: { title: string; people: Person[] }) {
   )
 }
 
-function Similar({ itemId }: { itemId: string }) {
+function Similar({ item }: { item: Item }) {
   const { userId } = useSession()
   const [items, setItems] = useState<Item[]>([])
+  const sourceId = item.Type === "Episode" ? item.SeriesId || item.Id : item.Id
+  const liked = (item.Type === "Episode" ? item.SeriesName : item.Name) || "this"
 
   useEffect(() => {
     let cancel = false
     api
-      .similar(userId, itemId)
+      .similar(userId, sourceId)
       .then((result) => {
-        if (!cancel) setItems(result.Items || [])
+        if (cancel) return
+        setItems((result.Items || []).filter((entry) => entry.Id && entry.Id !== sourceId && entry.Id !== item.Id))
       })
       .catch(() => {
         if (!cancel) setItems([])
@@ -671,11 +674,11 @@ function Similar({ itemId }: { itemId: string }) {
     return () => {
       cancel = true
     }
-  }, [itemId, userId])
+  }, [item.Id, sourceId, userId])
 
   if (items.length === 0) return null
   return (
-    <Row title="More like this">
+    <Row title={`If you liked ${liked}`}>
       {items.map((entry) => (
         <PosterCard key={entry.Id} item={entry} layout="poster" href={`/item/${entry.Id}`} />
       ))}
