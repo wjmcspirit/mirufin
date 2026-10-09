@@ -41,6 +41,16 @@ export function focusables() {
   return [...document.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(visible)
 }
 
+function layoutScale() {
+  const scale = Number(document.documentElement.style.zoom)
+  return scale > 0 ? scale : 1
+}
+
+function layoutViewport() {
+  const scale = layoutScale()
+  return { width: window.innerWidth / scale, height: window.innerHeight / scale }
+}
+
 function center(node: HTMLElement) {
   const rect = node.getBoundingClientRect()
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
@@ -81,7 +91,8 @@ function focusNode(node: HTMLElement) {
     const row = scroller.closest(".row")
     const target = row instanceof HTMLElement ? row : scroller
     const rect = target.getBoundingClientRect()
-    if (rect.top < 72 || rect.bottom > window.innerHeight - 16) {
+    const view = layoutViewport()
+    if (rect.top < 72 || rect.bottom > view.height - 16) {
       target.scrollIntoView({ block: "nearest", behavior: "smooth" })
     }
     return
@@ -99,6 +110,7 @@ function scrollInside(scroller: HTMLElement, node: HTMLElement) {
 
 function nearest(current: HTMLElement, items: HTMLElement[], key: "ArrowUp" | "ArrowDown") {
   const origin = center(current)
+  const reach = Math.max(220, current.getBoundingClientRect().width * 0.8)
   let best: HTMLElement | null = null
   let bestScore = Number.POSITIVE_INFINITY
   for (const item of items) {
@@ -108,7 +120,7 @@ function nearest(current: HTMLElement, items: HTMLElement[], key: "ArrowUp" | "A
     const dy = point.y - origin.y
     if (key === "ArrowDown" && dy < 8) continue
     if (key === "ArrowUp" && dy > -8) continue
-    if (Math.abs(dx) > Math.max(220, Math.abs(dy) * 2.2)) continue
+    if (Math.abs(dx) > Math.max(reach, Math.abs(dy) * 2.2)) continue
     const score = Math.abs(dy) + Math.abs(dx) * 1.25
     if (score < bestScore) {
       best = item

@@ -6,12 +6,18 @@ import { App } from "./App"
 import { SessionProvider } from "./session"
 import "./styles.css"
 
+const DESIGN_WIDTH = 1500
+
 function fitTelevision() {
   if (!Capacitor.isNativePlatform()) return
   const apply = () => {
-    document.documentElement.style.zoom = ""
+    const width = window.innerWidth
     const height = window.innerHeight
-    if (height > 0) document.documentElement.style.setProperty("--app-height", `${height}px`)
+    if (width < 200 || height < 200) return
+    const scale = width / DESIGN_WIDTH
+    document.documentElement.style.zoom = String(scale)
+    document.documentElement.style.setProperty("--app-scale", String(scale))
+    document.documentElement.style.setProperty("--app-height", `${Math.round(height / scale)}px`)
   }
   apply()
   window.addEventListener("resize", apply)

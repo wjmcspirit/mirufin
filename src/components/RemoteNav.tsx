@@ -6,6 +6,32 @@ import { useLocalProxy } from "../lib/media"
 import { backHeld, focusables, isBackKey, moveFocus, remoteKey } from "../lib/remote"
 
 const ARROWS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])
+const TEXT_TYPES = new Set(["text", "password", "search", "url", "email", "tel"])
+
+function isTextField(node: HTMLElement) {
+  if (node instanceof HTMLTextAreaElement) return true
+  if (!(node instanceof HTMLInputElement)) return false
+  return TEXT_TYPES.has((node.type || "text").toLowerCase())
+}
+
+function stepSelect(select: HTMLSelectElement, delta: number) {
+  const next = select.selectedIndex + delta
+  if (next < 0 || next >= select.options.length) return
+  select.selectedIndex = next
+  select.dispatchEvent(new Event("change", { bubbles: true }))
+}
+
+function stepNumber(input: HTMLInputElement, delta: number) {
+  const step = Number(input.step) > 0 ? Number(input.step) : 1
+  const min = input.min === "" ? Number.NEGATIVE_INFINITY : Number(input.min)
+  const max = input.max === "" ? Number.POSITIVE_INFINITY : Number(input.max)
+  const value = Number(input.value)
+  const base = Number.isFinite(value) ? value : 0
+  const next = Math.min(max, Math.max(min, base + delta * step))
+  if (next === base) return
+  input.value = String(next)
+  input.dispatchEvent(new Event("change", { bubbles: true }))
+}
 
 export function RemoteNav() {
   const navigate = useNavigate()
@@ -43,10 +69,32 @@ export function RemoteNav() {
       if (location.pathname.startsWith("/play/")) return
       const key = remoteKey(event)
       const target = event.target instanceof HTMLElement ? event.target : null
-      if (target?.closest("input, textarea, select")) {
-        if (!isBackKey(event)) return
+      const field = target?.closest("input, textarea, select")
+      if (field instanceof HTMLElement) {
+        if (isBackKey(event)) {
+          event.preventDefault()
+          field.blur()
+          return
+        }
+        if (key === "Enter" && field instanceof HTMLInputElement && field.type === "checkbox") {
+          event.preventDefault()
+          field.click()
+          return
+        }
+        if (!ARROWS.has(key)) return
+        if (isTextField(field) && (key === "ArrowLeft" || key === "ArrowRight")) return
+        if (field instanceof HTMLSelectElement && (key === "ArrowLeft" || key === "ArrowRight")) {
+          event.preventDefault()
+          stepSelect(field, key === "ArrowRight" ? 1 : -1)
+          return
+        }
+        if (field instanceof HTMLInputElement && field.type === "number" && (key === "ArrowLeft" || key === "ArrowRight")) {
+          event.preventDefault()
+          stepNumber(field, key === "ArrowRight" ? 1 : -1)
+          return
+        }
         event.preventDefault()
-        target.blur()
+        moveFocus(key)
         return
       }
       document.documentElement.classList.add("remote")

@@ -1375,7 +1375,9 @@ select {
   display: grid;
   gap: 10px;
 }
-.check { display: flex; align-items: center; gap: 10px; }
+.check { display: flex; align-items: center; gap: 12px; min-height: 36px; }
+.check input[type="checkbox"] { width: 22px; height: 22px; accent-color: #3ec8ff; flex: none; }
+.check:focus-within, .field:focus-within { outline: 2px solid rgba(215, 244, 255, 0.9); outline-offset: 4px; border-radius: 10px; }
 .mono { font-family: Consolas, "Courier New", monospace; color: var(--text); }
 
 .status, .problem, .empty {
