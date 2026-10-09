@@ -14,6 +14,19 @@ export function remoteKey(event: { key: string; keyCode?: number }) {
   return DPAD[event.keyCode ?? -1] || event.key
 }
 
+let backHolds = 0
+
+export function holdBack() {
+  backHolds += 1
+  return () => {
+    backHolds = Math.max(0, backHolds - 1)
+  }
+}
+
+export function backHeld() {
+  return backHolds > 0
+}
+
 export function isBackKey(event: { key: string; keyCode?: number }) {
   const key = remoteKey(event)
   return key === "Escape" || key === "BrowserBack" || key === "GoBack" || key === "Back" || event.keyCode === 4 || event.keyCode === 461 || event.keyCode === 10009
@@ -48,9 +61,19 @@ function markFocus(node: HTMLElement) {
   node.classList.add("dpad-focus")
 }
 
+export function placeFocus(node: HTMLElement) {
+  focusNode(node)
+}
+
 function focusNode(node: HTMLElement) {
   markFocus(node)
+  if (place(node) === "main" && !node.closest(".letter-rail, .tool-pop, .trailer-pop")) returnMain = node
   node.focus({ preventScroll: true })
+  if (node.closest(".side")) {
+    const rail = node.closest(".side-nav")
+    if (rail instanceof HTMLElement) scrollInside(rail, node)
+    return
+  }
   const scroller = node.closest(".scroller")
   if (scroller instanceof HTMLElement) {
     const left = node.offsetLeft - (scroller.clientWidth - node.offsetWidth) / 2
@@ -66,7 +89,15 @@ function focusNode(node: HTMLElement) {
   node.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" })
 }
 
-function nearest(current: HTMLElement, items: HTMLElement[], key: string, allowFar = false) {
+function scrollInside(scroller: HTMLElement, node: HTMLElement) {
+  const box = scroller.getBoundingClientRect()
+  const rect = node.getBoundingClientRect()
+  if (rect.top >= box.top + 4 && rect.bottom <= box.bottom - 4) return
+  const top = scroller.scrollTop + rect.top - box.top - (box.height - rect.height) / 2
+  scroller.scrollTo({ top: Math.max(0, top), behavior: "smooth" })
+}
+
+function nearest(current: HTMLElement, items: HTMLElement[], key: "ArrowUp" | "ArrowDown") {
   const origin = center(current)
   let best: HTMLElement | null = null
   let bestScore = Number.POSITIVE_INFINITY
@@ -75,14 +106,10 @@ function nearest(current: HTMLElement, items: HTMLElement[], key: string, allowF
     const point = center(item)
     const dx = point.x - origin.x
     const dy = point.y - origin.y
-    if (key === "ArrowRight" && dx < 8) continue
-    if (key === "ArrowLeft" && dx > -8) continue
     if (key === "ArrowDown" && dy < 8) continue
     if (key === "ArrowUp" && dy > -8) continue
-    const primary = key === "ArrowLeft" || key === "ArrowRight" ? Math.abs(dx) : Math.abs(dy)
-    const secondary = key === "ArrowLeft" || key === "ArrowRight" ? Math.abs(dy) : Math.abs(dx)
-    if (!allowFar && secondary > Math.max(220, primary * 2.2)) continue
-    const score = allowFar ? secondary + primary * 0.2 : primary + secondary * 1.25
+    if (Math.abs(dx) > Math.max(220, Math.abs(dy) * 2.2)) continue
+    const score = Math.abs(dy) + Math.abs(dx) * 1.25
     if (score < bestScore) {
       best = item
       bestScore = score
@@ -91,32 +118,139 @@ function nearest(current: HTMLElement, items: HTMLElement[], key: string, allowF
   return best
 }
 
+function overlapsY(a: DOMRect, b: DOMRect) {
+  return Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 8
+}
+
+function rowNeighbor(current: HTMLElement, items: HTMLElement[], key: "ArrowLeft" | "ArrowRight") {
+  const rect = current.getBoundingClientRect()
+  const mid = rect.left + rect.width / 2
+  const midY = rect.top + rect.height / 2
+  let best: HTMLElement | null = null
+  let bestDx = Number.POSITIVE_INFINITY
+  let bestDy = Number.POSITIVE_INFINITY
+  for (const item of items) {
+    if (item === current) continue
+    const other = item.getBoundingClientRect()
+    if (!overlapsY(rect, other)) continue
+    const dx = other.left + other.width / 2 - mid
+    if (key === "ArrowLeft" && dx > -8) continue
+    if (key === "ArrowRight" && dx < 8) continue
+    const distance = Math.abs(dx)
+    const dy = Math.abs(other.top + other.height / 2 - midY)
+    if (distance < bestDx - 1 || (Math.abs(distance - bestDx) <= 1 && dy < bestDy)) {
+      best = item
+      bestDx = distance
+      bestDy = dy
+    }
+  }
+  return best
+}
+
+function stepList(current: HTMLElement, items: HTMLElement[], key: "ArrowUp" | "ArrowDown") {
+  const index = items.indexOf(current)
+  if (index < 0) return key === "ArrowDown" ? items[0] : items[items.length - 1]
+  return items[index + (key === "ArrowDown" ? 1 : -1)] || null
+}
+
+function aligned(from: HTMLElement, items: HTMLElement[]) {
+  const y = center(from).y
+  let best: HTMLElement | null = null
+  let bestDy = Number.POSITIVE_INFINITY
+  for (const item of items) {
+    const dy = Math.abs(center(item).y - y)
+    if (dy < bestDy) {
+      best = item
+      bestDy = dy
+    }
+  }
+  return best
+}
+
+function enterRow(from: HTMLElement, items: HTMLElement[]) {
+  const y = center(from).y
+  let best: HTMLElement | null = null
+  let bestScore = Number.POSITIVE_INFINITY
+  for (const item of items) {
+    const rect = item.getBoundingClientRect()
+    const score = Math.abs(center(item).y - y) * 8 + rect.left
+    if (score < bestScore) {
+      best = item
+      bestScore = score
+    }
+  }
+  return best
+}
+
+function alive(node: HTMLElement | null): node is HTMLElement {
+  return !!node && node.isConnected && visible(node)
+}
+
+let returnSide: HTMLElement | null = null
+let returnMain: HTMLElement | null = null
+
+function cross(from: HTMLElement, to: HTMLElement) {
+  if (place(from) === "main" && place(to) === "side") {
+    returnMain = from
+    returnSide = to
+  } else if (place(from) === "side" && place(to) === "main") {
+    returnSide = from
+    returnMain = to
+  }
+  focusNode(to)
+}
+
 export function moveFocus(key: string) {
   const items = focusables()
   if (items.length === 0) return
-  const current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-  if (!current || !items.includes(current)) {
-    focusNode(items[0])
+  const current = document.activeElement instanceof HTMLElement && items.includes(document.activeElement) ? document.activeElement : null
+  if (!current) {
+    focusNode(items.find((item) => place(item) === "side") || items[0])
     return
   }
-  const area = place(current)
-  if (key === "ArrowRight" && area === "side") {
-    const main = items.filter((item) => place(item) === "main")
-    const content = main.filter((item) => item.classList.contains("card") || item.closest(".hero, .page-head, .settings, .gate, .detail"))
-    const next = nearest(current, content.length ? content : main, key, true)
+  const trap = current.closest(".tool-pop, .trailer-pop")
+  if (trap instanceof HTMLElement) {
+    const inside = items.filter((item) => trap.contains(item))
+    const next = key === "ArrowUp" || key === "ArrowDown" ? stepList(current, inside, key) : key === "ArrowLeft" || key === "ArrowRight" ? rowNeighbor(current, inside, key) : null
     if (next) focusNode(next)
     return
   }
-  if (key === "ArrowLeft" && area === "main") {
-    const beside = nearest(current, items.filter((item) => place(item) === "main"), key)
+  const list = current.closest(".side, .letter-rail")
+  if ((key === "ArrowUp" || key === "ArrowDown") && list instanceof HTMLElement) {
+    const next = stepList(current, items.filter((item) => list.contains(item)), key)
+    if (next) focusNode(next)
+    return
+  }
+  const area = place(current)
+  const main = items.filter((item) => place(item) === "main")
+  const side = items.filter((item) => place(item) === "side")
+  if (current.closest(".letter-rail") && key === "ArrowLeft") {
+    const content = main.filter((item) => !item.closest(".letter-rail") && item.getBoundingClientRect().right <= current.getBoundingClientRect().left + 4)
+    const next = aligned(current, content)
+    if (next) focusNode(next)
+    return
+  }
+  if (area === "side") {
+    if (key !== "ArrowRight") return
+    const remembered = current === returnSide && alive(returnMain) && !returnMain.closest(".letter-rail") ? returnMain : null
+    const next = remembered || enterRow(current, main.filter((item) => !item.closest(".letter-rail")))
+    if (next) cross(current, next)
+    return
+  }
+  if (key === "ArrowLeft" || key === "ArrowRight") {
+    const beside = rowNeighbor(current, main, key)
     if (beside) {
       focusNode(beside)
       return
     }
-    const side = nearest(current, items.filter((item) => place(item) === "side"), key, true)
-    if (side) focusNode(side)
+    if (key === "ArrowLeft") {
+      const next = (alive(returnSide) ? returnSide : null) || side.find((item) => item.classList.contains("nav") && item.classList.contains("active")) || side.find((item) => item.classList.contains("nav"))
+      if (next) cross(current, next)
+    }
     return
   }
-  const next = nearest(current, items, key)
-  if (next) focusNode(next)
+  if (key === "ArrowUp" || key === "ArrowDown") {
+    const next = nearest(current, main, key)
+    if (next) focusNode(next)
+  }
 }

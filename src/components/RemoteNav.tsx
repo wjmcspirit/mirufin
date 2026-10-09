@@ -3,7 +3,7 @@ import { Capacitor } from "@capacitor/core"
 import { useEffect } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { useLocalProxy } from "../lib/media"
-import { focusables, isBackKey, moveFocus, remoteKey } from "../lib/remote"
+import { backHeld, focusables, isBackKey, moveFocus, remoteKey } from "../lib/remote"
 
 const ARROWS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])
 
@@ -51,6 +51,7 @@ export function RemoteNav() {
       }
       document.documentElement.classList.add("remote")
       if (isBackKey(event)) {
+        if (backHeld()) return
         if (location.pathname === "/" || location.pathname === "/connect") return
         event.preventDefault()
         navigate(-1)

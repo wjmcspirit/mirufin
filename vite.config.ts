@@ -22,6 +22,9 @@ export default defineConfig({
     port: 8095,
     strictPort: true,
     open: true,
+    watch: {
+      ignored: ["**/*.apk"],
+    },
   },
   preview: {
     host: "127.0.0.1",

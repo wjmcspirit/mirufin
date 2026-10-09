@@ -22,7 +22,7 @@ export function youtubeEmbed(url: string) {
   }
   id = id.split("&")[0]
   if (!/^[A-Za-z0-9_-]{6,}$/.test(id)) return null
-  return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0`
+  return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0&modestbranding=1&fs=1`
 }
 
 export function remoteTrailer(item: Pick<Item, "RemoteTrailers">) {

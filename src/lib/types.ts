@@ -5,6 +5,7 @@ export interface UserData {
   IsFavorite?: boolean
   UnplayedItemCount?: number
   PlayCount?: number
+  LastPlayedDate?: string
 }
 
 export interface MediaStream {
@@ -16,20 +17,35 @@ export interface MediaStream {
   Title?: string
   IsDefault?: boolean
   IsForced?: boolean
+  IsExternal?: boolean
+  IsHearingImpaired?: boolean
   BitDepth?: number
+  BitRate?: number
   VideoRange?: string
+  VideoRangeType?: string
+  VideoDoViTitle?: string
+  Profile?: string
+  Level?: number
+  AverageFrameRate?: number
   Width?: number
   Height?: number
+  IsInterlaced?: boolean
+  ColorSpace?: string
+  ColorTransfer?: string
+  ColorPrimaries?: string
+  PixelFormat?: string
   Channels?: number
+  ChannelLayout?: string
+  SampleRate?: number
   DeliveryMethod?: string
   DeliveryUrl?: string
   IsTextSubtitleStream?: boolean
-  IsExternal?: boolean
 }
 
 export interface MediaSource {
   Id: string
   Container?: string
+  Size?: number
   SupportsDirectPlay?: boolean
   SupportsDirectStream?: boolean
   SupportsTranscoding?: boolean
@@ -103,6 +119,7 @@ export interface Item {
   SeriesName?: string
   SeriesId?: string
   SeasonId?: string
+  ParentId?: string
   SeasonName?: string
   IndexNumber?: number
   ParentIndexNumber?: number
@@ -110,9 +127,12 @@ export interface Item {
   RecursiveItemCount?: number
   CollectionType?: string
   UserData?: UserData
+  Status?: string
+  ExtraType?: string
   Genres?: string[]
+  GenreItems?: { Id?: string; Name?: string }[]
   People?: Person[]
-  Studios?: { Name?: string }[]
+  Studios?: { Id?: string; Name?: string }[]
   Taglines?: string[]
   RemoteTrailers?: { Name?: string; Url?: string }[]
   LocalTrailerCount?: number
@@ -183,6 +203,8 @@ export interface Preferences {
   screensaverMinutes: number
   maxBitrate: number
   skip: Record<SegmentType, SkipMode>
+  subtitleSize: "small" | "medium" | "large"
+  subtitleRaise: number
   showHero: boolean
   homeRows: HomeRowSetting[]
   libraryStyle: HomeCardStyle

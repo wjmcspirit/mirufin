@@ -164,6 +164,23 @@ export function SettingsPage() {
           <input type="number" min={5} max={60} value={prefs.skipBack} onChange={(event) => setPrefs({ skipBack: Number(event.target.value) })} />
         </label>
         <label className="field compact">
+          Subtitle size
+          <select value={prefs.subtitleSize} onChange={(event) => setPrefs({ subtitleSize: event.target.value as "small" | "medium" | "large" })}>
+            <option value="small">Small</option>
+            <option value="medium">Medium</option>
+            <option value="large">Large</option>
+          </select>
+        </label>
+        <label className="field compact">
+          Subtitle position
+          <select value={prefs.subtitleRaise} onChange={(event) => setPrefs({ subtitleRaise: Number(event.target.value) })}>
+            <option value={4}>Close to the picture</option>
+            <option value={8}>Normal</option>
+            <option value={16}>Higher</option>
+            <option value={24}>Clear of the controls</option>
+          </select>
+        </label>
+        <label className="field compact">
           Skip forward (seconds)
           <input type="number" min={5} max={90} value={prefs.skipForward} onChange={(event) => setPrefs({ skipForward: Number(event.target.value) })} />
         </label>

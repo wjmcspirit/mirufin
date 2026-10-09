@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import { useParams } from "react-router-dom"
+import { useParams, useSearchParams } from "react-router-dom"
 import { PosterCard } from "../components/Cards"
 import { Hero } from "../components/Hero"
 import { FilterIcon, SortIcon, ViewIcon } from "../components/Icons"
@@ -25,6 +25,7 @@ const SORTS = [
 
 export function LibraryPage() {
   const { id = "" } = useParams()
+  const [params, setParams] = useSearchParams()
   const { userId, libraries } = useSession()
   const { prefs, setPrefs } = usePrefs()
   const known = libraries.find((library) => library.Id === id)
@@ -35,7 +36,9 @@ export function LibraryPage() {
   const [sort, setSort] = useState("SortName")
   const [order, setOrder] = useState("Ascending")
   const [filter, setFilter] = useState("")
-  const [genreId, setGenreId] = useState("")
+  const [genreId, setGenreId] = useState(() => params.get("genre") || "")
+  const [studioId, setStudioId] = useState(() => params.get("studio") || "")
+  const [studioName, setStudioName] = useState(() => params.get("studioName") || "")
   const [letter, setLetter] = useState("")
   const [appliedKey, setAppliedKey] = useState("")
   const [menu, setMenu] = useState<"view" | "sort" | "filter" | null>(null)
@@ -61,7 +64,6 @@ export function LibraryPage() {
     setSort("SortName")
     setOrder("Ascending")
     setFilter("")
-    setGenreId("")
     setLetter("")
     setAppliedKey("")
     setMenu(null)
@@ -70,6 +72,14 @@ export function LibraryPage() {
     setRecent([])
     setUpcoming([])
   }, [known, id])
+
+  const search = params.toString()
+  useEffect(() => {
+    const current = new URLSearchParams(search)
+    setGenreId(current.get("genre") || "")
+    setStudioId(current.get("studio") || "")
+    setStudioName(current.get("studioName") || "")
+  }, [search])
 
   useEffect(() => {
     if (!menu) return
@@ -126,9 +136,10 @@ export function LibraryPage() {
     order,
     filters: filter,
     genreId,
+    studioId,
     nameStartsWith: letter,
   }
-  const listKey = `${id}|${letter}|${query.sort}|${order}|${filter}|${genreId}|${query.types}`
+  const listKey = `${id}|${letter}|${query.sort}|${order}|${filter}|${genreId}|${studioId}|${query.types}`
 
   useEffect(() => {
     let cancel = false
@@ -154,7 +165,7 @@ export function LibraryPage() {
       if (cancel) return
       setGenres(genreList.Items || [])
       if (sort === "EpisodeAdded" && current.CollectionType === "tvshows") {
-        const result = await api.recentEpisodes(userId, id, 0, ADDED_PAGE, { filters: filter, genreId })
+        const result = await api.recentEpisodes(userId, id, 0, ADDED_PAGE, { filters: filter, genreId, studioId })
         if (cancel) return
         const batch = result.Items || []
         const grouped = seriesFromAddedEpisodes(batch)
@@ -216,13 +227,13 @@ export function LibraryPage() {
     return () => {
       cancel = true
     }
-  }, [episodes, filter, genreId, id, letter, library, listKey, order, query.sort, query.types, sort, userId])
+  }, [episodes, filter, genreId, studioId, id, letter, library, listKey, order, query.sort, query.types, sort, userId])
 
   async function loadMore() {
     setStatus("more")
     try {
       if (sort === "EpisodeAdded") {
-        const result = await api.recentEpisodes(userId, id, addedScan.current, ADDED_PAGE, { filters: filter, genreId })
+        const result = await api.recentEpisodes(userId, id, addedScan.current, ADDED_PAGE, { filters: filter, genreId, studioId })
         const batch = result.Items || []
         addedScan.current += batch.length
         const grouped = mergeAddedSeries(addedGroups.current, seriesFromAddedEpisodes(batch), order === "Ascending")
@@ -256,6 +267,22 @@ export function LibraryPage() {
       setError(caught instanceof Error ? caught.message : "Could not load more.")
       setStatus("error")
     }
+  }
+
+  function chooseGenre(next: string) {
+    const nextParams = new URLSearchParams(params)
+    if (next) nextParams.set("genre", next)
+    else nextParams.delete("genre")
+    setParams(nextParams, { replace: true })
+    setMenu(null)
+  }
+
+  function clearStudio() {
+    const nextParams = new URLSearchParams(params)
+    nextParams.delete("studio")
+    nextParams.delete("studioName")
+    setParams(nextParams, { replace: true })
+    setMenu(null)
   }
 
   const movies = library?.CollectionType === "movies"
@@ -380,7 +407,7 @@ export function LibraryPage() {
   const count = total ? `${total.toLocaleString()} titles` : "No titles"
   const viewOn = prefs.libraryStyle !== "poster" || prefs.librarySize !== "medium"
   const sortOn = sort !== "SortName" || order !== "Ascending"
-  const filterOn = Boolean(filter || genreId)
+  const filterOn = Boolean(filter || genreId || studioId)
 
   return (
     <div className={live ? "library-page" : "library-page with-rail"}>
@@ -473,29 +500,19 @@ export function LibraryPage() {
                   {option.label}
                 </button>
               ))}
+              {studioId && (
+                <button type="button" aria-pressed={true} onClick={clearStudio}>
+                  {studioName || "Studio"} · Clear
+                </button>
+              )}
               {genres.length > 0 && <p className="tool-label">Genre</p>}
               {genres.length > 0 && (
-                <button
-                  type="button"
-                  aria-pressed={genreId === ""}
-                  onClick={() => {
-                    setGenreId("")
-                    setMenu(null)
-                  }}
-                >
+                <button type="button" aria-pressed={genreId === ""} onClick={() => chooseGenre("")}>
                   All genres
                 </button>
               )}
               {genres.map((genre) => (
-                <button
-                  key={genre.Id}
-                  type="button"
-                  aria-pressed={genreId === genre.Id}
-                  onClick={() => {
-                    setGenreId(genre.Id)
-                    setMenu(null)
-                  }}
-                >
+                <button key={genre.Id} type="button" aria-pressed={genreId === genre.Id} onClick={() => chooseGenre(genre.Id)}>
                   {genre.Name}
                 </button>
               ))}
@@ -505,7 +522,7 @@ export function LibraryPage() {
       </header>
       {items.length === 0 ? (
         <div className="problem">
-          <p>{filter || genreId || letter ? "Nothing in this library matches." : "This library is empty."}</p>
+          <p>{filter || genreId || studioId || letter ? "Nothing in this library matches." : "This library is empty."}</p>
         </div>
       ) : (
         <div className={`grid ${style} size-${size}`}>

@@ -2,6 +2,7 @@ package app.mirufin.tv;
 
 import android.app.Activity;
 import android.graphics.Color;
+import android.util.TypedValue;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Display;
@@ -26,6 +27,7 @@ import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
+import androidx.media3.ui.SubtitleView;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -43,6 +45,8 @@ public class NativePlayerPlugin extends Plugin {
     private ExoPlayer player;
     private PlayerView view;
     private String mediaUrl = "";
+    private String cueSize = "medium";
+    private float cueRaise = 8f;
     private int savedModeId = -1;
     private boolean ticking = false;
 
@@ -126,6 +130,7 @@ public class NativePlayerPlugin extends Plugin {
                 mediaUrl = url;
                 view.setPlayer(exo);
                 view.setVisibility(View.VISIBLE);
+                applyCueStyle();
                 WebView webView = getBridge().getWebView();
                 if (webView != null) webView.setBackgroundColor(Color.TRANSPARENT);
                 activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -190,6 +195,23 @@ public class NativePlayerPlugin extends Plugin {
             player.setMediaItem(item.build(), position);
             player.prepare();
             if (playing) player.play();
+            call.resolve();
+        });
+    }
+
+    @PluginMethod
+    public void subtitleStyle(PluginCall call) {
+        String size = call.getString("size", "medium");
+        Double raise = call.getDouble("raise", 8d);
+        cueSize = size == null || size.isEmpty() ? "medium" : size;
+        cueRaise = raise == null ? 8f : raise.floatValue();
+        Activity activity = getActivity();
+        if (activity == null) {
+            call.resolve();
+            return;
+        }
+        activity.runOnUiThread(() -> {
+            applyCueStyle();
             call.resolve();
         });
     }
@@ -296,6 +318,17 @@ public class NativePlayerPlugin extends Plugin {
         data.put("ended", player != null && player.getPlaybackState() == Player.STATE_ENDED);
         if (error != null) data.put("error", error);
         notifyListeners("state", data);
+    }
+
+    private void applyCueStyle() {
+        if (view == null) return;
+        SubtitleView subs = view.getSubtitleView();
+        if (subs == null) return;
+        float sp = "large".equals(cueSize) ? 42f : "small".equals(cueSize) ? 18f : 28f;
+        subs.setApplyEmbeddedFontSizes(false);
+        subs.setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
+        float fraction = Math.max(0f, Math.min(0.4f, cueRaise / 100f));
+        subs.setBottomPaddingFraction(fraction);
     }
 
     private void applyFrameRate() {

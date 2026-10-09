@@ -1,20 +1,21 @@
 import { useEffect, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { MediaImage, PosterCard } from "../components/Cards"
-import { CheckIcon, HeartIcon, PlayIcon, TrailerIcon } from "../components/Icons"
+import { CheckIcon, HeartIcon, InfoIcon, PlayIcon, SeasonIcon } from "../components/Icons"
+import { TrailerButton } from "../components/TrailerButton"
+import { MediaInfo } from "../components/MediaInfo"
 import { Row } from "../components/Row"
 import { Loading, Problem } from "../components/Status"
 import { usePinnedArt } from "../components/Stage"
 import { useThemeSong } from "../components/Theme"
 import { TitleLogo } from "../components/Title"
-import { TrailerPopup } from "../components/TrailerPopup"
 import * as api from "../lib/api"
-import { canPlayDirectly, episodeCode, formatRuntime, metaLine, personFacts, progressPct, techChips } from "../lib/format"
+import { airedLabel, canPlayDirectly, episodeCode, formatRuntime, metaLine, personFacts, progressPct, techChips } from "../lib/format"
+import { hasMediaInfo } from "../lib/mediaInfo"
+import { placeFocus } from "../lib/remote"
 import { knownFor, type KnownWork } from "../lib/knownFor"
-import { nativeEngine } from "../lib/nativePlayer"
-import { remoteTrailer, youtubeEmbed } from "../lib/trailer"
 import { backdropSrc, imageUrl, primarySrc } from "../lib/images"
-import type { Item } from "../lib/types"
+import type { Item, Person } from "../lib/types"
 import { useSession } from "../session"
 
 export function ItemPage() {
@@ -24,6 +25,7 @@ export function ItemPage() {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
   const [error, setError] = useState("")
   const [busy, setBusy] = useState("")
+  const [infoOpen, setInfoOpen] = useState(false)
 
   useEffect(() => {
     let cancel = false
@@ -117,11 +119,10 @@ export function ItemPage() {
             )}
             {item.Taglines?.[0] && <p className="tagline">{item.Taglines[0]}</p>}
             {item.Overview && (item.Type === "Person" ? <Bio text={item.Overview} /> : <p className="overview">{item.Overview}</p>)}
-            {item.Genres && item.Genres.length > 0 && <p className="kicker">{item.Genres.join("  ·  ")}</p>}
-            {item.Studios?.[0]?.Name && <p className="hint">{item.Studios.map((studio) => studio.Name).filter(Boolean).join(", ")}</p>}
+            <FactLinks item={item} />
             <div className="actions">
               <PlayActions item={item} progress={progress} />
-              {(item.Type === "Movie" || item.Type === "Series") && <TrailerLink item={item} />}
+              {(item.Type === "Movie" || item.Type === "Series") && <TrailerButton item={item} />}
               <button className={`btn icon-btn ${item.UserData?.IsFavorite ? "on" : ""}`} type="button" onClick={() => void toggleFavorite()} disabled={busy === "favorite"} aria-pressed={Boolean(item.UserData?.IsFavorite)}>
                 <HeartIcon />
                 {item.UserData?.IsFavorite ? "Favorited" : "Favorite"}
@@ -132,11 +133,18 @@ export function ItemPage() {
                   {item.UserData?.Played ? "Watched" : "Mark watched"}
                 </button>
               )}
+              {hasMediaInfo(item) && (
+                <button className="btn icon-btn" type="button" onClick={() => setInfoOpen(true)}>
+                  <InfoIcon size={16} />
+                  Media info
+                </button>
+              )}
             </div>
             {error && <p className="error">{error}</p>}
           </div>
         </div>
       </header>
+      {infoOpen && <MediaInfo item={item} onClose={() => setInfoOpen(false)} />}
       <ItemBody item={item} />
     </article>
   )
@@ -171,46 +179,6 @@ function Bio({ text }: { text: string }) {
   )
 }
 
-function TrailerLink({ item }: { item: Item }) {
-  const { userId } = useSession()
-  const [localId, setLocalId] = useState<string | null>(null)
-  const [open, setOpen] = useState(false)
-  const remote = remoteTrailer(item)
-  const embeddable = Boolean(remote && youtubeEmbed(remote) && !nativeEngine())
-
-  useEffect(() => {
-    if (item.LocalTrailerCount === 0) return
-    let cancel = false
-    api.localTrailers(userId, item.Id).then((list) => {
-      if (!cancel) setLocalId(list.Items?.find((entry) => entry.Id)?.Id || null)
-    })
-    return () => {
-      cancel = true
-    }
-  }, [item.Id, item.LocalTrailerCount, userId])
-
-  if (localId) {
-    return (
-      <Link className="btn icon-btn" to={`/play/${localId}?resume=0`}>
-        <TrailerIcon size={16} />
-        Trailer
-      </Link>
-    )
-  }
-
-  if (!embeddable || !remote) return null
-
-  return (
-    <>
-      <button className="btn icon-btn" type="button" onClick={() => setOpen(true)}>
-        <TrailerIcon size={16} />
-        Trailer
-      </button>
-      {open && <TrailerPopup url={remote} title={item.Name || "Trailer"} onClose={() => setOpen(false)} />}
-    </>
-  )
-}
-
 function PlayActions({ item, progress }: { item: Item; progress: number }) {
   if (item.Type === "Series") return <SeriesPlay series={item} />
   if (!canPlayDirectly(item) && item.Type !== "TvChannel") return null
@@ -226,6 +194,12 @@ function PlayActions({ item, progress }: { item: Item; progress: number }) {
           Play from start
         </Link>
       )}
+      {item.Type === "Episode" && (
+        <Link className="btn icon-btn" to={`/play/${item.Id}?resume=${resume ? "1" : "0"}&rest=season`}>
+          <SeasonIcon size={16} />
+          Play season
+        </Link>
+      )}
     </>
   )
 }
@@ -235,28 +209,35 @@ function SeriesPlay({ series }: { series: Item }) {
   const navigate = useNavigate()
   const [pending, setPending] = useState(false)
 
-  async function play() {
+  async function play(rest: boolean) {
     setPending(true)
     try {
       const next = await api.nextUp(userId, series.Id, 1)
       const episode = next.Items?.[0]
+      const suffix = rest ? "&rest=season" : ""
       if (episode) {
-        navigate(`/play/${episode.Id}?resume=1`)
+        navigate(`/play/${episode.Id}?resume=1${suffix}`)
         return
       }
       const list = await api.episodes(userId, series.Id)
       const first = list.Items?.[0]
-      if (first) navigate(`/play/${first.Id}?resume=0`)
+      if (first) navigate(`/play/${first.Id}?resume=0${suffix}`)
     } finally {
       setPending(false)
     }
   }
 
   return (
-    <button className="btn btn-primary" type="button" onClick={() => void play()} disabled={pending}>
-      <PlayIcon />
-      {pending ? "Finding episode…" : "Play"}
-    </button>
+    <>
+      <button className="btn btn-primary" type="button" onClick={() => void play(false)} disabled={pending}>
+        <PlayIcon />
+        {pending ? "Finding episode…" : "Play"}
+      </button>
+      <button className="btn icon-btn" type="button" onClick={() => void play(true)} disabled={pending}>
+        <SeasonIcon size={16} />
+        Play season
+      </button>
+    </>
   )
 }
 
@@ -270,7 +251,8 @@ function ItemBody({ item }: { item: Item }) {
   if (item.Type === "Photo") return <PhotoBody item={item} />
   return (
     <>
-      <People people={item.People || []} />
+      <Extras itemId={item.Id} />
+      <PeopleRows people={item.People} />
       <Similar itemId={item.Id} />
     </>
   )
@@ -280,14 +262,22 @@ function SeriesBody({ series }: { series: Item }) {
   const { userId } = useSession()
   const [seasons, setSeasons] = useState<Item[]>([])
   const [seasonId, setSeasonId] = useState<string>("")
+  const [nextEpisode, setNextEpisode] = useState<Item | null>(null)
 
   useEffect(() => {
     let cancel = false
-    api.seasons(userId, series.Id).then((result) => {
+    Promise.all([
+      api.seasons(userId, series.Id),
+      api.nextUp(userId, series.Id, 1).catch(() => ({ Items: [] as Item[] })),
+    ]).then(([result, next]) => {
       if (cancel) return
       const list = result.Items || []
+      const episode = next.Items?.[0] || null
       setSeasons(list)
-      setSeasonId(list[0]?.Id || "")
+      setNextEpisode(episode)
+      const season = episode?.SeasonId || episode?.ParentId
+      const match = list.find((item) => item.Id === season) || list.find((item) => episode?.ParentIndexNumber != null && item.IndexNumber === episode.ParentIndexNumber)
+      setSeasonId(match?.Id || list[0]?.Id || "")
     }).catch(() => {
       if (!cancel) setSeasons([])
     })
@@ -310,16 +300,18 @@ function SeriesBody({ series }: { series: Item }) {
           </div>
         </div>
       )}
-      {seasonId && <EpisodeList seriesId={series.Id} seasonId={seasonId} />}
-      <People people={series.People || []} />
+      {seasonId && <EpisodeList seriesId={series.Id} seasonId={seasonId} nextId={nextEpisode?.Id || ""} />}
+      {seasonId && <Extras itemId={seasonId} />}
+      <PeopleRows people={series.People} />
       <Similar itemId={series.Id} />
     </div>
   )
 }
 
-function EpisodeList({ seriesId, seasonId }: { seriesId: string; seasonId: string }) {
+function EpisodeList({ seriesId, seasonId, nextId = "" }: { seriesId: string; seasonId: string; nextId?: string }) {
   const { userId } = useSession()
   const [episodes, setEpisodes] = useState<Item[] | null>(null)
+  const landed = useRef("")
 
   useEffect(() => {
     let cancel = false
@@ -337,6 +329,14 @@ function EpisodeList({ seriesId, seasonId }: { seriesId: string; seasonId: strin
     }
   }, [seasonId, seriesId, userId])
 
+  useEffect(() => {
+    if (!nextId || !episodes?.some((episode) => episode.Id === nextId) || landed.current === nextId) return
+    const node = document.querySelector<HTMLElement>(`[data-episode="${nextId}"]`)
+    if (!node) return
+    landed.current = nextId
+    placeFocus(node)
+  }, [episodes, nextId])
+
   if (!episodes) return <Loading label="Loading episodes" />
   if (episodes.length === 0) return <p className="hint">No episodes in this season.</p>
 
@@ -345,7 +345,7 @@ function EpisodeList({ seriesId, seasonId }: { seriesId: string; seasonId: strin
       {episodes.map((episode) => {
         const progress = progressPct(episode)
         return (
-          <Link key={episode.Id} className="episode" to={`/item/${episode.Id}`}>
+          <Link key={episode.Id} className={episode.Id === nextId ? "episode is-next" : "episode"} to={`/item/${episode.Id}`} data-episode={episode.Id}>
             <span className="episode-art">
               <MediaImage src={primarySrc(episode, 480) || backdropSrc(episode)} alt="" />
               {progress > 1 && progress < 98 && (
@@ -361,8 +361,9 @@ function EpisodeList({ seriesId, seasonId }: { seriesId: string; seasonId: strin
               <h3>
                 {episodeCode(episode) ? `${episodeCode(episode)}  ·  ` : ""}
                 {episode.Name}
+                {episode.Id === nextId ? <span className="episode-flag">Up next</span> : null}
               </h3>
-              <p className="hint">{formatRuntime(episode.RunTimeTicks)}</p>
+              <p className="hint">{[formatRuntime(episode.RunTimeTicks), airedLabel(episode)].filter(Boolean).join("  ·  ")}</p>
               {episode.Overview && <p className="overview clamp">{episode.Overview}</p>}
             </div>
           </Link>
@@ -516,12 +517,131 @@ function PhotoBody({ item }: { item: Item }) {
   )
 }
 
-function People({ people }: { people: Item["People"] }) {
-  const cast = (people || []).filter((person) => person.Id && person.Name).slice(0, 18)
-  if (cast.length === 0) return null
+function FactLinks({ item }: { item: Item }) {
+  const { libraries } = useSession()
+  const libraryId = libraryTarget(item, libraries)
+  const genres: { Id?: string; Name?: string }[] = item.GenreItems?.filter((genre) => genre.Name) || (item.Genres || []).map((name) => ({ Name: name }))
+  const studios = (item.Studios || []).filter((studio) => studio.Name)
+  if (genres.length === 0 && studios.length === 0) return null
   return (
-    <Row title="Cast">
-      {cast.map((person) => (
+    <>
+      {genres.length > 0 && (
+        <p className="meta-links">
+          {genres.map((genre) =>
+            libraryId && genre.Id ? (
+              <Link key={genre.Id} to={`/library/${libraryId}?genre=${encodeURIComponent(genre.Id)}`}>
+                {genre.Name}
+              </Link>
+            ) : (
+              <span key={genre.Name}>{genre.Name}</span>
+            ),
+          )}
+        </p>
+      )}
+      {studios.length > 0 && (
+        <p className="meta-links">
+          {studios.map((studio) =>
+            libraryId && studio.Id ? (
+              <Link key={studio.Id} to={`/library/${libraryId}?studio=${encodeURIComponent(studio.Id)}&studioName=${encodeURIComponent(studio.Name || "")}`}>
+                {studio.Name}
+              </Link>
+            ) : (
+              <span key={studio.Name}>{studio.Name}</span>
+            ),
+          )}
+        </p>
+      )}
+    </>
+  )
+}
+
+function libraryTarget(item: Item, libraries: Item[]) {
+  if (item.ParentId && libraries.some((library) => library.Id === item.ParentId)) return item.ParentId
+  const shows = item.Type === "Series" || item.Type === "Season" || item.Type === "Episode"
+  const kind = shows ? "tvshows" : item.Type === "Movie" ? "movies" : ""
+  const matches = libraries.filter((library) => library.CollectionType === kind)
+  return matches.length === 1 ? matches[0].Id : ""
+}
+
+function PeopleRows({ people }: { people: Item["People"] }) {
+  const list = people || []
+  const directors = list.filter((person) => person.Type === "Director" && person.Id && person.Name)
+  const writers = list.filter((person) => person.Type === "Writer" && person.Id && person.Name)
+  const cast = list.filter((person) => person.Id && person.Name && person.Type !== "Director" && person.Type !== "Writer" && person.Type !== "Producer").slice(0, 18)
+  return (
+    <>
+      <People title={directors.length === 1 ? "Director" : "Directors"} people={directors} />
+      <People title={writers.length === 1 ? "Writer" : "Writers"} people={writers} />
+      <People title="Cast" people={cast} />
+    </>
+  )
+}
+
+const EXTRA_ORDER = ["DeletedScene", "BehindTheScenes", "Interview", "Featurette", "Scene", "Short", "Clip", "Trailer", "Sample", "ThemeVideo", "ThemeSong"]
+const EXTRA_LABELS: Record<string, string> = {
+  DeletedScene: "Deleted scenes",
+  BehindTheScenes: "Behind the scenes",
+  Interview: "Interviews",
+  Featurette: "Featurettes",
+  Scene: "Scenes",
+  Short: "Shorts",
+  Clip: "Clips",
+  Trailer: "Trailers",
+  Sample: "Samples",
+  ThemeVideo: "Theme videos",
+  ThemeSong: "Theme songs",
+}
+
+function Extras({ itemId }: { itemId: string }) {
+  const { userId } = useSession()
+  const [items, setItems] = useState<Item[]>([])
+
+  useEffect(() => {
+    let cancel = false
+    setItems([])
+    api
+      .specialFeatures(userId, itemId)
+      .then((list) => {
+        if (!cancel) setItems(list || [])
+      })
+      .catch(() => {
+        if (!cancel) setItems([])
+      })
+    return () => {
+      cancel = true
+    }
+  }, [itemId, userId])
+
+  const groups = new Map<string, Item[]>()
+  for (const extra of items) {
+    const key = extra.ExtraType || "Clip"
+    if (key === "Trailer") continue
+    groups.set(key, [...(groups.get(key) || []), extra])
+  }
+  const keys = [...groups.keys()].sort((a, b) => {
+    const left = EXTRA_ORDER.indexOf(a)
+    const right = EXTRA_ORDER.indexOf(b)
+    return (left < 0 ? EXTRA_ORDER.length : left) - (right < 0 ? EXTRA_ORDER.length : right)
+  })
+  if (keys.length === 0) return null
+  return (
+    <>
+      {keys.map((key) => (
+        <Row key={key} title={EXTRA_LABELS[key] || "Extras"}>
+          {(groups.get(key) || []).map((extra) => (
+            <PosterCard key={extra.Id} item={extra} layout="wide" href={`/play/${extra.Id}?resume=0`} />
+          ))}
+        </Row>
+      ))}
+    </>
+  )
+}
+
+function People({ title, people }: { title: string; people: Person[] }) {
+  if (people.length === 0) return null
+  return (
+    <Row title={title}>
+      {people.map((person) => (
         <Link key={`${person.Id}-${person.Role || ""}`} className="person" to={`/item/${person.Id}`}>
           <MediaImage src={person.PrimaryImageTag && person.Id ? imageUrl(person.Id, "Primary", { maxWidth: 420, tag: person.PrimaryImageTag }) : null} alt="" className="avatar" />
           <span className="person-copy">

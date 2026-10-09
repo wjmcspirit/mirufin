@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react"
+import * as api from "../lib/api"
 import { backdropSrc, primarySrc } from "../lib/images"
 import type { Item } from "../lib/types"
+import { useSession } from "../session"
 
 interface StageValue {
   pinned: Item | null
@@ -35,10 +37,12 @@ export function StageProvider({ children }: { children: ReactNode }) {
   const focus = held ? pinned || hovered : hovered || pinned
   const pinnedFocus = Boolean(posterFallback && pinned && focus?.Id === pinned.Id)
   const art = focus ? backdropSrc(focus) || (pinnedFocus ? primarySrc(focus, 1600) : null) : null
+  const reelSource = focus?.Id && focus.Id === pinned?.Id ? pinned : null
+  const reelId = reelSource?.Type === "Movie" || reelSource?.Type === "Series" ? reelSource.Id : reelSource?.Type === "Episode" ? reelSource.SeriesId || null : null
 
   return (
     <StageContext.Provider value={value}>
-      <StageArt src={art} />
+      <StageArt src={art} reelId={reelId} />
       {children}
     </StageContext.Provider>
   )
@@ -87,7 +91,7 @@ function artworkTone(image: HTMLImageElement) {
   }
 }
 
-function StageArt({ src }: { src: string | null }) {
+function StageArt({ src, reelId }: { src: string | null; reelId: string | null }) {
   const [current, setCurrent] = useState<string | null>(null)
   const [previous, setPrevious] = useState<string | null>(null)
   const [tone, setTone] = useState("9, 9, 11")
@@ -122,8 +126,69 @@ function StageArt({ src }: { src: string | null }) {
     <div className="stage" style={tint} aria-hidden="true">
       {previous && <div key={previous} className="stage-img" style={{ backgroundImage: `url("${previous}")` }} />}
       {current && <div key={current} className="stage-img on" style={{ backgroundImage: `url("${current}")` }} />}
+      <StageReel itemId={reelId} />
       <div className="stage-scrim" />
     </div>
+  )
+}
+
+const trailerUrls = new Map<string, string | null>()
+
+function StageReel({ itemId }: { itemId: string | null }) {
+  const { userId } = useSession()
+  const [url, setUrl] = useState<string | null>(null)
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    setVisible(false)
+    if (!itemId || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setUrl(null)
+      return
+    }
+    if (trailerUrls.has(itemId)) {
+      setUrl(trailerUrls.get(itemId) || null)
+      return
+    }
+    let cancel = false
+    Promise.all([api.localTrailers(userId, itemId), api.specialFeatures(userId, itemId).catch(() => [] as Item[])])
+      .then(async ([list, features]) => {
+        const trailer = [...(list.Items || []), ...features.filter((entry) => entry.ExtraType === "Trailer")].find((entry) => entry.Id)
+        if (!trailer?.Id) {
+          trailerUrls.set(itemId, null)
+          if (!cancel) setUrl(null)
+          return
+        }
+        const file = await api.item(userId, trailer.Id)
+        const next = api.directVideoUrl(file)
+        trailerUrls.set(itemId, next)
+        if (!cancel) setUrl(next)
+      })
+      .catch(() => {
+        trailerUrls.set(itemId, null)
+        if (!cancel) setUrl(null)
+      })
+    return () => {
+      cancel = true
+    }
+  }, [itemId, userId])
+
+  if (!url) return null
+  return (
+    <video
+      key={url}
+      className={visible ? "stage-reel on" : "stage-reel"}
+      src={url}
+      muted
+      autoPlay
+      loop
+      playsInline
+      onPlaying={() => setVisible(true)}
+      onError={() => {
+        if (itemId) trailerUrls.set(itemId, null)
+        setUrl(null)
+        setVisible(false)
+      }}
+    />
   )
 }
 

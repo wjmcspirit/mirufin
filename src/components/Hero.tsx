@@ -1,14 +1,9 @@
-import { useEffect, useState } from "react"
-import { Link, useNavigate } from "react-router-dom"
-import * as api from "../lib/api"
+import { Link } from "react-router-dom"
 import { episodeCode, metaLine, progressPct } from "../lib/format"
-import { nativeEngine } from "../lib/nativePlayer"
-import { remoteTrailer, youtubeEmbed } from "../lib/trailer"
 import type { Item } from "../lib/types"
-import { useSession } from "../session"
-import { InfoIcon, PlayIcon, TrailerIcon } from "./Icons"
+import { InfoIcon, PlayIcon } from "./Icons"
 import { TitleLogo } from "./Title"
-import { TrailerPopup } from "./TrailerPopup"
+import { TrailerButton } from "./TrailerButton"
 
 export function Hero({
   item,
@@ -69,73 +64,10 @@ export function Hero({
               Details
             </Link>
           )}
-          {(item.Type === "Movie" || item.Type === "Series" || episode) && <HeroTrailer key={item.Id} item={item} onTrailer={onTrailer} />}
+          {(item.Type === "Movie" || item.Type === "Series" || episode) && <TrailerButton key={item.Id} item={item} onOpen={onTrailer} />}
         </div>
       </div>
     </section>
-  )
-}
-
-function HeroTrailer({ item, onTrailer }: { item: Item; onTrailer: (open: boolean) => void }) {
-  const { userId } = useSession()
-  const navigate = useNavigate()
-  const [localId, setLocalId] = useState("")
-  const [url, setUrl] = useState("")
-  const [open, setOpen] = useState(false)
-
-  useEffect(() => {
-    let cancel = false
-    const apply = async (target: Item) => {
-      const saved = await api.localTrailers(userId, target.Id).catch(() => ({ Items: [] as Item[] }))
-      if (cancel) return
-      const trailer = saved.Items?.find((entry) => entry.Id)
-      if (trailer?.Id) {
-        setLocalId(trailer.Id)
-        setUrl("")
-        return
-      }
-      setLocalId("")
-      const remote = remoteTrailer(target)
-      setUrl(remote && youtubeEmbed(remote) && !nativeEngine() ? remote : "")
-    }
-    if (item.Type === "Episode" && item.SeriesId) {
-      api
-        .item(userId, item.SeriesId)
-        .then(apply)
-        .catch(() => apply(item))
-    } else {
-      void apply(item)
-    }
-    return () => {
-      cancel = true
-    }
-  }, [item, userId])
-
-  useEffect(() => () => onTrailer(false), [onTrailer])
-
-  function toggle(next: boolean) {
-    setOpen(next)
-    onTrailer(next)
-  }
-
-  if (localId) {
-    return (
-      <button className="btn" type="button" onClick={() => navigate(`/play/${localId}?resume=0`)}>
-        <TrailerIcon size={16} />
-        Trailer
-      </button>
-    )
-  }
-  if (!url) return null
-  const title = item.Type === "Episode" ? item.SeriesName || item.Name || "Trailer" : item.Name || "Trailer"
-  return (
-    <>
-      <button className="btn" type="button" onClick={() => toggle(true)}>
-        <TrailerIcon size={16} />
-        Trailer
-      </button>
-      {open && <TrailerPopup url={url} title={title} onClose={() => toggle(false)} />}
-    </>
   )
 }
 

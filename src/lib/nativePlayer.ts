@@ -17,6 +17,7 @@ interface NativePlayerPlugin {
   rate(options: { rate: number }): Promise<void>
   volume(options: { volume: number }): Promise<void>
   subtitle(options: { url: string }): Promise<void>
+  subtitleStyle(options: { size: string; raise: number }): Promise<void>
   selectAudio(options: { ordinal: number }): Promise<{ selected: boolean }>
   selectText(options: { ordinal: number }): Promise<{ selected: boolean }>
   stop(): Promise<void>

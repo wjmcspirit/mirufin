@@ -34,6 +34,7 @@ export function Shell() {
           <img className="brand-mark" src="/mirufin-m.png" alt="" />
           <img className="brand-name" src="/mirufin-name.png" alt="Mirufin" />
         </NavLink>
+        <div className="side-nav-clip">
         <nav className="side-nav">
           <NavLink to="/" end title="Home" className={({ isActive }) => (isActive ? "nav active" : "nav")}>
             <HomeIcon size={icon} />
@@ -55,6 +56,7 @@ export function Shell() {
             </NavLink>
           ))}
         </nav>
+        </div>
         <div className="side-foot">
           <button className="nav rail-toggle" type="button" onClick={toggleRail} aria-expanded={!collapsed} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
             <ChevronIcon direction={collapsed ? "right" : "left"} />

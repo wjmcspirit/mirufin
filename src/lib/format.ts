@@ -184,16 +184,53 @@ export function criticLabel(item: Item, verbose = false) {
   if (item.Type !== "Movie" && item.Type !== "Series") return ""
   if (typeof item.CriticRating !== "number" || !Number.isFinite(item.CriticRating)) return ""
   const score = Math.round(item.CriticRating)
-  return verbose ? `🍅 ${score}% Critics` : `🍅 ${score}%`
+  const mark = score >= 60 ? `🍅 ${score}%` : `Rotten ${score}%`
+  return verbose ? `${mark} Critics` : mark
+}
+
+export function airedLabel(item: Item) {
+  const aired = calendarDate(item.PremiereDate)
+  return aired ? formatDay(aired) : ""
+}
+
+function seriesSpan(item: Item) {
+  const start = item.ProductionYear
+  if (!start) return ""
+  const end = calendarDate(item.EndDate)?.getFullYear()
+  if (item.Status === "Continuing") return `${start}–`
+  if (end && end > start) return `${start}–${end}`
+  return String(start)
+}
+
+export function endsAtLabel(item: Item) {
+  const runtime = item.RunTimeTicks || 0
+  const position = item.UserData?.PlaybackPositionTicks || 0
+  if (!runtime || position <= 0 || position >= runtime) return ""
+  const end = new Date(Date.now() + (runtime - position) / 10_000)
+  return `Ends ${end.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
 }
 
 export function metaLine(item: Item) {
   const bits: string[] = []
-  if (item.ProductionYear) bits.push(String(item.ProductionYear))
-  const runtime = formatRuntime(item.RunTimeTicks)
+  if (item.Type === "Series") {
+    const span = seriesSpan(item)
+    if (span) bits.push(span)
+    if (item.Status === "Continuing" || item.Status === "Ended") bits.push(item.Status)
+  } else if (item.Type === "Episode") {
+    const aired = airedLabel(item)
+    if (aired) bits.push(aired)
+    else if (item.ProductionYear) bits.push(String(item.ProductionYear))
+  } else if (item.ProductionYear) bits.push(String(item.ProductionYear))
+  const runtime = item.Type === "Series" ? "" : formatRuntime(item.RunTimeTicks)
   if (runtime) bits.push(runtime)
+  if (item.Type === "Movie" || item.Type === "Episode") {
+    const left = remainingLabel(item)
+    if (left) bits.push(left)
+    const ends = endsAtLabel(item)
+    if (ends) bits.push(ends)
+  }
   if (item.OfficialRating) bits.push(item.OfficialRating)
-  if (item.CommunityRating) bits.push(item.CommunityRating.toFixed(1))
+  if (item.CommunityRating) bits.push(`${item.CommunityRating.toFixed(1)} ★`)
   const critic = criticLabel(item, true)
   if (critic) bits.push(critic)
   return bits.join("  ·  ")
@@ -230,13 +267,16 @@ export function continueWatching(items: Item[]) {
   return items.filter((item) => (item.Type === "Movie" || item.Type === "Episode") && isInProgress(item))
 }
 
-export function qualityLabel(height?: number) {
-  if (!height) return ""
-  if (height >= 2000) return "4K"
-  if (height >= 1400) return "1440p"
-  if (height >= 1000) return "1080p"
-  if (height >= 700) return "720p"
-  return `${height}p`
+export function qualityLabel(height?: number, width?: number) {
+  const tall = height || 0
+  const wide = Math.max(tall, width || 0)
+  if (!wide) return ""
+  if (wide >= 3800 || tall >= 2000) return "4K"
+  if (!tall) return ""
+  if (tall >= 1400) return "1440p"
+  if (tall >= 1000) return "1080p"
+  if (tall >= 700) return "720p"
+  return `${tall}p`
 }
 
 export function codecName(codec?: string) {
@@ -268,7 +308,7 @@ export function techChips(item: Item) {
   const streams = mediaStreams(item)
   const video = streams.find((stream) => stream.Type === "Video")
   const audio = streams.find((stream) => stream.Type === "Audio")
-  const chips = [qualityLabel(video?.Height), codecName(video?.Codec), video?.VideoRange && video.VideoRange !== "SDR" ? video.VideoRange : "", codecName(audio?.Codec), channelsLabel(audio?.Channels)]
+  const chips = [qualityLabel(video?.Height, video?.Width), codecName(video?.Codec), video?.VideoRange && video.VideoRange !== "SDR" ? video.VideoRange : "", codecName(audio?.Codec), channelsLabel(audio?.Channels)]
   return chips.filter(Boolean)
 }
 

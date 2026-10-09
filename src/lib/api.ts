@@ -160,12 +160,38 @@ export function nextUp(userId: string, seriesId?: string, limit = 18) {
   const params = new URLSearchParams({
     userId,
     Limit: String(limit),
-    Fields: `${CARD_FIELDS},SeriesId`,
+    Fields: `${CARD_FIELDS},SeriesId,SeasonId,ParentIndexNumber`,
     EnableImageTypes: CARD_IMAGES,
     ImageTypeLimit: "1",
   })
   if (seriesId) params.set("seriesId", seriesId)
   return jf<ItemList>(`/Shows/NextUp?${params}`)
+}
+
+export function airedRecently(userId: string) {
+  const start = new Date()
+  start.setDate(start.getDate() - 7)
+  const end = new Date()
+  end.setDate(end.getDate() + 1)
+  const params = new URLSearchParams({
+    Recursive: "true",
+    IncludeItemTypes: "Episode",
+    SortBy: "PremiereDate",
+    SortOrder: "Descending",
+    MinPremiereDate: dayStamp(start),
+    MaxPremiereDate: dayStamp(end),
+    Limit: "18",
+    Fields: `${CARD_FIELDS},PremiereDate,SeriesName,SeriesId,ParentIndexNumber,IndexNumber`,
+    EnableImageTypes: CARD_IMAGES,
+    ImageTypeLimit: "1",
+  })
+  return jf<ItemList>(`/Users/${userId}/Items?${params}`)
+}
+
+function dayStamp(date: Date) {
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${date.getFullYear()}-${month}-${day}`
 }
 
 export function seriesByRecentEpisodes(userId: string, parentId: string) {
@@ -188,7 +214,7 @@ export function recentEpisodes(
   parentId: string,
   start: number,
   limit: number,
-  options?: { filters?: string; genreId?: string; order?: string },
+  options?: { filters?: string; genreId?: string; studioId?: string; order?: string },
 ) {
   const params = new URLSearchParams({
     ParentId: parentId,
@@ -204,6 +230,7 @@ export function recentEpisodes(
   })
   if (options?.filters) params.set("Filters", options.filters)
   if (options?.genreId) params.set("GenreIds", options.genreId)
+  if (options?.studioId) params.set("StudioIds", options.studioId)
   return jf<ItemList>(`/Users/${userId}/Items?${params}`)
 }
 
@@ -257,7 +284,7 @@ export function latest(userId: string, parentId: string) {
 export function libraryItems(
   userId: string,
   parentId: string,
-  options: { types?: string; sort: string; order: string; start: number; limit: number; filters?: string; genreId?: string; nameStartsWith?: string },
+  options: { types?: string; sort: string; order: string; start: number; limit: number; filters?: string; genreId?: string; studioId?: string; nameStartsWith?: string },
 ) {
   const params = new URLSearchParams({
     ParentId: parentId,
@@ -278,6 +305,7 @@ export function libraryItems(
   }
   if (options.filters) params.set("Filters", options.filters)
   if (options.genreId) params.set("GenreIds", options.genreId)
+  if (options.studioId) params.set("StudioIds", options.studioId)
   if (options.nameStartsWith) params.set("NameStartsWith", options.nameStartsWith)
   return jf<ItemList>(`/Users/${userId}/Items?${params}`)
 }
@@ -297,14 +325,18 @@ export function item(userId: string, itemId: string) {
   return jf<Item>(`/Users/${userId}/Items/${itemId}?Fields=${ITEM_FIELDS}`)
 }
 
+export function specialFeatures(userId: string, itemId: string) {
+  return jf<Item[]>(`/Users/${userId}/Items/${itemId}/SpecialFeatures?Fields=${CARD_FIELDS}`)
+}
+
 export function seasons(userId: string, seriesId: string) {
-  return jf<ItemList>(`/Shows/${seriesId}/Seasons?userId=${userId}&Fields=Overview,ItemCounts,UserData,ImageTags`)
+  return jf<ItemList>(`/Shows/${seriesId}/Seasons?userId=${userId}&Fields=Overview,ItemCounts,UserData,ImageTags,IndexNumber`)
 }
 
 export function episodes(userId: string, seriesId: string, seasonId?: string) {
   const params = new URLSearchParams({
     userId,
-    Fields: "Overview,UserData,ImageTags,RunTimeTicks,ParentIndexNumber,SeriesName",
+    Fields: "Overview,UserData,ImageTags,RunTimeTicks,ParentIndexNumber,SeriesName,PremiereDate,SeasonId,ParentId",
   })
   if (seasonId) params.set("seasonId", seasonId)
   return jf<ItemList>(`/Shows/${seriesId}/Episodes?${params}`)
@@ -386,6 +418,15 @@ export function intros(userId: string, itemId: string) {
 
 export function localTrailers(userId: string, itemId: string) {
   return jf<ItemList>(`/Users/${userId}/Items/${itemId}/LocalTrailers`).catch(() => ({ Items: [] as Item[] }))
+}
+
+const DIRECT_CONTAINERS = new Set(["mp4", "m4v", "webm"])
+
+export function directVideoUrl(item: Item) {
+  const source = item.MediaSources?.find((entry) => DIRECT_CONTAINERS.has((entry.Container || "").toLowerCase()))
+  if (!source?.Id) return null
+  const params = new URLSearchParams({ static: "true", mediaSourceId: source.Id })
+  return mediaUrl(`/Videos/${item.Id}/stream.${(source.Container || "mp4").toLowerCase()}?${params}`)
 }
 
 export function themeSongs(itemId: string, userId: string) {

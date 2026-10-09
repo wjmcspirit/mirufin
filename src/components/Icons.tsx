@@ -59,8 +59,18 @@ export function InfoIcon(props: IconProps) {
 export function TrailerIcon(props: IconProps) {
   return (
     <Base {...props}>
-      <rect x="3" y="6" width="18" height="12" rx="2" />
-      <path d="m10 9.2 4.8 2.8-4.8 2.8z" fill="currentColor" stroke="none" />
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M7 4v16M17 4v16M3 8.5h4M3 12h4M3 15.5h4M17 8.5h4M17 12h4M17 15.5h4" />
+    </Base>
+  )
+}
+
+export function SeasonIcon(props: IconProps) {
+  return (
+    <Base {...props}>
+      <rect x="4" y="4" width="16" height="4.5" rx="1" />
+      <rect x="4" y="10" width="16" height="4.5" rx="1" />
+      <rect x="4" y="16" width="10" height="4.5" rx="1" />
     </Base>
   )
 }

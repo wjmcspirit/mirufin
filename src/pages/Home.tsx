@@ -32,6 +32,7 @@ export function HomePage() {
   const [resumeItems, setResumeItems] = useState<Item[]>([])
   const [nextItems, setNextItems] = useState<Item[]>([])
   const [upcomingItems, setUpcomingItems] = useState<Item[]>([])
+  const [airedItems, setAiredItems] = useState<Item[]>([])
   const [rows, setRows] = useState<LatestRow[]>([])
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
   const [error, setError] = useState("")
@@ -40,10 +41,11 @@ export function HomePage() {
     setStatus("loading")
     const run = async () => {
       const library = await api.views(userId)
-      const [resumeList, nextList, playedList, latestRows] = await Promise.all([
+      const [resumeList, nextList, playedList, airedList, latestRows] = await Promise.all([
         settle(api.resume(userId), { Items: [] }),
         settle(api.nextUp(userId), { Items: [] }),
         settle(api.playedEpisodes(userId), { Items: [] }),
+        settle(api.airedRecently(userId), { Items: [] }),
         Promise.all(
           (library.Items || []).map(async (view) => ({
             view,
@@ -56,6 +58,7 @@ export function HomePage() {
       setResumeItems(resumeList.Items || [])
       setNextItems(nextList.Items || [])
       setUpcomingItems(following)
+      setAiredItems(airedList.Items || [])
       setRows(latestRows)
       setStatus("ready")
     }
@@ -140,6 +143,15 @@ export function HomePage() {
             <Row key={section.id} className={`size-${section.size}`} title="Next up">
               {upcomingItems.map((item) => (
                 <PosterCard key={item.Id} item={item} layout={layout} href={`/play/${item.Id}?resume=0`} />
+              ))}
+            </Row>
+          )
+        }
+        if (section.id === "aired" && airedItems.length > 0) {
+          return (
+            <Row key={section.id} className={`size-${section.size}`} title="New this week">
+              {airedItems.map((item) => (
+                <PosterCard key={item.Id} item={item} layout={layout} href={`/item/${item.Id}`} />
               ))}
             </Row>
           )

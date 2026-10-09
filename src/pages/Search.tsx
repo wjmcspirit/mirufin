@@ -19,6 +19,31 @@ const GROUPS: { title: string; types: string[] }[] = [
 ]
 
 const discoveryCache = new Map<string, Promise<Item[]>>()
+const RECENT = "mirufin.searches"
+const KEY_ROWS = ["ABCDEFG", "HIJKLMN", "OPQRSTU", "VWXYZ12", "3456789"]
+
+function loadRecent() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(RECENT) || "[]") as unknown
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((item): item is string => typeof item === "string").slice(0, 8)
+  } catch {
+    return []
+  }
+}
+
+function rememberSearch(term: string) {
+  const folded = term.toLowerCase()
+  const existing = loadRecent()
+  if (existing.some((item) => item.toLowerCase().startsWith(folded) && item.toLowerCase() !== folded)) return existing
+  const kept = existing.filter((item) => {
+    const value = item.toLowerCase()
+    return value !== folded && !folded.startsWith(value)
+  })
+  const next = [term, ...kept].slice(0, 8)
+  localStorage.setItem(RECENT, JSON.stringify(next))
+  return next
+}
 
 export function SearchPage() {
   const { userId, libraries } = useSession()
@@ -29,6 +54,7 @@ export function SearchPage() {
   const [highlights, setHighlights] = useState<Item[]>([])
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle")
   const [error, setError] = useState("")
+  const [recent, setRecent] = useState<string[]>(() => loadRecent())
   const term = text.trim()
   const movies = libraries.find((library) => library.CollectionType === "movies")
   const shows = libraries.find((library) => library.CollectionType === "tvshows")
@@ -74,6 +100,7 @@ export function SearchPage() {
     if (!term) {
       setItems([])
       setStatus("idle")
+      if (params.get("q")) setParams({}, { replace: true })
       return
     }
     let cancel = false
@@ -97,7 +124,12 @@ export function SearchPage() {
       cancel = true
       window.clearTimeout(handle)
     }
-  }, [setParams, term, userId])
+  }, [params, setParams, term, userId])
+
+  useEffect(() => {
+    if (status !== "ready" || !term || items.length === 0) return
+    setRecent(rememberSearch(term))
+  }, [items.length, status, term])
 
   return (
     <div className="search-screen">
@@ -116,9 +148,51 @@ export function SearchPage() {
             onChange={(event) => setText(event.target.value)}
             placeholder="Titles, people, albums"
             aria-label="Search"
-            autoFocus
           />
         </label>
+        <div className="keypad" aria-label="On-screen keyboard">
+          {KEY_ROWS.map((row) => (
+            <div key={row} className="key-row">
+              {[...row].map((key, index) => (
+                <button key={key} className="key" type="button" autoFocus={!initial && row === KEY_ROWS[0] && index === 0} onClick={() => setText((value) => `${value}${key}`)}>
+                  {key}
+                </button>
+              ))}
+            </div>
+          ))}
+          <div className="key-row">
+            <button className="key key-wide" type="button" onClick={() => setText((value) => `${value}0`)}>
+              0
+            </button>
+            <button className="key key-wide" type="button" onClick={() => setText((value) => `${value} `)}>
+              Space
+            </button>
+            <button className="key key-wide" type="button" onClick={() => setText((value) => value.slice(0, -1))}>
+              Delete
+            </button>
+          </div>
+        </div>
+        {!term && recent.length > 0 && (
+          <div className="recent-searches">
+            <p className="search-label">Recent searches</p>
+            <div className="search-browse">
+              {recent.map((entry) => (
+                <button key={entry} type="button" onClick={() => setText(entry)}>
+                  {entry}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  localStorage.removeItem(RECENT)
+                  setRecent([])
+                }}
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        )}
         {!term && (
           <>
             <p className="search-label">Browse your library</p>

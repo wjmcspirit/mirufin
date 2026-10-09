@@ -37,8 +37,9 @@ export function PlayerPage() {
   const { id = "" } = useParams()
   const [params] = useSearchParams()
   const resume = params.get("resume") !== "0"
+  const restSeason = params.get("rest") === "season"
   const { userId } = useSession()
-  const { prefs } = usePrefs()
+  const { prefs, setPrefs } = usePrefs()
   const prefsRef = useRef(prefs)
   prefsRef.current = prefs
   const navigate = useNavigate()
@@ -124,8 +125,10 @@ export function PlayerPage() {
         if (loaded.Type === "Episode" && loaded.SeriesId) {
           const list = await api.episodes(userId, loaded.SeriesId)
           if (cancel) return
-          const index = (list.Items || []).findIndex((episode) => episode.Id === loaded.Id)
-          setNext(index >= 0 ? list.Items[index + 1] || null : null)
+          const episodes = list.Items || []
+          const index = episodes.findIndex((episode) => episode.Id === loaded.Id)
+          const following = index >= 0 ? episodes[index + 1] || null : null
+          setNext(following && (!restSeason || sameSeason(loaded, following)) ? following : null)
         }
       })
       .catch((caught: unknown) => {
@@ -137,7 +140,37 @@ export function PlayerPage() {
     return () => {
       cancel = true
     }
-  }, [id, resume, userId])
+  }, [id, restSeason, resume, userId])
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    const place = () => {
+      const line = 100 - prefs.subtitleRaise
+      for (const track of video.textTracks) {
+        const cues = track.cues
+        if (!cues) continue
+        for (const cue of cues) {
+          if (!(cue instanceof VTTCue)) continue
+          cue.snapToLines = false
+          cue.line = line
+        }
+      }
+    }
+    place()
+    video.textTracks.addEventListener("addtrack", place)
+    const tracks = [...video.textTracks]
+    for (const track of tracks) track.addEventListener("cuechange", place)
+    return () => {
+      video.textTracks.removeEventListener("addtrack", place)
+      for (const track of tracks) track.removeEventListener("cuechange", place)
+    }
+  }, [plan, prefs.subtitleRaise, subtitleIndex])
+
+  useEffect(() => {
+    if (!nativeEngine()) return
+    void nativePlayer.subtitleStyle({ size: prefs.subtitleSize, raise: prefs.subtitleRaise }).catch(() => undefined)
+  }, [prefs.subtitleRaise, prefs.subtitleSize])
 
   const source = prelude ?? item
 
@@ -470,14 +503,14 @@ export function PlayerPage() {
         if (current <= 1) {
           window.clearInterval(timer)
           sessionStorage.setItem("mirufin.autoplayStreak", String(streak + 1))
-          navigate(`/play/${upcoming.Id}?resume=0`)
+          navigate(`/play/${upcoming.Id}?resume=0${restSeason ? "&rest=season" : ""}`)
           return 0
         }
         return current - 1
       })
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [creditsOpen, ended, navigate, next, nextHold, prefs.autoplayNext, prefs.nextUp, prefs.nextUpDelay])
+  }, [creditsOpen, ended, navigate, next, nextHold, prefs.autoplayNext, prefs.nextUp, prefs.nextUpDelay, restSeason])
 
   function wake() {
     setPointer((value) => value + 1)
@@ -805,7 +838,7 @@ export function PlayerPage() {
   function playNextNow() {
     if (!next) return
     sessionStorage.setItem("mirufin.autoplayStreak", "0")
-    navigate(`/play/${next.Id}?resume=0`)
+    navigate(`/play/${next.Id}?resume=0${restSeason ? "&rest=season" : ""}`)
   }
 
   const shown = scrub ?? seekPreview?.seconds ?? position
@@ -823,7 +856,7 @@ export function PlayerPage() {
   const volumeLevel = muted ? 0 : volume
   return (
     <div
-      className="player"
+      className={`player cue-${prefs.subtitleSize}`}
       ref={rootRef}
       tabIndex={0}
       onKeyDownCapture={onKey}
@@ -1071,6 +1104,21 @@ export function PlayerPage() {
           )}
           {menu === "subs" && plan && (
             <Menu title="Subtitles">
+              <div className="cue-row">
+                {(["small", "medium", "large"] as const).map((size) => (
+                  <button key={size} type="button" aria-pressed={prefs.subtitleSize === size} onClick={() => setPrefs({ subtitleSize: size })}>
+                    {size === "small" ? "Small" : size === "large" ? "Large" : "Medium"}
+                  </button>
+                ))}
+              </div>
+              <div className="cue-row">
+                <button type="button" onClick={() => setPrefs({ subtitleRaise: Math.min(32, prefs.subtitleRaise + 4) })}>
+                  Higher
+                </button>
+                <button type="button" onClick={() => setPrefs({ subtitleRaise: Math.max(0, prefs.subtitleRaise - 4) })}>
+                  Lower
+                </button>
+              </div>
               <button type="button" aria-pressed={subtitleIndex == null} onClick={() => chooseSubtitle(null, false)}>
                 Off
               </button>
@@ -1104,6 +1152,13 @@ export function PlayerPage() {
       </div>
       </div>
   )
+}
+
+function sameSeason(current: Item, next: Item) {
+  const left = current.SeasonId || current.ParentId
+  const right = next.SeasonId || next.ParentId
+  if (left && right) return left === right
+  return current.ParentIndexNumber != null && next.ParentIndexNumber != null && current.ParentIndexNumber === next.ParentIndexNumber
 }
 
 function chapterName(chapters: Chapter[] | undefined, seconds: number) {
