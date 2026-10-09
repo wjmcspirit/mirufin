@@ -81,6 +81,10 @@ export function RemoteNav() {
           field.click()
           return
         }
+        if (key === "Enter" && field instanceof HTMLSelectElement) {
+          event.preventDefault()
+          return
+        }
         if (!ARROWS.has(key)) return
         if (isTextField(field) && (key === "ArrowLeft" || key === "ArrowRight")) return
         if (field instanceof HTMLSelectElement && (key === "ArrowLeft" || key === "ArrowRight")) {

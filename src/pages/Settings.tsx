@@ -155,14 +155,8 @@ export function SettingsPage() {
             <option value="never">Never</option>
           </select>
         </label>
-        <label className="field compact">
-          Resume rewind (seconds)
-          <input type="number" min={0} max={30} value={prefs.resumeRewind} onChange={(event) => setPrefs({ resumeRewind: Number(event.target.value) })} />
-        </label>
-        <label className="field compact">
-          Skip back (seconds)
-          <input type="number" min={5} max={60} value={prefs.skipBack} onChange={(event) => setPrefs({ skipBack: Number(event.target.value) })} />
-        </label>
+        <Seconds label="Resume rewind (seconds)" value={prefs.resumeRewind} min={0} max={30} onChange={(resumeRewind) => setPrefs({ resumeRewind })} />
+        <Seconds label="Skip back (seconds)" value={prefs.skipBack} min={5} max={60} onChange={(skipBack) => setPrefs({ skipBack })} />
         <label className="field compact">
           Subtitle size
           <select value={prefs.subtitleSize} onChange={(event) => setPrefs({ subtitleSize: event.target.value as "small" | "medium" | "large" })}>
@@ -180,10 +174,7 @@ export function SettingsPage() {
             <option value={24}>Clear of the controls</option>
           </select>
         </label>
-        <label className="field compact">
-          Skip forward (seconds)
-          <input type="number" min={5} max={90} value={prefs.skipForward} onChange={(event) => setPrefs({ skipForward: Number(event.target.value) })} />
-        </label>
+        <Seconds label="Skip forward (seconds)" value={prefs.skipForward} min={5} max={90} onChange={(skipForward) => setPrefs({ skipForward })} />
         <label className="field compact">
           Transcode quality
           <select value={prefs.maxBitrate} onChange={(event) => setPrefs({ maxBitrate: Number(event.target.value) })}>
@@ -217,6 +208,24 @@ export function SettingsPage() {
           ))}
         </div>
       </section>
+    </div>
+  )
+}
+
+function Seconds({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (value: number) => void }) {
+  function set(next: number) {
+    onChange(Math.min(max, Math.max(min, next)))
+  }
+  return (
+    <div className="seconds">
+      <span>{label}</span>
+      <button className="btn tiny" type="button" aria-label={`Decrease ${label}`} disabled={value <= min} onClick={() => set(value - 1)}>
+        −
+      </button>
+      <strong>{value}</strong>
+      <button className="btn tiny" type="button" aria-label={`Increase ${label}`} disabled={value >= max} onClick={() => set(value + 1)}>
+        +
+      </button>
     </div>
   )
 }

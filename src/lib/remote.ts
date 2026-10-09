@@ -79,6 +79,10 @@ function focusNode(node: HTMLElement) {
   markFocus(node)
   if (place(node) === "main" && !node.closest(".letter-rail, .tool-pop, .trailer-pop")) returnMain = node
   node.focus({ preventScroll: true })
+  const setting = node.closest(".settings .check, .settings .field, .settings .seconds, .settings .setting")
+  if (setting instanceof HTMLElement) {
+    setting.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" })
+  }
   if (node.closest(".side")) {
     const rail = node.closest(".side-nav")
     if (rail instanceof HTMLElement) scrollInside(rail, node)
