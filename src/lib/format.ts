@@ -34,6 +34,128 @@ export function episodeCode(item: Item) {
   return `S${item.ParentIndexNumber}:E${item.IndexNumber}`
 }
 
+/** Newest episodes in this library land within about a week, so two weeks is the recent window. */
+const RECENT_EPISODE_WINDOW = 14 * 24 * 60 * 60 * 1000
+
+export interface RecentSeries {
+  seriesId: string
+  series: Item
+  episode: Item
+  added: number
+}
+
+export interface AddedSeries {
+  seriesId: string
+  added: number
+  count: number
+  latestCode: string
+  latestName: string
+  episodeId: string
+  resume: boolean
+  seriesName: string
+  posterTag: string
+}
+
+export function seriesFromAddedEpisodes(episodes: Item[]) {
+  const groups = new Map<string, AddedSeries>()
+  for (const episode of episodes) {
+    if (episode.Type && episode.Type !== "Episode") continue
+    const seriesId = episode.SeriesId
+    if (!seriesId) continue
+    const added = Date.parse(episode.DateCreated || "")
+    const stamp = Number.isFinite(added) ? added : 0
+    const existing = groups.get(seriesId)
+    if (!existing) {
+      groups.set(seriesId, {
+        seriesId,
+        added: stamp,
+        count: 1,
+        latestCode: episodeCode(episode),
+        latestName: episode.Name || "",
+        episodeId: episode.Id,
+        resume: isInProgress(episode),
+        seriesName: episode.SeriesName || "",
+        posterTag: episode.SeriesPrimaryImageTag || "",
+      })
+      continue
+    }
+    existing.count += 1
+    if (stamp >= existing.added) {
+      existing.added = stamp
+      existing.latestCode = episodeCode(episode)
+      existing.latestName = episode.Name || ""
+      existing.episodeId = episode.Id
+      existing.resume = isInProgress(episode)
+    }
+  }
+  return [...groups.values()].sort((a, b) => b.added - a.added)
+}
+
+export function mergeAddedSeries(current: AddedSeries[], extra: AddedSeries[], ascending = false) {
+  const groups = new Map(current.map((group) => [group.seriesId, { ...group }]))
+  for (const group of extra) {
+    const existing = groups.get(group.seriesId)
+    if (!existing) {
+      groups.set(group.seriesId, { ...group })
+      continue
+    }
+    existing.count += group.count
+    if (group.added >= existing.added) {
+      existing.added = group.added
+      existing.latestCode = group.latestCode
+      existing.latestName = group.latestName
+      existing.episodeId = group.episodeId
+      existing.resume = group.resume
+    }
+  }
+  const list = [...groups.values()].sort((a, b) => b.added - a.added)
+  if (ascending) list.reverse()
+  return list
+}
+
+export function addedSeriesNote(group: AddedSeries) {
+  const label = group.count === 1 ? "1 new episode" : `${group.count} new episodes`
+  const latest = group.latestCode || group.latestName
+  return latest ? `${label} · ${latest}` : label
+}
+
+export function seriesFallback(group: AddedSeries): Item {
+  return {
+    Id: group.seriesId,
+    Name: group.seriesName || "Series",
+    Type: "Series",
+    ImageTags: group.posterTag ? { Primary: group.posterTag } : undefined,
+  }
+}
+
+export function recentlyAddedSeries(series: Item[], now = Date.now()) {
+  const cutoff = now - RECENT_EPISODE_WINDOW
+  return series
+    .filter((item) => item.Type === "Series" || !item.Type)
+    .map((item) => ({ item, added: Date.parse(item.DateLastMediaAdded || "") }))
+    .filter((entry) => Number.isFinite(entry.added) && entry.added >= cutoff)
+    .sort((a, b) => b.added - a.added)
+    .slice(0, 8)
+    .map((entry) => entry.item)
+}
+
+export function seriesArtwork(episode: Item): Item {
+  const next: Item = { ...episode }
+  if (episode.ParentBackdropItemId && episode.ParentBackdropImageTags?.length) next.BackdropImageTags = undefined
+  if (episode.ParentLogoItemId && episode.ParentLogoImageTag && episode.ImageTags?.Logo) {
+    next.ImageTags = { ...episode.ImageTags, Logo: "" }
+  }
+  return next
+}
+
+export function heroPlayTarget(episode: Item, upcoming: Item[]) {
+  if (isInProgress(episode)) return { item: episode, resume: true }
+  if (!episode.UserData?.Played) return { item: episode, resume: false }
+  const next = upcoming.find((entry) => entry.Type === "Episode" && entry.SeriesId === episode.SeriesId && entry.Id !== episode.Id)
+  if (next) return { item: next, resume: isInProgress(next) }
+  return { item: episode, resume: false }
+}
+
 function calendarDate(value?: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value || "")
   if (!match) return null
@@ -58,6 +180,13 @@ export function personFacts(item: Item) {
   return age >= 0 ? `${born} · Age ${age}` : born
 }
 
+export function criticLabel(item: Item, verbose = false) {
+  if (item.Type !== "Movie" && item.Type !== "Series") return ""
+  if (typeof item.CriticRating !== "number" || !Number.isFinite(item.CriticRating)) return ""
+  const score = Math.round(item.CriticRating)
+  return verbose ? `🍅 ${score}% Critics` : `🍅 ${score}%`
+}
+
 export function metaLine(item: Item) {
   const bits: string[] = []
   if (item.ProductionYear) bits.push(String(item.ProductionYear))
@@ -65,6 +194,8 @@ export function metaLine(item: Item) {
   if (runtime) bits.push(runtime)
   if (item.OfficialRating) bits.push(item.OfficialRating)
   if (item.CommunityRating) bits.push(item.CommunityRating.toFixed(1))
+  const critic = criticLabel(item, true)
+  if (critic) bits.push(critic)
   return bits.join("  ·  ")
 }
 

@@ -68,7 +68,7 @@ export async function jf<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     const message = await readError(response)
     const sentToken = Boolean(getToken())
-    if (response.status === 401 && sentToken && !path.includes("/AuthenticateByName")) {
+    if (response.status === 401 && sentToken && !path.includes("/AuthenticateByName") && !path.includes("/QuickConnect/")) {
       onUnauthorized()
     }
     throw new ApiError(message || `Request failed (${response.status})`, response.status)
@@ -94,6 +94,7 @@ const ITEM_FIELDS = [
   "PremiereDate",
   "EndDate",
   "CommunityRating",
+  "CriticRating",
   "OfficialRating",
   "Taglines",
   "RemoteTrailers",
@@ -106,7 +107,7 @@ const ITEM_FIELDS = [
   "Trickplay",
 ].join(",")
 
-const CARD_FIELDS = "PrimaryImageAspectRatio,ProductionYear,Overview,ParentId,UserData,ImageTags,RunTimeTicks,RemoteTrailers"
+const CARD_FIELDS = "PrimaryImageAspectRatio,ProductionYear,Overview,ParentId,UserData,ImageTags,RunTimeTicks,RemoteTrailers,CriticRating"
 const CARD_IMAGES = "Primary,Backdrop,Thumb,Logo"
 
 export function publicInfo() {
@@ -122,6 +123,14 @@ export function authenticate(username: string, password: string) {
     method: "POST",
     body: JSON.stringify({ Username: username, Pw: password, Password: password }),
   })
+}
+
+export function quickConnectStart() {
+  return jf<{ Secret: string; Code: string }>("/QuickConnect/Initiate", { method: "POST" })
+}
+
+export function quickConnectFinish(secret: string) {
+  return jf<AuthResult>(`/QuickConnect/Connect?secret=${encodeURIComponent(secret)}`)
 }
 
 export function views(userId: string) {
@@ -151,12 +160,87 @@ export function nextUp(userId: string, seriesId?: string, limit = 18) {
   const params = new URLSearchParams({
     userId,
     Limit: String(limit),
-    Fields: CARD_FIELDS,
+    Fields: `${CARD_FIELDS},SeriesId`,
     EnableImageTypes: CARD_IMAGES,
     ImageTypeLimit: "1",
   })
   if (seriesId) params.set("seriesId", seriesId)
   return jf<ItemList>(`/Shows/NextUp?${params}`)
+}
+
+export function seriesByRecentEpisodes(userId: string, parentId: string) {
+  const params = new URLSearchParams({
+    ParentId: parentId,
+    Recursive: "true",
+    IncludeItemTypes: "Series",
+    SortBy: "DateLastContentAdded",
+    SortOrder: "Descending",
+    Limit: "24",
+    Fields: `${CARD_FIELDS},DateLastMediaAdded`,
+    EnableImageTypes: CARD_IMAGES,
+    ImageTypeLimit: "1",
+  })
+  return jf<ItemList>(`/Users/${userId}/Items?${params}`)
+}
+
+export function recentEpisodes(
+  userId: string,
+  parentId: string,
+  start: number,
+  limit: number,
+  options?: { filters?: string; genreId?: string; order?: string },
+) {
+  const params = new URLSearchParams({
+    ParentId: parentId,
+    Recursive: "true",
+    IncludeItemTypes: "Episode",
+    SortBy: "DateCreated",
+    SortOrder: options?.order === "Ascending" ? "Ascending" : "Descending",
+    StartIndex: String(start),
+    Limit: String(limit),
+    Fields: `${CARD_FIELDS},DateCreated,SeriesId,SeriesName,ParentIndexNumber,IndexNumber,SeriesPrimaryImageTag`,
+    EnableImageTypes: "Primary",
+    ImageTypeLimit: "1",
+  })
+  if (options?.filters) params.set("Filters", options.filters)
+  if (options?.genreId) params.set("GenreIds", options.genreId)
+  return jf<ItemList>(`/Users/${userId}/Items?${params}`)
+}
+
+export async function seriesByIds(userId: string, ids: string[], nameStartsWith?: string) {
+  if (ids.length === 0) return { Items: [] as Item[] }
+  const lists = await Promise.all(
+    Array.from({ length: Math.ceil(ids.length / 60) }, (_, index) => {
+      const chunk = ids.slice(index * 60, index * 60 + 60)
+      const params = new URLSearchParams({
+        Ids: chunk.join(","),
+        IncludeItemTypes: "Series",
+        Recursive: "true",
+        Fields: `${CARD_FIELDS},Genres`,
+        EnableImageTypes: CARD_IMAGES,
+        ImageTypeLimit: "1",
+        Limit: String(chunk.length),
+      })
+      if (nameStartsWith) params.set("NameStartsWith", nameStartsWith)
+      return jf<ItemList>(`/Users/${userId}/Items?${params}`)
+    }),
+  )
+  return { Items: lists.flatMap((list) => list.Items || []) }
+}
+
+export function newestEpisode(userId: string, seriesId: string) {
+  const params = new URLSearchParams({
+    ParentId: seriesId,
+    Recursive: "true",
+    IncludeItemTypes: "Episode",
+    SortBy: "DateCreated",
+    SortOrder: "Descending",
+    Limit: "1",
+    Fields: `${CARD_FIELDS},DateCreated,SeriesId,SeriesName,ParentIndexNumber,IndexNumber,PremiereDate,OfficialRating,CommunityRating,Genres`,
+    EnableImageTypes: CARD_IMAGES,
+    ImageTypeLimit: "1",
+  })
+  return jf<ItemList>(`/Users/${userId}/Items?${params}`)
 }
 
 export function latest(userId: string, parentId: string) {
@@ -170,7 +254,11 @@ export function latest(userId: string, parentId: string) {
   return jf<Item[]>(`/Users/${userId}/Items/Latest?${params}`)
 }
 
-export function libraryItems(userId: string, parentId: string, options: { types?: string; sort: string; order: string; start: number; limit: number }) {
+export function libraryItems(
+  userId: string,
+  parentId: string,
+  options: { types?: string; sort: string; order: string; start: number; limit: number; filters?: string; genreId?: string; nameStartsWith?: string },
+) {
   const params = new URLSearchParams({
     ParentId: parentId,
     Recursive: "true",
@@ -183,7 +271,26 @@ export function libraryItems(userId: string, parentId: string, options: { types?
     EnableImageTypes: CARD_IMAGES,
   })
   if (options.types) params.set("IncludeItemTypes", options.types)
+  if (options.types === "Movie") {
+    params.set("ExcludeItemTypes", "BoxSet")
+    params.set("CollapseBoxSetItems", "false")
+    params.set("Fields", `${CARD_FIELDS},Genres`)
+  }
+  if (options.filters) params.set("Filters", options.filters)
+  if (options.genreId) params.set("GenreIds", options.genreId)
+  if (options.nameStartsWith) params.set("NameStartsWith", options.nameStartsWith)
   return jf<ItemList>(`/Users/${userId}/Items?${params}`)
+}
+
+export function genres(userId: string, parentId: string) {
+  const params = new URLSearchParams({
+    userId,
+    parentId,
+    SortBy: "SortName",
+    SortOrder: "Ascending",
+    Recursive: "true",
+  })
+  return jf<ItemList>(`/Genres?${params}`)
 }
 
 export function item(userId: string, itemId: string) {
@@ -225,6 +332,22 @@ export function filmography(userId: string, personId: string) {
     SortOrder: "Descending",
     Limit: "48",
     Fields: CARD_FIELDS,
+  })
+  return jf<ItemList>(`/Users/${userId}/Items?${params}`)
+}
+
+export function recentMedia(userId: string) {
+  const params = new URLSearchParams({
+    Recursive: "true",
+    IncludeItemTypes: "Movie,Series",
+    ExcludeItemTypes: "BoxSet",
+    CollapseBoxSetItems: "false",
+    SortBy: "DateCreated",
+    SortOrder: "Descending",
+    Limit: "16",
+    Fields: `${CARD_FIELDS},BackdropImageTags`,
+    EnableImageTypes: CARD_IMAGES,
+    ImageTypeLimit: "1",
   })
   return jf<ItemList>(`/Users/${userId}/Items?${params}`)
 }
@@ -298,9 +421,10 @@ interface PlaybackRequest {
   burnSubtitle?: boolean
   autoOpen: boolean
   direct: boolean
+  native: boolean
 }
 
-function deviceProfile(maxBitrate: number, burnSubtitle: boolean) {
+function deviceProfile(maxBitrate: number, burnSubtitle: boolean, native: boolean) {
   const subtitles = burnSubtitle
     ? [
         { Format: "srt", Method: "Encode" },
@@ -312,30 +436,56 @@ function deviceProfile(maxBitrate: number, burnSubtitle: boolean) {
         { Format: "dvdsub", Method: "Encode" },
         { Format: "dvbsub", Method: "Encode" },
       ]
+    : native
+      ? [
+          { Format: "vtt", Method: "External" },
+          { Format: "srt", Method: "External" },
+          { Format: "subrip", Method: "Embed" },
+          { Format: "ass", Method: "Embed" },
+          { Format: "ssa", Method: "Embed" },
+          { Format: "pgssub", Method: "Embed" },
+          { Format: "dvdsub", Method: "Embed" },
+          { Format: "dvbsub", Method: "Embed" },
+        ]
+      : [
+          { Format: "vtt", Method: "External" },
+          { Format: "srt", Method: "External" },
+          { Format: "subrip", Method: "External" },
+          { Format: "ass", Method: "External" },
+          { Format: "ssa", Method: "External" },
+          { Format: "pgssub", Method: "Encode" },
+          { Format: "dvdsub", Method: "Encode" },
+          { Format: "dvbsub", Method: "Encode" },
+        ]
+
+  const directPlay = native
+    ? [
+        {
+          Container: "mkv,mp4,m4v,mov,webm,ts,m2ts,avi,mpeg,mpg,wmv,ogv,3gp",
+          Type: "Video",
+          VideoCodec: "h264,hevc,vp8,vp9,av1,mpeg2video,mpeg4,vc1,h263",
+          AudioCodec: "aac,mp3,mp2,opus,flac,vorbis,ac3,eac3,dts,truehd,mlp,alac,pcm_s16le,pcm_s24le",
+        },
+        { Container: "mp3", Type: "Audio", AudioCodec: "mp3" },
+        { Container: "aac,m4a", Type: "Audio", AudioCodec: "aac" },
+        { Container: "flac", Type: "Audio", AudioCodec: "flac" },
+        { Container: "ogg,oga", Type: "Audio", AudioCodec: "opus,vorbis" },
+      ]
     : [
-        { Format: "vtt", Method: "External" },
-        { Format: "srt", Method: "External" },
-        { Format: "subrip", Method: "External" },
-        { Format: "ass", Method: "External" },
-        { Format: "ssa", Method: "External" },
-        { Format: "pgssub", Method: "Encode" },
-        { Format: "dvdsub", Method: "Encode" },
-        { Format: "dvbsub", Method: "Encode" },
+        { Container: "mp4,m4v,mov", Type: "Video", VideoCodec: "h264,hevc,vp9,av1", AudioCodec: "aac,mp3,opus,flac,vorbis" },
+        { Container: "webm", Type: "Video", VideoCodec: "vp8,vp9,av1", AudioCodec: "vorbis,opus" },
+        { Container: "mp3", Type: "Audio", AudioCodec: "mp3" },
+        { Container: "aac,m4a", Type: "Audio", AudioCodec: "aac" },
+        { Container: "flac", Type: "Audio", AudioCodec: "flac" },
+        { Container: "ogg,oga", Type: "Audio", AudioCodec: "opus,vorbis" },
       ]
 
   return {
-    Name: "Mirufin",
+    Name: native ? "Mirufin TV" : "Mirufin",
     MaxStreamingBitrate: maxBitrate,
-    MaxStaticBitrate: maxBitrate,
+    MaxStaticBitrate: native ? 1_000_000_000 : maxBitrate,
     MusicStreamingTranscodingBitrate: 384000,
-    DirectPlayProfiles: [
-      { Container: "mp4,m4v,mov", Type: "Video", VideoCodec: "h264,hevc,vp9,av1", AudioCodec: "aac,mp3,opus,flac,vorbis" },
-      { Container: "webm", Type: "Video", VideoCodec: "vp8,vp9,av1", AudioCodec: "vorbis,opus" },
-      { Container: "mp3", Type: "Audio", AudioCodec: "mp3" },
-      { Container: "aac,m4a", Type: "Audio", AudioCodec: "aac" },
-      { Container: "flac", Type: "Audio", AudioCodec: "flac" },
-      { Container: "ogg,oga", Type: "Audio", AudioCodec: "opus,vorbis" },
-    ],
+    DirectPlayProfiles: directPlay,
     TranscodingProfiles: [
       {
         Container: "ts",
@@ -358,17 +508,19 @@ function deviceProfile(maxBitrate: number, burnSubtitle: boolean) {
       },
     ],
     ContainerProfiles: [],
-    CodecProfiles: [
-      {
-        Type: "Video",
-        Codec: "h264",
-        Conditions: [
-          { Condition: "NotEquals", Property: "IsAnamorphic", Value: "true", IsRequired: false },
-          { Condition: "EqualsAny", Property: "VideoProfile", Value: "high|main|baseline|constrained baseline", IsRequired: false },
-          { Condition: "LessThanEqual", Property: "VideoLevel", Value: "51", IsRequired: false },
+    CodecProfiles: native
+      ? []
+      : [
+          {
+            Type: "Video",
+            Codec: "h264",
+            Conditions: [
+              { Condition: "NotEquals", Property: "IsAnamorphic", Value: "true", IsRequired: false },
+              { Condition: "EqualsAny", Property: "VideoProfile", Value: "high|main|baseline|constrained baseline", IsRequired: false },
+              { Condition: "LessThanEqual", Property: "VideoLevel", Value: "51", IsRequired: false },
+            ],
+          },
         ],
-      },
-    ],
     SubtitleProfiles: subtitles,
     ResponseProfiles: [{ Type: "Video", Container: "m4v", MimeType: "video/mp4" }],
   }
@@ -387,7 +539,7 @@ async function requestPlayback(request: PlaybackRequest) {
     EnableTranscoding: true,
     AllowVideoStreamCopy: request.direct,
     AllowAudioStreamCopy: request.direct,
-    DeviceProfile: deviceProfile(prefsBitrate, Boolean(request.burnSubtitle)),
+    DeviceProfile: deviceProfile(prefsBitrate, Boolean(request.burnSubtitle), request.native),
   }
   if (request.audioStreamIndex != null) body.AudioStreamIndex = request.audioStreamIndex
   if (request.subtitleStreamIndex != null) body.SubtitleStreamIndex = request.subtitleStreamIndex
@@ -403,9 +555,10 @@ function streamByType(source: MediaSource, type: string, index?: number) {
   return streams[0]
 }
 
-function browserCanPlay(source: MediaSource, audioIndex?: number) {
+function browserCanPlay(source: MediaSource, audioIndex?: number, native = false) {
   const video = streamByType(source, "Video")
   const audio = streamByType(source, "Audio", audioIndex ?? source.DefaultAudioStreamIndex)
+  if (native) return Boolean(video || audio)
   if (!video) {
     const container = (source.Container || "").toLowerCase()
     const codec = (audio?.Codec || "").toLowerCase()
@@ -422,8 +575,10 @@ function browserCanPlay(source: MediaSource, audioIndex?: number) {
   return videoOk && audioOk && sdr && depthOk
 }
 
-function directContainer(source: MediaSource) {
-  return ["mp4", "m4v", "mov", "webm", "mp3", "aac", "m4a", "flac", "ogg", "oga"].includes((source.Container || "").toLowerCase())
+function directContainer(source: MediaSource, native = false) {
+  const container = (source.Container || "").toLowerCase()
+  if (native) return ["mkv", "mp4", "m4v", "mov", "webm", "ts", "m2ts", "avi", "mpeg", "mpg", "wmv", "ogv", "3gp", "mp3", "aac", "m4a", "flac", "ogg", "oga"].includes(container)
+  return ["mp4", "m4v", "mov", "webm", "mp3", "aac", "m4a", "flac", "ogg", "oga"].includes(container)
 }
 
 export interface SubtitleChoice {
@@ -480,8 +635,10 @@ export async function openPlayback(options: {
   subtitleStreamIndex?: number | null
   burnSubtitle?: boolean
   forceTranscode?: boolean
+  native?: boolean
 }): Promise<PlaybackPlan> {
   const maxBitrate = loadPrefs().maxBitrate
+  const native = Boolean(options.native)
   const base = {
     itemId: options.itemId,
     userId: options.userId,
@@ -490,15 +647,16 @@ export async function openPlayback(options: {
     audioStreamIndex: options.audioStreamIndex,
     subtitleStreamIndex: options.subtitleStreamIndex,
     burnSubtitle: options.burnSubtitle,
+    native,
   }
 
   if (!options.forceTranscode && !options.burnSubtitle) {
     const probe = await requestPlayback({ ...base, autoOpen: false, direct: true, subtitleStreamIndex: null })
     const source = probe.MediaSources?.[0]
     if (!source) throw new Error("Jellyfin did not return a playable version of this title.")
-    const friendly = browserCanPlay(source, options.audioStreamIndex)
+    const friendly = browserCanPlay(source, options.audioStreamIndex, native)
     const hasVideo = Boolean(streamByType(source, "Video"))
-    if (friendly && source.SupportsDirectPlay !== false && directContainer(source)) {
+    if (friendly && source.SupportsDirectPlay !== false && directContainer(source, native)) {
       const kind = hasVideo ? "Videos" : "Audio"
       const url = mediaUrl(
         `/${kind}/${options.itemId}/stream?Static=true&MediaSourceId=${encodeURIComponent(source.Id)}`,

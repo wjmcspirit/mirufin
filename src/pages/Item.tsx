@@ -11,7 +11,8 @@ import { TrailerPopup } from "../components/TrailerPopup"
 import * as api from "../lib/api"
 import { canPlayDirectly, episodeCode, formatRuntime, metaLine, personFacts, progressPct, techChips } from "../lib/format"
 import { knownFor, type KnownWork } from "../lib/knownFor"
-import { remoteTrailer, trailerSearch } from "../lib/trailer"
+import { nativeEngine } from "../lib/nativePlayer"
+import { remoteTrailer, youtubeEmbed } from "../lib/trailer"
 import { backdropSrc, imageUrl, primarySrc } from "../lib/images"
 import type { Item } from "../lib/types"
 import { useSession } from "../session"
@@ -19,7 +20,6 @@ import { useSession } from "../session"
 export function ItemPage() {
   const { id = "" } = useParams()
   const { userId } = useSession()
-  const navigate = useNavigate()
   const [item, setItem] = useState<Item | null>(null)
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
   const [error, setError] = useState("")
@@ -93,9 +93,6 @@ export function ItemPage() {
   return (
     <article className="detail">
       <header className="detail-hero stage-copy">
-        <button className="btn back" type="button" onClick={() => navigate(-1)}>
-          Back
-        </button>
         <div className={item.Type === "Person" ? "detail-layout align-start" : "detail-layout"}>
           <div className="poster-lg">
             <MediaImage src={poster || backdrop} alt="" />
@@ -178,10 +175,11 @@ function TrailerLink({ item }: { item: Item }) {
   const { userId } = useSession()
   const [localId, setLocalId] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
-  const remote = remoteTrailer(item) || trailerSearch(item)
+  const remote = remoteTrailer(item)
+  const embeddable = Boolean(remote && youtubeEmbed(remote) && !nativeEngine())
 
   useEffect(() => {
-    if (!item.LocalTrailerCount) return
+    if (item.LocalTrailerCount === 0) return
     let cancel = false
     api.localTrailers(userId, item.Id).then((list) => {
       if (!cancel) setLocalId(list.Items?.find((entry) => entry.Id)?.Id || null)
@@ -193,12 +191,14 @@ function TrailerLink({ item }: { item: Item }) {
 
   if (localId) {
     return (
-      <Link className="btn icon-btn" to={`/play/${localId}`}>
+      <Link className="btn icon-btn" to={`/play/${localId}?resume=0`}>
         <TrailerIcon size={16} />
         Trailer
       </Link>
     )
   }
+
+  if (!embeddable || !remote) return null
 
   return (
     <>
@@ -299,12 +299,15 @@ function SeriesBody({ series }: { series: Item }) {
   return (
     <div className="detail-body">
       {seasons.length > 1 && (
-        <div className="season-tabs" role="tablist">
-          {seasons.map((season) => (
-            <button key={season.Id} type="button" role="tab" aria-selected={season.Id === seasonId} className={season.Id === seasonId ? "tab on" : "tab"} onClick={() => setSeasonId(season.Id)}>
-              {season.Name || `Season ${season.IndexNumber ?? ""}`}
-            </button>
-          ))}
+        <div className="season-block">
+          <p className="season-label">Seasons</p>
+          <div className="season-tabs" role="tablist" aria-label="Seasons">
+            {seasons.map((season) => (
+              <button key={season.Id} type="button" role="tab" aria-selected={season.Id === seasonId} className={season.Id === seasonId ? "season on" : "season"} onClick={() => setSeasonId(season.Id)}>
+                {season.Name || `Season ${season.IndexNumber ?? ""}`}
+              </button>
+            ))}
+          </div>
         </div>
       )}
       {seasonId && <EpisodeList seriesId={series.Id} seasonId={seasonId} />}
@@ -342,29 +345,27 @@ function EpisodeList({ seriesId, seasonId }: { seriesId: string; seasonId: strin
       {episodes.map((episode) => {
         const progress = progressPct(episode)
         return (
-          <article key={episode.Id} className="episode">
-            <Link className="episode-art" to={`/item/${episode.Id}`}>
+          <Link key={episode.Id} className="episode" to={`/item/${episode.Id}`}>
+            <span className="episode-art">
               <MediaImage src={primarySrc(episode, 480) || backdropSrc(episode)} alt="" />
               {progress > 1 && progress < 98 && (
                 <span className="progress">
                   <span style={{ width: `${progress}%` }} />
                 </span>
               )}
-            </Link>
-            <div>
+              <span className="episode-play" aria-hidden="true">
+                <PlayIcon size={18} />
+              </span>
+            </span>
+            <div className="episode-copy">
               <h3>
-                <Link to={`/item/${episode.Id}`}>
-                  {episodeCode(episode) ? `${episodeCode(episode)}  ·  ` : ""}
-                  {episode.Name}
-                </Link>
+                {episodeCode(episode) ? `${episodeCode(episode)}  ·  ` : ""}
+                {episode.Name}
               </h3>
               <p className="hint">{formatRuntime(episode.RunTimeTicks)}</p>
               {episode.Overview && <p className="overview clamp">{episode.Overview}</p>}
             </div>
-            <Link className="btn btn-primary" to={`/play/${episode.Id}?resume=1`} aria-label={`Play ${episode.Name || "episode"}`}>
-              <PlayIcon />
-            </Link>
-          </article>
+          </Link>
         )
       })}
     </div>

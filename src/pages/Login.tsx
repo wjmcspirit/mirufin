@@ -7,7 +7,7 @@ import { MediaImage } from "../components/Cards"
 import { useSession } from "../session"
 
 export function LoginPage() {
-  const { serverUrl, serverName, serverVersion, userName, accessToken, login } = useSession()
+  const { serverUrl, serverName, serverVersion, userName, accessToken, login, accept } = useSession()
   const navigate = useNavigate()
   const [users, setUsers] = useState<PublicUser[]>([])
   const [username, setUsername] = useState("")
@@ -15,6 +15,8 @@ export function LoginPage() {
   const [error, setError] = useState("")
   const [pending, setPending] = useState(false)
   const [offline, setOffline] = useState("")
+  const [code, setCode] = useState("")
+  const [quickError, setQuickError] = useState("")
 
   useEffect(() => {
     if (!serverUrl) {
@@ -57,6 +59,44 @@ export function LoginPage() {
     }
   }
 
+  const [quick, setQuick] = useState(false)
+
+  useEffect(() => {
+    if (!quick) return
+    let cancel = false
+    let secret = ""
+    api
+      .quickConnectStart()
+      .then((started) => {
+        if (cancel) return
+        secret = started.Secret
+        setCode(started.Code)
+      })
+      .catch((caught: unknown) => {
+        if (cancel) return
+        setQuick(false)
+        setQuickError(caught instanceof Error ? caught.message : "Quick Connect is unavailable.")
+      })
+    const timer = window.setInterval(() => {
+      if (!secret || cancel) return
+      api
+        .quickConnectFinish(secret)
+        .then((result) => {
+          if (cancel || !result?.AccessToken) return
+          accept(result)
+          navigate("/")
+        })
+        .catch((caught: unknown) => {
+          if (caught instanceof api.ApiError && (caught.status === 401 || caught.status === 404)) return
+          if (!cancel) setQuickError(caught instanceof Error ? caught.message : "Quick Connect stopped.")
+        })
+    }, 2000)
+    return () => {
+      cancel = true
+      window.clearInterval(timer)
+    }
+  }, [accept, navigate, quick])
+
   function onSubmit(event: FormEvent) {
     event.preventDefault()
     void submit(username.trim(), password)
@@ -74,6 +114,17 @@ export function LoginPage() {
           <h1>Sign in</h1>
         </div>
         {offline && <p className="error">{offline}</p>}
+        {code ? (
+          <div className="quick-connect">
+            <p className="hint">On your phone, open Jellyfin and approve this code.</p>
+            <p className="quick-code">{code}</p>
+          </div>
+        ) : (
+          <button className="btn" type="button" onClick={() => { setQuickError(""); setQuick(true) }}>
+            Use a code from another device
+          </button>
+        )}
+        {quickError && <p className="error">{quickError}</p>}
         {users.length > 0 && (
           <div className="user-row">
             {users.map((user) => (

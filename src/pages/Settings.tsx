@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import * as api from "../lib/api"
 import type { SegmentType, SkipMode } from "../lib/types"
 import { APP_VERSION, installRelease, isNewerVersion, latestRelease } from "../lib/version"
+import { HomeEditor } from "../components/HomeEditor"
 import { usePrefs, useSession } from "../session"
 
 const SEGMENTS: { id: SegmentType; label: string }[] = [
@@ -102,6 +103,7 @@ export function SettingsPage() {
         </div>
         {message && <p className="hint">{message}</p>}
       </section>
+      <HomeEditor />
       <section className="setting">
         <h2>Library</h2>
         <label className="check">

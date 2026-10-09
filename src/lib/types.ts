@@ -84,9 +84,12 @@ export interface Item {
   Overview?: string
   ProductionYear?: number
   PremiereDate?: string
+  DateCreated?: string
+  DateLastMediaAdded?: string
   EndDate?: string
   RunTimeTicks?: number
   CommunityRating?: number
+  CriticRating?: number
   OfficialRating?: string
   ImageTags?: Record<string, string>
   BackdropImageTags?: string[]
@@ -182,4 +185,6 @@ export interface Preferences {
   skip: Record<SegmentType, SkipMode>
   showHero: boolean
   homeRows: HomeRowSetting[]
+  libraryStyle: HomeCardStyle
+  librarySize: HomeCardSize
 }

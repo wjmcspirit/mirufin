@@ -17,7 +17,7 @@ import {
   saveServer,
   saveServerMeta,
 } from "./lib/storage"
-import type { Item, Preferences, PublicInfo } from "./lib/types"
+import type { AuthResult, Item, Preferences, PublicInfo } from "./lib/types"
 
 interface SessionState {
   serverUrl: string
@@ -32,6 +32,7 @@ interface SessionState {
 interface SessionValue extends SessionState {
   connect: (url: string) => Promise<PublicInfo>
   login: (username: string, password: string) => Promise<void>
+  accept: (result: AuthResult) => void
   logout: () => void
   disconnect: () => void
   refreshLibraries: () => Promise<void>
@@ -115,6 +116,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       },
       async login(username: string, password: string) {
         const result = await api.authenticate(username, password)
+        saveAuth(result.AccessToken, result.User.Id, result.User.Name)
+        setSession((current) => ({
+          ...current,
+          accessToken: result.AccessToken,
+          userId: result.User.Id,
+          userName: result.User.Name,
+        }))
+      },
+      accept(result: AuthResult) {
         saveAuth(result.AccessToken, result.User.Id, result.User.Name)
         setSession((current) => ({
           ...current,

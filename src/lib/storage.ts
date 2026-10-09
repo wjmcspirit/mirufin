@@ -27,6 +27,8 @@ export const DEFAULT_PREFS: Preferences = {
   maxBitrate: 80_000_000,
   showHero: true,
   homeRows: [],
+  libraryStyle: "poster",
+  librarySize: "medium",
   skip: {
     Intro: "ask",
     Outro: "ask",
@@ -157,6 +159,8 @@ export function loadPrefs(): Preferences {
       maxBitrate: Number(parsed.maxBitrate) || DEFAULT_PREFS.maxBitrate,
       showHero: parsed.showHero !== false,
       homeRows: normalizeHomeRows(parsed.homeRows),
+      libraryStyle: HOME_STYLES.includes(parsed.libraryStyle as HomeCardStyle) ? (parsed.libraryStyle as HomeCardStyle) : "poster",
+      librarySize: HOME_SIZES.includes(parsed.librarySize as HomeCardSize) ? (parsed.librarySize as HomeCardSize) : "medium",
       skip,
     }
   } catch {

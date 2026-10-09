@@ -10,6 +10,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(DiscoveryPlugin.class);
         registerPlugin(UpdatePlugin.class);
+        registerPlugin(NativePlayerPlugin.class);
         super.onCreate(savedInstanceState);
         prepareWebView();
     }

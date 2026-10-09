@@ -3,12 +3,13 @@ import Hls from "hls.js"
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react"
 import { useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { Loading } from "../components/Status"
-import { ChevronIcon, PauseIcon, PlayIcon, VolumeIcon } from "../components/Icons"
+import { AudioIcon, CaptionsIcon, ChaptersIcon, ForwardIcon, FullscreenIcon, PauseIcon, PlayIcon, RewindIcon, VolumeIcon } from "../components/Icons"
 import * as api from "../lib/api"
 import type { PlaybackPlan } from "../lib/api"
 import { episodeCode, formatClock, secondsToTicks, ticksToSeconds } from "../lib/format"
 import { isBackKey, remoteKey } from "../lib/remote"
 import { backdropSrc, primarySrc, trickplayUrl } from "../lib/images"
+import { nativeEngine, nativePlayer } from "../lib/nativePlayer"
 import { pickTrickplay, segmentAt, segmentEnd, segmentKey, segmentLabel } from "../lib/segments"
 import type { Chapter, Item, MediaSegment, SegmentType, TrickplayInfo } from "../lib/types"
 import { usePrefs, useSession } from "../session"
@@ -61,13 +62,20 @@ export function PlayerPage() {
   const [next, setNext] = useState<Item | null>(null)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [scrub, setScrub] = useState<number | null>(null)
-  const [seekPreview, setSeekPreview] = useState<{ seconds: number; ratio: number } | null>(null)
+  const [seekPreview, setSeekPreview] = useState<{ seconds: number; ratio: number; remote: boolean } | null>(null)
+  const previewTimer = useRef(0)
   const [prelude, setPrelude] = useState<Item | null>(null)
   const [segments, setSegments] = useState<MediaSegment[]>([])
   const [promptId, setPromptId] = useState<string | null>(null)
   const [creditsOpen, setCreditsOpen] = useState(false)
   const [nextHold, setNextHold] = useState(false)
   const [rate, setRate] = useState(1)
+  const [subtitleIndex, setSubtitleIndex] = useState<number | null>(null)
+  const [seekFocused, setSeekFocused] = useState(false)
+  const [volumeOpen, setVolumeOpen] = useState(false)
+  const [seekFlash, setSeekFlash] = useState<{ direction: "back" | "forward"; seconds: number } | null>(null)
+  const flashTimer = useRef(0)
+  const menuButton = useRef<HTMLElement | null>(null)
   const fallback = useRef(false)
   const positionRef = useRef(0)
   const dismissed = useRef(new Set<string>())
@@ -80,6 +88,7 @@ export function PlayerPage() {
     setPlan(null)
     setError("")
     setEnded(false)
+    setSubtitleIndex(null)
     setNext(null)
     setCountdown(null)
     setPrelude(null)
@@ -153,6 +162,7 @@ export function PlayerPage() {
     setEnded(false)
 
     const currentSeconds = () => {
+      if (nativeEngine()) return positionRef.current
       const offset = playback.mode === "hls" ? ticksToSeconds(playback.offsetTicks) : 0
       return offset + (video.currentTime || 0)
     }
@@ -209,13 +219,17 @@ export function PlayerPage() {
       setLoading(false)
     }
 
-    video.addEventListener("timeupdate", onTime)
-    video.addEventListener("play", onPlay)
-    video.addEventListener("pause", onPause)
-    video.addEventListener("waiting", onWaiting)
-    video.addEventListener("playing", onPlaying)
-    video.addEventListener("ended", onEnded)
-    video.addEventListener("error", onError)
+    let nativePaused = true
+    let nativeListening: { remove: () => Promise<void> } | null = null
+    if (!nativeEngine()) {
+      video.addEventListener("timeupdate", onTime)
+      video.addEventListener("play", onPlay)
+      video.addEventListener("pause", onPause)
+      video.addEventListener("waiting", onWaiting)
+      video.addEventListener("playing", onPlaying)
+      video.addEventListener("ended", onEnded)
+      video.addEventListener("error", onError)
+    }
 
     const run = async () => {
       const nextPlan = await api.openPlayback({
@@ -226,6 +240,7 @@ export function PlayerPage() {
         subtitleStreamIndex: request.burnSubtitle ? request.subtitleStreamIndex : null,
         burnSubtitle: request.burnSubtitle,
         forceTranscode: request.forceTranscode,
+        native: nativeEngine(),
       })
       if (cancel) {
         if (nextPlan.mode === "hls" && nextPlan.playSessionId) void api.stopEncoding(nextPlan.playSessionId)
@@ -239,6 +254,51 @@ export function PlayerPage() {
       if (nextPlan.runTimeTicks) setDuration(ticksToSeconds(nextPlan.runTimeTicks))
       const offset = ticksToSeconds(nextPlan.offsetTicks)
       setPosition(offset)
+      positionRef.current = offset
+
+      if (nativeEngine()) {
+        document.documentElement.classList.add("native-playing")
+        const authorization = api.authHeader()
+        nativeListening = await nativePlayer.addListener("state", (event) => {
+          if (cancel) return
+          if (event.error) {
+            onError()
+            return
+          }
+          const base = playback.mode === "hls" ? ticksToSeconds(playback.offsetTicks) : 0
+          const seconds = base + event.seconds
+          positionRef.current = seconds
+          setPosition(seconds)
+          if (event.duration > 0) setDuration(base + event.duration)
+          setBuffering(event.buffering && !event.ended)
+          const wasPaused = nativePaused
+          nativePaused = event.paused
+          if (event.ended) {
+            onEnded()
+            return
+          }
+          if (!event.paused) {
+            setPaused(false)
+            setLoading(false)
+            if (!playback.started) {
+              playback.started = true
+              report("start", false)
+            }
+          } else if (playback.started && !wasPaused) {
+            setPaused(true)
+            report("progress", true)
+          } else {
+            setPaused(true)
+          }
+        })
+        await nativePlayer.play({
+          url: nextPlan.url,
+          startSeconds: nextPlan.mode === "hls" ? 0 : offset,
+          headers: { Authorization: authorization, "X-Emby-Authorization": authorization },
+        })
+        setLoading(false)
+        return
+      }
 
       const hlsSource = nextPlan.mode === "hls" || nextPlan.url.includes(".m3u8")
       if (hlsSource && video.canPlayType("application/vnd.apple.mpegurl")) {
@@ -279,12 +339,16 @@ export function PlayerPage() {
     })
 
     const progressTimer = window.setInterval(() => {
-      if (!video.paused && playback.started) report("progress", false)
+      const isPaused = nativeEngine() ? nativePaused : video.paused
+      if (!isPaused && playback.started) report("progress", false)
     }, 10000)
 
     return () => {
       cancel = true
       window.clearInterval(progressTimer)
+      document.documentElement.classList.remove("native-playing")
+      void nativeListening?.remove()
+      if (nativeEngine()) void nativePlayer.stop()
       video.removeEventListener("timeupdate", onTime)
       video.removeEventListener("play", onPlay)
       video.removeEventListener("pause", onPause)
@@ -305,21 +369,43 @@ export function PlayerPage() {
   }, [id])
 
   useEffect(() => {
+    if (nativeEngine()) {
+      void nativePlayer.volume({ volume: muted ? 0 : volume })
+      return
+    }
     const video = videoRef.current
     if (!video) return
     video.volume = volume
-  }, [volume])
+  }, [muted, volume])
 
   useEffect(() => {
-    if (paused || ended) {
+    if (paused || ended || menu) {
       setChrome(true)
       return
     }
-    const timer = window.setTimeout(() => setChrome(false), 2800)
+    const timer = window.setTimeout(() => setChrome(false), 4000)
     return () => window.clearTimeout(timer)
-  }, [ended, paused, pointer])
+  }, [ended, menu, paused, pointer])
 
   useEffect(() => {
+    if (!menu) return
+    const frame = window.requestAnimationFrame(() => {
+      const current =
+        rootRef.current?.querySelector<HTMLElement>(".pop-menu button[aria-pressed='true']") ||
+        rootRef.current?.querySelector<HTMLElement>(".pop-menu button")
+      if (!current) return
+      rootRef.current?.querySelectorAll(".dpad-focus").forEach((el) => el.classList.remove("dpad-focus"))
+      current.classList.add("dpad-focus")
+      current.focus()
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [menu])
+
+  useEffect(() => {
+    if (nativeEngine()) {
+      void nativePlayer.rate({ rate })
+      return
+    }
     const video = videoRef.current
     if (video) video.playbackRate = rate
   }, [plan, rate])
@@ -402,10 +488,22 @@ export function PlayerPage() {
     sessionStorage.setItem("mirufin.autoplayStreak", "0")
   }
 
+  function showSeekPreview(seconds: number) {
+    const ratio = duration > 0 ? Math.min(1, Math.max(0, seconds / duration)) : 0
+    setSeekPreview({ seconds, ratio, remote: true })
+    window.clearTimeout(previewTimer.current)
+    previewTimer.current = window.setTimeout(() => setSeekPreview(null), 1400)
+  }
+
   function toggle() {
+    touchUser()
+    if (nativeEngine()) {
+      if (paused) void nativePlayer.resume()
+      else void nativePlayer.pause()
+      return
+    }
     const video = videoRef.current
     if (!video) return
-    touchUser()
     if (video.paused) void video.play()
     else video.pause()
   }
@@ -417,11 +515,19 @@ export function PlayerPage() {
 
   function seekTo(seconds: number) {
     const video = videoRef.current
-    if (!video || !request) return
+    if (!request) return
     touchUser()
     wake()
     setEnded(false)
     const next = Math.max(0, seconds)
+    if (nativeEngine()) {
+      const base = plan?.mode === "hls" ? ticksToSeconds(plan.offsetTicks) : 0
+      positionRef.current = next
+      setPosition(next)
+      void nativePlayer.seek({ seconds: Math.max(0, next - base) })
+      return
+    }
+    if (!video) return
     if (Number.isFinite(video.duration) && video.duration > 0) {
       video.currentTime = Math.min(next, video.duration)
       setPosition(video.currentTime)
@@ -438,7 +544,34 @@ export function PlayerPage() {
 
   function chooseSubtitle(index: number | null, burn: boolean) {
     const video = videoRef.current
+    setSubtitleIndex(index)
     setMenu(null)
+    focusControl(menuButton.current)
+    if (nativeEngine()) {
+      if (index == null) {
+        void nativePlayer.subtitle({ url: "" })
+        void nativePlayer.selectText({ ordinal: -1 })
+        return
+      }
+      const choice = plan?.subtitles.find((subtitle) => subtitle.index === index)
+      const ordinal = plan?.subtitles.findIndex((subtitle) => subtitle.index === index) ?? -1
+      if (!burn && choice?.src) {
+        void nativePlayer.subtitle({ url: choice.src })
+        return
+      }
+      void nativePlayer.selectText({ ordinal }).then((result) => {
+        if (result.selected || !burn || !request) return
+        setRequest({
+          ...request,
+          subtitleStreamIndex: index,
+          burnSubtitle: true,
+          forceTranscode: true,
+          startTicks: secondsToTicks(positionRef.current),
+          nonce: request.nonce + 1,
+        })
+      })
+      return
+    }
     if (!burn && video) {
       for (let track = 0; track < video.textTracks.length; track += 1) {
         video.textTracks[track].mode = index != null && plan?.subtitles.filter((subtitle) => subtitle.src)[track]?.index === index ? "showing" : "disabled"
@@ -469,6 +602,12 @@ export function PlayerPage() {
   function chooseAudio(index: number) {
     if (!request) return
     setMenu(null)
+    focusControl(menuButton.current)
+    if (nativeEngine()) {
+      const ordinal = plan?.audio.findIndex((track) => track.index === index) ?? 0
+      void nativePlayer.selectAudio({ ordinal })
+      return
+    }
     setRequest({
       ...request,
       audioStreamIndex: index,
@@ -477,50 +616,174 @@ export function PlayerPage() {
     })
   }
 
+  function focusControl(node: HTMLElement | null) {
+    if (!node) return
+    rootRef.current?.querySelectorAll(".dpad-focus").forEach((el) => el.classList.remove("dpad-focus"))
+    node.classList.add("dpad-focus")
+    node.focus({ preventScroll: true })
+  }
+
+  function controlRows() {
+    const pick = (selector: string) =>
+      [...(rootRef.current?.querySelectorAll<HTMLElement>(selector) || [])].filter((el) => el.getClientRects().length > 0)
+    return [
+      pick(".seek-row input"),
+      pick(".transport button"),
+      pick(".skip-prompt"),
+      pick(".next-up button"),
+    ].filter((row) => row.length > 0)
+  }
+
+  function moveRow(from: HTMLElement, delta: number) {
+    const rows = controlRows()
+    const rowIndex = rows.findIndex((row) => row.includes(from))
+    if (rowIndex < 0) {
+      focusControl((delta > 0 ? rows[0] : rows[rows.length - 1])?.[0] || null)
+      return
+    }
+    const nextRow = rows[rowIndex + delta]
+    if (!nextRow) return
+    const index = rows[rowIndex].indexOf(from)
+    focusControl(nextRow[Math.min(index, nextRow.length - 1)] || null)
+  }
+
+  function moveAcross(from: HTMLElement, delta: number) {
+    const row = controlRows().find((entry) => entry.includes(from))
+    if (!row) return
+    const next = row[row.indexOf(from) + delta]
+    if (next) focusControl(next)
+  }
+
+  function changeVolume(delta: number) {
+    const base = muted ? 0 : volume
+    const value = Math.min(1, Math.max(0, Math.round((base + delta) * 20) / 20))
+    setVolume(value)
+    setMuted(value === 0)
+  }
+
+  function nudge(direction: "back" | "forward") {
+    const seconds = direction === "back" ? prefs.skipBack : prefs.skipForward
+    const delta = direction === "back" ? -seconds : seconds
+    const next = Math.max(0, positionRef.current + delta)
+    setSeekFlash({ direction, seconds })
+    window.clearTimeout(flashTimer.current)
+    flashTimer.current = window.setTimeout(() => setSeekFlash(null), 900)
+    showSeekPreview(next)
+    seekTo(next)
+  }
+
+  function openMenu(name: "audio" | "subs" | "chapters" | "speed") {
+    const opener = document.activeElement
+    if (opener instanceof HTMLElement) menuButton.current = opener
+    setMenu((current) => (current === name ? null : name))
+    wake()
+  }
+
   function onKey(event: KeyboardEvent) {
     const key = remoteKey(event)
     const target = event.target as HTMLElement
-    if (target.matches("input, select, textarea") && key !== "ArrowUp" && key !== "ArrowDown" && !isBackKey(event)) return
-    const control = target.closest<HTMLElement>("button, a, input")
-    const onControl = Boolean(control && control.closest(".chrome, .next-up, .pop-menu, .skip-prompt, .center-play"))
-    if ((key === "ArrowLeft" || key === "ArrowRight") && onControl && control) {
+    if (isBackKey(event)) {
       event.preventDefault()
       event.stopPropagation()
-      const controls = [...document.querySelectorAll<HTMLElement>(".chrome button, .chrome input, .next-up button, .pop-menu button")].filter((item) => item.getClientRects().length > 0)
-      const index = controls.indexOf(control)
-      const next = controls[index + (key === "ArrowRight" ? 1 : -1)]
-      next?.focus()
+      if (menu) {
+        setMenu(null)
+        focusControl(menuButton.current)
+      } else leave()
       return
     }
-    if (key === "ArrowUp") {
+    if (menu) {
+      const items = [...(rootRef.current?.querySelectorAll<HTMLElement>(".pop-menu button") || [])]
+      if (key === "ArrowDown" || key === "ArrowUp") {
+        event.preventDefault()
+        const index = items.indexOf(target)
+        const start = index < 0 ? 0 : index
+        const next = items[Math.min(items.length - 1, Math.max(0, start + (key === "ArrowDown" ? 1 : -1)))]
+        focusControl(next || null)
+      }
+      wake()
+      return
+    }
+    const overlay = target.closest(".next-up, .skip-prompt")
+    if ((key === "ArrowLeft" || key === "ArrowRight") && overlay) {
+      event.preventDefault()
+      const current = target.closest("button")
+      if (current instanceof HTMLElement) moveAcross(current, key === "ArrowRight" ? 1 : -1)
+      return
+    }
+    if (!showChrome) {
+      if (key === "ArrowUp") {
+        event.preventDefault()
+        wake()
+        focusControl(rootRef.current?.querySelector<HTMLElement>(".seek-row input") || null)
+        return
+      }
+      if (key === "Enter") {
+        event.preventDefault()
+        wake()
+        focusControl(rootRef.current?.querySelector<HTMLElement>(".transport-primary .transport-btn") || null)
+        return
+      }
+      if (key === "ArrowLeft" || key === "ArrowRight") {
+        event.preventDefault()
+        nudge(key === "ArrowLeft" ? "back" : "forward")
+        return
+      }
+      if (key === " " || key === "k") {
+        event.preventDefault()
+        toggle()
+        return
+      }
+    }
+    const onTimeline = Boolean(target.closest(".seek-row"))
+    const onVolume = Boolean(target.closest(".volume-pop"))
+    const onTransport = Boolean(target.closest(".transport, .seek-row"))
+    if ((key === "ArrowLeft" || key === "ArrowRight") && onVolume) {
+      event.preventDefault()
+      changeVolume(key === "ArrowRight" ? 0.05 : -0.05)
+      wake()
+      return
+    }
+    if ((key === "ArrowLeft" || key === "ArrowRight") && onTimeline) {
+      event.preventDefault()
+      nudge(key === "ArrowLeft" ? "back" : "forward")
+      return
+    }
+    if ((key === "ArrowLeft" || key === "ArrowRight") && onTransport) {
+      event.preventDefault()
+      const current = target.closest("button")
+      if (current instanceof HTMLElement) moveAcross(current, key === "ArrowRight" ? 1 : -1)
+      wake()
+      return
+    }
+    if ((key === "ArrowLeft" || key === "ArrowRight") && !overlay) {
+      event.preventDefault()
+      nudge(key === "ArrowLeft" ? "back" : "forward")
+      return
+    }
+    if (key === "ArrowUp" || key === "ArrowDown") {
       event.preventDefault()
       wake()
-      if (!onControl) document.querySelector<HTMLElement>(".seek-row input")?.focus()
+      const current = target.closest(".volume-pop")?.querySelector("button") || target.closest("button, input")
+      if (current instanceof HTMLElement && (onTransport || overlay)) moveRow(current, key === "ArrowDown" ? 1 : -1)
+      else if (key === "ArrowUp") focusControl(rootRef.current?.querySelector<HTMLElement>(".seek-row input") || null)
+      else focusControl(rootRef.current?.querySelector<HTMLElement>(".transport-primary .transport-btn") || null)
       return
     }
-    if (key === "ArrowDown" && onControl) {
-      event.preventDefault()
-      rootRef.current?.focus()
-      setChrome(false)
-      return
-    }
-    if (key === " " || key === "k" || (key === "Enter" && !onControl)) {
+    if ((key === " " || key === "k") && !target.closest("button")) {
       event.preventDefault()
       toggle()
-    } else if (key === "ArrowRight" || key === "ArrowLeft") {
+      return
+    }
+    if (key === "Enter" && onTimeline) {
       event.preventDefault()
-      wake()
-      const step = key === "ArrowRight" ? 10 : -10
-      seekTo(Math.max(0, positionRef.current + step))
-    } else if (key === "f") {
+      toggle()
+      return
+    }
+    if (key === "f") {
       event.preventDefault()
       void toggleFullscreen()
     } else if (event.key === "m") {
       setMuted((value) => !value)
-    } else if (isBackKey(event)) {
-      event.preventDefault()
-      if (menu) setMenu(null)
-      else leave()
     }
   }
 
@@ -555,12 +818,15 @@ export function PlayerPage() {
   const artwork = item ? backdropSrc(item) || primarySrc(item, 1200) : null
   const audioOnly = item?.Type === "Audio"
   const modeLabel = plan?.mode === "hls" ? "Transcoding" : plan?.mode === "remux" ? "Direct stream" : plan ? "Direct play" : ""
+  const showFullscreen = !Capacitor.isNativePlatform()
+  const audioIndex = request?.audioStreamIndex ?? plan?.audio[0]?.index
+  const volumeLevel = muted ? 0 : volume
   return (
     <div
       className="player"
       ref={rootRef}
       tabIndex={0}
-      onKeyDown={onKey}
+      onKeyDownCapture={onKey}
       onMouseMove={wake}
       onClick={(event) => {
         if (event.target === videoRef.current) toggle()
@@ -573,6 +839,11 @@ export function PlayerPage() {
             <track key={`${id}-${subtitle.index}`} kind="subtitles" label={subtitle.label} srcLang={subtitle.label} src={subtitle.src} />
           ))}
       </video>
+      {!showChrome && duration > 0 && (
+        <div className="edge-progress" aria-hidden="true">
+          <span style={{ width: `${Math.min(100, (position / duration) * 100)}%` }} />
+        </div>
+      )}
       {audioOnly && artwork && <img className="player-art" src={artwork} alt="" />}
       {(loading || (buffering && !paused && !error)) && (
         <div className="player-center">
@@ -587,9 +858,6 @@ export function PlayerPage() {
       {error && (
         <div className="player-center panel narrow">
           <p>{error}</p>
-          <button className="btn" type="button" onClick={() => navigate(-1)}>
-            Back
-          </button>
         </div>
       )}
       {prelude && (
@@ -641,11 +909,14 @@ export function PlayerPage() {
           )}
         </div>
       )}
+      {seekFlash && (
+        <div className="seek-flash" aria-hidden="true">
+          {seekFlash.direction === "back" ? <RewindIcon size={32} /> : <ForwardIcon size={32} />}
+          <span>{seekFlash.seconds} seconds</span>
+        </div>
+      )}
       <div className={showChrome ? "chrome" : "chrome hidden"}>
         <div className="chrome-top">
-          <button className="btn icon-btn" type="button" onClick={leave} aria-label="Back">
-            <ChevronIcon />
-          </button>
           <div>
             <h1>{prelude ? "Trailer" : item?.Type === "Episode" ? item.SeriesName : item?.Name}</h1>
             {item?.Type === "Episode" && (
@@ -659,11 +930,12 @@ export function PlayerPage() {
         </div>
         <div className="chrome-bottom">
           <div className="seek-row">
-            <span>{formatClock(shown)}</span>
-            <div className="seek-wrap">
+            <span className="seek-time">{formatClock(shown)}</span>
+            <div className={seekFocused ? "seek-wrap is-focused" : "seek-wrap"}>
               {trick && item && seekPreview && (
-                <div className="trickplay" style={{ left: `${seekPreview.ratio * 100}%` }}>
-                  <TrickFrame itemId={item.Id} mediaSourceId={trick.sourceId} info={trick.info} sheetWidth={trick.width} seconds={seekPreview.seconds} />
+                <div className={seekPreview.remote ? "trickplay remote" : "trickplay"} style={seekPreview.remote ? undefined : { left: `${seekPreview.ratio * 100}%` }}>
+                  <TrickFrame itemId={item.Id} mediaSourceId={trick.sourceId} info={trick.info} sheetWidth={trick.width} seconds={seekPreview.seconds} frame={seekPreview.remote ? 420 : 220} />
+                  {seekPreview.remote && <p className="trickplay-time">{formatClock(seekPreview.seconds)}{chapterName(item.Chapters, seekPreview.seconds) ? `  ·  ${chapterName(item.Chapters, seekPreview.seconds)}` : ""}</p>}
                 </div>
               )}
               <input
@@ -680,7 +952,7 @@ export function PlayerPage() {
                   if (!duration) return
                   const rect = event.currentTarget.getBoundingClientRect()
                   const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width))
-                  setSeekPreview({ seconds: ratio * duration, ratio })
+                  setSeekPreview({ seconds: ratio * duration, ratio, remote: false })
                 }}
                 onPointerLeave={() => setSeekPreview(null)}
                 onPointerUp={(event) => {
@@ -689,91 +961,121 @@ export function PlayerPage() {
                   setSeekPreview(null)
                   seekTo(value)
                 }}
-                onKeyUp={(event) => {
-                  const key = remoteKey(event)
-                  if (key !== "ArrowLeft" && key !== "ArrowRight") return
-                  const value = Number((event.target as HTMLInputElement).value)
-                  setScrub(null)
-                  seekTo(value)
+                onFocus={(event) => {
+                  setSeekFocused(true)
+                  event.currentTarget.classList.add("dpad-focus")
                 }}
-                onBlur={() => { setScrub(null); setSeekPreview(null) }}
+                onBlur={(event) => {
+                  setSeekFocused(false)
+                  setScrub(null)
+                  setSeekPreview(null)
+                  event.currentTarget.classList.remove("dpad-focus")
+                }}
               />
             </div>
-            <span>{duration ? formatClock(duration) : "--:--"}</span>
+            <span className="seek-time end">{duration ? formatClock(duration) : "--:--"}</span>
           </div>
-          <div className="controls">
-            <button className="btn icon-btn" type="button" onClick={toggle} aria-label={paused ? "Play" : "Pause"}>
-              {paused ? <PlayIcon /> : <PauseIcon />}
-            </button>
-            <button className="btn" type="button" onClick={() => seekTo(Math.max(0, positionRef.current - prefs.skipBack))}>
-              −{prefs.skipBack}s
-            </button>
-            <button className="btn" type="button" onClick={() => seekTo(positionRef.current + prefs.skipForward)}>
-              +{prefs.skipForward}s
-            </button>
-            {activeSegment && activeMode !== "off" && (
-              <button className="btn btn-primary" type="button" onClick={() => skipSegment(activeSegment)}>
-                {segmentLabel(activeSegment.Type)}
+          <div className="transport">
+            <div className="transport-primary">
+              <button className="transport-btn transport-play" type="button" onClick={toggle} aria-label={paused ? "Play" : "Pause"} onFocus={(event) => event.currentTarget.classList.add("dpad-focus")} onBlur={(event) => event.currentTarget.classList.remove("dpad-focus")}>
+                {paused ? <PlayIcon size={30} /> : <PauseIcon size={30} />}
               </button>
-            )}
-            <label className="volume">
-              <button className="btn icon-btn" type="button" onClick={() => setMuted((value) => !value)} aria-label={muted || volume === 0 ? "Unmute" : "Mute"}>
-                <VolumeIcon muted={muted || volume === 0} />
+              <button className="transport-btn" type="button" onClick={() => nudge("back")} aria-label={`Rewind ${prefs.skipBack} seconds`} onFocus={(event) => event.currentTarget.classList.add("dpad-focus")} onBlur={(event) => event.currentTarget.classList.remove("dpad-focus")}>
+                <RewindIcon />
+                <span className="transport-step">{prefs.skipBack}</span>
               </button>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={muted ? 0 : volume}
-                aria-label="Volume"
-                onChange={(event) => {
-                  const value = Number(event.target.value)
-                  setVolume(value)
-                  setMuted(value === 0)
-                }}
-              />
-            </label>
-            <span className="spacer" />
-            {plan && plan.audio.length > 1 && (
-              <button className="btn" type="button" onClick={() => setMenu(menu === "audio" ? null : "audio")}>
-                Audio
+              <button className="transport-btn" type="button" onClick={() => nudge("forward")} aria-label={`Forward ${prefs.skipForward} seconds`} onFocus={(event) => event.currentTarget.classList.add("dpad-focus")} onBlur={(event) => event.currentTarget.classList.remove("dpad-focus")}>
+                <ForwardIcon />
+                <span className="transport-step">{prefs.skipForward}</span>
               </button>
-            )}
-            {plan && plan.subtitles.length > 0 && (
-              <button className="btn" type="button" onClick={() => setMenu(menu === "subs" ? null : "subs")}>
-                Subtitles
+              <div className={volumeOpen ? "volume-pop open" : "volume-pop"}>
+                <button
+                  className="transport-btn"
+                  type="button"
+                  aria-label={muted || volume === 0 ? "Unmute" : "Volume"}
+                  onClick={() => setMuted((value) => !value)}
+                  onFocus={(event) => {
+                    setVolumeOpen(true)
+                    event.currentTarget.classList.add("dpad-focus")
+                  }}
+                  onBlur={(event) => {
+                    event.currentTarget.classList.remove("dpad-focus")
+                    const next = event.relatedTarget
+                    if (!(next instanceof Node) || !event.currentTarget.parentElement?.contains(next)) setVolumeOpen(false)
+                  }}
+                >
+                  <VolumeIcon muted={muted || volume === 0} size={26} />
+                </button>
+                <div className="volume-slider">
+                  <span>{Math.round(volumeLevel * 100)}</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={volumeLevel}
+                    aria-label="Volume"
+                    onChange={(event) => {
+                      const value = Number(event.target.value)
+                      setVolume(value)
+                      setMuted(value === 0)
+                    }}
+                    onBlur={() => setVolumeOpen(false)}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="transport-secondary">
+              {activeSegment && activeMode !== "off" && (
+                <button className="transport-chip" type="button" onClick={() => skipSegment(activeSegment)} onFocus={(event) => event.currentTarget.classList.add("dpad-focus")} onBlur={(event) => event.currentTarget.classList.remove("dpad-focus")}>
+                  {segmentLabel(activeSegment.Type)}
+                </button>
+              )}
+              {plan && plan.audio.length > 1 && (
+                <button className="transport-chip" type="button" onClick={() => openMenu("audio")} onFocus={(event) => event.currentTarget.classList.add("dpad-focus")} onBlur={(event) => event.currentTarget.classList.remove("dpad-focus")}>
+                  <AudioIcon />
+                  Audio
+                </button>
+              )}
+              {plan && plan.subtitles.length > 0 && (
+                <button className={subtitleIndex == null ? "transport-chip" : "transport-chip is-on"} type="button" onClick={() => openMenu("subs")} onFocus={(event) => event.currentTarget.classList.add("dpad-focus")} onBlur={(event) => event.currentTarget.classList.remove("dpad-focus")}>
+                  <CaptionsIcon />
+                  Subtitles
+                </button>
+              )}
+              <button className="transport-chip" type="button" onClick={() => openMenu("speed")} onFocus={(event) => event.currentTarget.classList.add("dpad-focus")} onBlur={(event) => event.currentTarget.classList.remove("dpad-focus")}>
+                <span className="chip-rate">{rate}×</span>
+                Speed
               </button>
-            )}
-            <button className="btn" type="button" onClick={() => setMenu(menu === "speed" ? null : "speed")}>
-              {rate === 1 ? "Speed" : `${rate}×`}
-            </button>
-            {item?.Chapters && item.Chapters.length > 0 && (
-              <button className="btn" type="button" onClick={() => setMenu(menu === "chapters" ? null : "chapters")}>
-                Chapters
-              </button>
-            )}
-            <button className="btn" type="button" onClick={() => void toggleFullscreen()}>
-              Fullscreen
-            </button>
+              {item?.Chapters && item.Chapters.length > 0 && (
+                <button className="transport-chip" type="button" onClick={() => openMenu("chapters")} onFocus={(event) => event.currentTarget.classList.add("dpad-focus")} onBlur={(event) => event.currentTarget.classList.remove("dpad-focus")}>
+                  <ChaptersIcon />
+                  Chapters
+                </button>
+              )}
+              {showFullscreen && (
+                <button className="transport-btn transport-icon" type="button" onClick={() => void toggleFullscreen()} aria-label="Fullscreen" onFocus={(event) => event.currentTarget.classList.add("dpad-focus")} onBlur={(event) => event.currentTarget.classList.remove("dpad-focus")}>
+                  <FullscreenIcon />
+                </button>
+              )}
+            </div>
           </div>
-          <p className="key-hint">Space play · left and right seek · up for buttons · Esc back</p>
           {menu === "speed" && (
             <Menu title="Speed">
               {[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((value) => (
-                <button key={value} type="button" onClick={() => { setRate(value); setMenu(null) }}>
-                  {value === 1 ? "Normal" : `${value}×`}
+                <button key={value} type="button" aria-pressed={value === rate} onClick={() => { setRate(value); setMenu(null); focusControl(menuButton.current) }}>
+                  {value}×
                 </button>
               ))}
             </Menu>
           )}
           {menu === "subs" && plan && (
             <Menu title="Subtitles">
-              <button type="button" onClick={() => chooseSubtitle(null, false)}>
+              <button type="button" aria-pressed={subtitleIndex == null} onClick={() => chooseSubtitle(null, false)}>
                 Off
               </button>
               {plan.subtitles.map((subtitle) => (
-                <button key={subtitle.index} type="button" onClick={() => chooseSubtitle(subtitle.index, subtitle.burn)}>
+                <button key={subtitle.index} type="button" aria-pressed={subtitle.index === subtitleIndex} onClick={() => chooseSubtitle(subtitle.index, subtitle.burn)}>
                   {subtitle.label}
                   {subtitle.burn ? " · burn in" : ""}
                 </button>
@@ -783,7 +1085,7 @@ export function PlayerPage() {
           {menu === "audio" && plan && (
             <Menu title="Audio">
               {plan.audio.map((track) => (
-                <button key={track.index} type="button" onClick={() => chooseAudio(track.index)}>
+                <button key={track.index} type="button" aria-pressed={track.index === audioIndex} onClick={() => chooseAudio(track.index)}>
                   {track.label}
                 </button>
               ))}
@@ -792,7 +1094,7 @@ export function PlayerPage() {
           {menu === "chapters" && item?.Chapters && (
             <Menu title="Chapters">
               {item.Chapters.map((chapter, index) => (
-                <button key={`${chapter.Name}-${index}`} type="button" onClick={() => { setMenu(null); seekTo(ticksToSeconds(chapter.StartPositionTicks || 0)) }}>
+                <button key={`${chapter.Name}-${index}`} type="button" onClick={() => { setMenu(null); focusControl(menuButton.current); seekTo(ticksToSeconds(chapter.StartPositionTicks || 0)) }}>
                   {chapterLabel(chapter, index)}
                 </button>
               ))}
@@ -804,18 +1106,28 @@ export function PlayerPage() {
   )
 }
 
+function chapterName(chapters: Chapter[] | undefined, seconds: number) {
+  let name = ""
+  for (const chapter of chapters || []) {
+    if (ticksToSeconds(chapter.StartPositionTicks || 0) <= seconds + 0.4) name = chapter.Name || ""
+  }
+  return name
+}
+
 function TrickFrame({
   itemId,
   mediaSourceId,
   info,
   sheetWidth,
   seconds,
+  frame = 220,
 }: {
   itemId: string
   mediaSourceId: string
   info: TrickplayInfo
   sheetWidth: number
   seconds: number
+  frame?: number
 }) {
   const index = Math.min(Math.max(0, info.ThumbnailCount - 1), Math.floor((seconds * 1000) / Math.max(1, info.Interval)))
   const perSheet = Math.max(1, info.TileWidth * info.TileHeight)
@@ -823,7 +1135,7 @@ function TrickFrame({
   const offset = index % perSheet
   const col = offset % info.TileWidth
   const row = Math.floor(offset / info.TileWidth)
-  const width = 220
+  const width = frame
   const height = Math.max(80, Math.round((width * info.Height) / Math.max(1, info.Width)))
   return (
     <div

@@ -38,7 +38,18 @@ function place(node: HTMLElement) {
   return "main"
 }
 
+let focusedMark: HTMLElement | null = null
+
+function markFocus(node: HTMLElement) {
+  if (focusedMark !== node) {
+    focusedMark?.classList.remove("dpad-focus")
+    focusedMark = node
+  }
+  node.classList.add("dpad-focus")
+}
+
 function focusNode(node: HTMLElement) {
+  markFocus(node)
   node.focus({ preventScroll: true })
   const scroller = node.closest(".scroller")
   if (scroller instanceof HTMLElement) {

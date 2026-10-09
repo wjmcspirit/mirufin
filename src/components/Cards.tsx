@@ -1,25 +1,38 @@
 import { useState } from "react"
 import { Link } from "react-router-dom"
-import { episodeCode, progressPct, remainingLabel } from "../lib/format"
+import { criticLabel, episodeCode, progressPct, remainingLabel } from "../lib/format"
 import { primarySrc, thumbSrc } from "../lib/images"
 import type { Item } from "../lib/types"
 import { CheckIcon, PlayIcon } from "./Icons"
 import { usePrefs } from "../session"
 import { useStage } from "./Stage"
 
-export function MediaImage({ src, alt, className }: { src: string | null; alt: string; className?: string }) {
+export function MediaImage({ src, alt, label, className }: { src: string | null; alt: string; label?: string; className?: string }) {
   const [failed, setFailed] = useState(false)
   if (!src || failed) {
     return (
       <div className={`ph ${className || ""}`} aria-hidden="true">
-        {(alt || "?").slice(0, 1)}
+        <img className="ph-mark" src="/mirufin-m.png" alt="" />
+        {label ? <span className="ph-title">{label}</span> : null}
       </div>
     )
   }
   return <img src={src} alt={alt} className={className} draggable={false} onError={() => setFailed(true)} />
 }
 
-export function PosterCard({ item, layout, href, remaining = false }: { item: Item; layout: "poster" | "wide"; href: string; remaining?: boolean }) {
+export function PosterCard({
+  item,
+  layout,
+  href,
+  remaining = false,
+  note = "",
+}: {
+  item: Item
+  layout: "poster" | "wide"
+  href: string
+  remaining?: boolean
+  note?: string
+}) {
   const { prefs } = usePrefs()
   const { hover } = useStage()
   const image = layout === "wide" ? thumbSrc(item) : primarySrc(item)
@@ -28,14 +41,18 @@ export function PosterCard({ item, layout, href, remaining = false }: { item: It
   const title = item.Name || "Untitled"
   const showTitle = layout === "wide" || prefs.showTitles
   const subtitle = [
-    item.Type === "Episode"
-      ? [episodeCode(item), item.SeriesName].filter(Boolean).join("  ·  ")
-      : item.Type === "Series"
-        ? item.ProductionYear
-          ? String(item.ProductionYear)
-          : ""
-        : item.Artists?.[0] || (item.ProductionYear ? String(item.ProductionYear) : ""),
+    note,
+    note
+      ? ""
+      : item.Type === "Episode"
+        ? [episodeCode(item), item.SeriesName].filter(Boolean).join("  ·  ")
+        : item.Type === "Series"
+          ? item.ProductionYear
+            ? String(item.ProductionYear)
+            : ""
+          : item.Artists?.[0] || (item.ProductionYear ? String(item.ProductionYear) : ""),
     remaining ? remainingLabel(item) : "",
+    criticLabel(item),
   ]
     .filter(Boolean)
     .join("  ·  ")
@@ -43,7 +60,7 @@ export function PosterCard({ item, layout, href, remaining = false }: { item: It
   return (
     <Link className={`card ${layout}`} to={href} onMouseEnter={() => hover(item)} onMouseLeave={() => hover(null)} onFocus={() => hover(item)} onBlur={() => hover(null)}>
       <span className="card-art">
-        <MediaImage src={image} alt="" />
+        <MediaImage src={image} alt="" label={showTitle ? undefined : title} />
         {item.UserData?.Played && (
           <span className="played-mark">
             <CheckIcon />
