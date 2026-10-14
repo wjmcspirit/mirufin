@@ -9,8 +9,23 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&display=swap" rel="stylesheet" />
+    <style>
+      html, body { margin: 0; background: #000; height: 100%; }
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        display: grid;
+        place-items: center;
+        background: #000;
+      }
+      #boot img { width: min(920px, 68vw); height: auto; }
+    </style>
   </head>
   <body>
+    <div id="boot" aria-hidden="true">
+      <img src="/mirufin-logo.png" alt="" />
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

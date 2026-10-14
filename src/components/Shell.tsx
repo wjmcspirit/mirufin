@@ -1,24 +1,26 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode, type SyntheticEvent } from "react"
 import { NavLink, Outlet } from "react-router-dom"
 import { usePrefs, useSession } from "../session"
-import { CalendarIcon, ChevronIcon, HeartIcon, HomeIcon, LibraryIcon, SearchIcon, SettingsIcon } from "./Icons"
+import { HeartIcon, HomeIcon, LibraryIcon, SearchIcon, SettingsIcon } from "./Icons"
 import { Screensaver } from "./Screensaver"
 import { StageProvider } from "./Stage"
+
+function NavItem({ to, end = false, label, children }: { to: string; end?: boolean; label: string; children: ReactNode }) {
+  return (
+    <NavLink to={to} end={end} aria-label={label} className={({ isActive }) => (isActive ? "nav active" : "nav")}>
+      {children}
+      <span className="nav-label" aria-hidden="true">
+        {label}
+      </span>
+    </NavLink>
+  )
+}
 
 export function Shell() {
   const { libraries, userName } = useSession()
   const { prefs } = usePrefs()
   const [clock, setClock] = useState(() => new Date())
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem("mirufin.rail") === "icons")
-  const icon = collapsed ? 22 : 18
-
-  function toggleRail() {
-    setCollapsed((current) => {
-      const next = !current
-      localStorage.setItem("mirufin.rail", next ? "icons" : "full")
-      return next
-    })
-  }
+  const icon = 22
 
   useEffect(() => {
     if (!prefs.showClock) return
@@ -26,50 +28,68 @@ export function Shell() {
     return () => window.clearInterval(timer)
   }, [prefs.showClock])
 
+  function resetLabel(event: SyntheticEvent) {
+    const link = event.target instanceof HTMLElement ? event.target.closest(".nav") : null
+    const label = link?.querySelector<HTMLElement>(".nav-label")
+    if (label) label.style.removeProperty("margin-left")
+  }
+
+  function placeLabel(event: SyntheticEvent) {
+    const link = event.target instanceof HTMLElement ? event.target.closest(".nav") : null
+    if (!(link instanceof HTMLElement)) return
+    const label = link.querySelector<HTMLElement>(".nav-label")
+    if (!label) return
+    requestAnimationFrame(() => {
+      if (!link.isConnected || !link.matches(":hover, :focus-visible, .dpad-focus")) return
+      label.style.removeProperty("margin-left")
+      const rect = label.getBoundingClientRect()
+      if (rect.width < 2) return
+      const pad = 20
+      const end = link.closest(".side")?.querySelector(".side-end")
+      const endLeft = end instanceof HTMLElement ? end.getBoundingClientRect().left - 12 : window.innerWidth - pad
+      const limit = Math.min(window.innerWidth - pad, endLeft)
+      let shift = 0
+      if (rect.left < pad) shift = pad - rect.left
+      else if (rect.right > limit) shift = limit - rect.right
+      if (shift) label.style.marginLeft = `${shift}px`
+    })
+  }
+
   return (
     <StageProvider>
-    <div className={collapsed ? "shell collapsed" : "shell"}>
-      <aside className="side">
-        <NavLink to="/" className="brand" end title="Mirufin">
-          <img className="brand-mark" src="/mirufin-m.png" alt="" />
-          <img className="brand-name" src="/mirufin-name.png" alt="Mirufin" />
+    <div className="shell">
+      <header className="side">
+        <NavLink to="/" className="brand" end aria-label="Mirufin">
+          <img className="brand-logo" src="/mirufin-logo.png" alt="" />
         </NavLink>
-        <div className="side-nav-clip">
-        <nav className="side-nav">
-          <NavLink to="/" end title="Home" className={({ isActive }) => (isActive ? "nav active" : "nav")}>
+        <nav
+          className="side-nav"
+          aria-label="Main"
+          onFocus={placeLabel}
+          onMouseOver={placeLabel}
+          onBlur={resetLabel}
+          onMouseOut={resetLabel}
+        >
+          <NavItem to="/" end label="Home">
             <HomeIcon size={icon} />
-            <span>Home</span>
-          </NavLink>
-          <NavLink to="/favorites" title="Favorites" className={({ isActive }) => (isActive ? "nav active" : "nav")}>
+          </NavItem>
+          <NavItem to="/favorites" label="Favorites">
             <HeartIcon size={icon} />
-            <span>Favorites</span>
-          </NavLink>
-          <NavLink to="/search" title="Search" className={({ isActive }) => (isActive ? "nav active" : "nav")}>
+          </NavItem>
+          <NavItem to="/search" label="Search">
             <SearchIcon size={icon} />
-            <span>Search</span>
-          </NavLink>
-          <NavLink to="/calendar" title="Calendar" className={({ isActive }) => (isActive ? "nav active" : "nav")}>
-            <CalendarIcon size={icon} />
-            <span>Calendar</span>
-          </NavLink>
-          {libraries.length > 0 && <p className="side-label">Library</p>}
+          </NavItem>
           {libraries.map((library) => (
-            <NavLink key={library.Id} to={`/library/${library.Id}`} title={library.Name || "Library"} className={({ isActive }) => (isActive ? "nav active" : "nav")}>
+            <NavItem key={library.Id} to={`/library/${library.Id}`} label={library.Name || "Library"}>
               <LibraryIcon type={library.CollectionType} name={library.Name} size={icon} />
-              <span>{library.Name || "Library"}</span>
-            </NavLink>
+            </NavItem>
           ))}
-        </nav>
-        </div>
-        <div className="side-foot">
-          <button className="nav rail-toggle" type="button" onClick={toggleRail} aria-expanded={!collapsed} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
-            <ChevronIcon direction={collapsed ? "right" : "left"} />
-            <span>{collapsed ? "Expand" : "Collapse"}</span>
-          </button>
-          <NavLink to="/settings" title="Settings" className={({ isActive }) => (isActive ? "nav active" : "nav")}>
+          <NavItem to="/settings" label="Settings">
             <SettingsIcon size={icon} />
-            <span>Settings</span>
-          </NavLink>
+          </NavItem>
+        </nav>
+        <div className="side-end">
+          {prefs.showClock && <time className="clock">{clock.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time>}
           {userName && (
             <p className="account" title={userName}>
               <span className="account-mark" aria-hidden="true">{userName.slice(0, 1).toUpperCase()}</span>
@@ -77,13 +97,8 @@ export function Shell() {
             </p>
           )}
         </div>
-      </aside>
+      </header>
       <div className="main">
-        {prefs.showClock && (
-          <div className="topbar">
-            <time className="clock">{clock.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time>
-          </div>
-        )}
         <Outlet />
       </div>
       <Screensaver />

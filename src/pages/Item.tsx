@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { MediaImage, PosterCard } from "../components/Cards"
 import { CheckIcon, HeartIcon, InfoIcon, PlayIcon, SeasonIcon } from "../components/Icons"
@@ -6,16 +6,16 @@ import { TrailerButton } from "../components/TrailerButton"
 import { MediaInfo } from "../components/MediaInfo"
 import { Row } from "../components/Row"
 import { Loading, Problem } from "../components/Status"
-import { usePinnedArt } from "../components/Stage"
+import { useEpisodeStage, useFilmographyStage, usePinnedArt, useStage } from "../components/Stage"
 import { useThemeSong } from "../components/Theme"
 import { TitleLogo } from "../components/Title"
 import * as api from "../lib/api"
-import { airedLabel, canPlayDirectly, episodeCode, formatRuntime, metaLine, personFacts, progressPct, techChips } from "../lib/format"
+import { canPlayDirectly, episodeCode, formatRuntime, metaLine, personFacts, progressPct, techChips } from "../lib/format"
 import { hasMediaInfo } from "../lib/mediaInfo"
 import { placeFocus } from "../lib/remote"
 import { knownFor, type KnownWork } from "../lib/knownFor"
-import { backdropSrc, imageUrl, primarySrc } from "../lib/images"
-import type { Item, Person } from "../lib/types"
+import { artWidth, backdropSrc, episodeStillSrc, imageUrl, loadImage, primarySrc, thumbSrc, warmImage, wideBackdrop } from "../lib/images"
+import type { Item } from "../lib/types"
 import { useSession } from "../session"
 
 export function ItemPage() {
@@ -49,7 +49,8 @@ export function ItemPage() {
     }
   }, [id, userId])
 
-  usePinnedArt(status === "ready" ? item : null)
+  const personPage = item?.Type === "Person"
+  usePinnedArt(personPage || status !== "ready" ? null : item, false, false, !personPage)
   useThemeSong(item?.Id)
 
   async function toggleFavorite() {
@@ -88,16 +89,17 @@ export function ItemPage() {
 
   const backdrop = backdropSrc(item)
   const poster = primarySrc(item, 900)
+  const portrait = item.Type === "Person" ? poster : poster || backdrop
   const progress = progressPct(item)
   const chips = techChips(item)
   const facts = item.Type === "Person" ? personFacts(item) : metaLine(item)
 
   return (
-    <article className="detail">
+    <article className={item.Type === "Person" ? "detail person-page" : "detail"}>
       <header className="detail-hero stage-copy">
         <div className={item.Type === "Person" ? "detail-layout align-start" : "detail-layout"}>
           <div className="poster-lg">
-            <MediaImage src={poster || backdrop} alt="" />
+            <MediaImage src={portrait} alt="" />
           </div>
           <div className="detail-copy">
             {item.Type === "Episode" && (
@@ -120,29 +122,29 @@ export function ItemPage() {
             {item.Taglines?.[0] && <p className="tagline">{item.Taglines[0]}</p>}
             {item.Overview && (item.Type === "Person" ? <Bio text={item.Overview} /> : <p className="overview">{item.Overview}</p>)}
             <FactLinks item={item} />
-            <div className="actions">
-              <PlayActions item={item} progress={progress} />
-              {(item.Type === "Movie" || item.Type === "Series") && <TrailerButton item={item} />}
-              <button className={`btn icon-btn ${item.UserData?.IsFavorite ? "on" : ""}`} type="button" onClick={() => void toggleFavorite()} disabled={busy === "favorite"} aria-pressed={Boolean(item.UserData?.IsFavorite)}>
-                <HeartIcon />
-                {item.UserData?.IsFavorite ? "Favorited" : "Favorite"}
-              </button>
-              {canPlayDirectly(item) && (
-                <button className={`btn icon-btn ${item.UserData?.Played ? "on" : ""}`} type="button" onClick={() => void togglePlayed()} disabled={busy === "played"}>
-                  <CheckIcon size={16} />
-                  {item.UserData?.Played ? "Watched" : "Mark watched"}
-                </button>
-              )}
-              {hasMediaInfo(item) && (
-                <button className="btn icon-btn" type="button" onClick={() => setInfoOpen(true)}>
-                  <InfoIcon size={16} />
-                  Media info
-                </button>
-              )}
-            </div>
-            {error && <p className="error">{error}</p>}
           </div>
         </div>
+        <div className="actions detail-actions">
+          <PlayActions item={item} progress={progress} />
+          {(item.Type === "Movie" || item.Type === "Series") && <TrailerButton item={item} />}
+          <button className={`btn icon-btn ${item.UserData?.IsFavorite ? "on" : ""}`} type="button" onClick={() => void toggleFavorite()} disabled={busy === "favorite"} aria-pressed={Boolean(item.UserData?.IsFavorite)}>
+            <HeartIcon />
+            {item.UserData?.IsFavorite ? "Favorited" : "Favorite"}
+          </button>
+          {canPlayDirectly(item) && (
+            <button className={`btn icon-btn ${item.UserData?.Played ? "on" : ""}`} type="button" onClick={() => void togglePlayed()} disabled={busy === "played"}>
+              <CheckIcon size={16} />
+              {item.UserData?.Played ? "Watched" : "Mark watched"}
+            </button>
+          )}
+          {hasMediaInfo(item) && (
+            <button className="btn icon-btn" type="button" onClick={() => setInfoOpen(true)}>
+              <InfoIcon size={16} />
+              Media info
+            </button>
+          )}
+        </div>
+        {error && <p className="error">{error}</p>}
       </header>
       {infoOpen && <MediaInfo item={item} onClose={() => setInfoOpen(false)} />}
       <ItemBody item={item} />
@@ -243,7 +245,7 @@ function SeriesPlay({ series }: { series: Item }) {
 
 function ItemBody({ item }: { item: Item }) {
   if (item.Type === "Series") return <SeriesBody series={item} />
-  if (item.Type === "Season" && item.SeriesId) return <EpisodeList seriesId={item.SeriesId} seasonId={item.Id} />
+  if (item.Type === "Season" && item.SeriesId) return <EpisodeList seriesId={item.SeriesId} seasonId={item.Id} series={item} />
   if (item.Type === "Person") return <PersonBody person={item} />
   if (item.Type === "MusicAlbum" || item.Type === "Playlist" || item.Type === "BoxSet" || item.Type === "Folder" || item.Type === "PhotoAlbum" || item.Type === "CollectionFolder") {
     return <ChildrenBody item={item} />
@@ -288,19 +290,22 @@ function SeriesBody({ series }: { series: Item }) {
 
   return (
     <div className="detail-body">
-      {seasons.length > 1 && (
-        <div className="season-block">
-          <p className="season-label">Seasons</p>
-          <div className="season-tabs" role="tablist" aria-label="Seasons">
-            {seasons.map((season) => (
-              <button key={season.Id} type="button" role="tab" aria-selected={season.Id === seasonId} className={season.Id === seasonId ? "season on" : "season"} onClick={() => setSeasonId(season.Id)}>
-                {season.Name || `Season ${season.IndexNumber ?? ""}`}
-              </button>
-            ))}
+      {seasons.length > 0 && (
+        <section className="season-block">
+          <div className="scroller season-scroller" role="tablist" aria-label="Seasons">
+            {seasons.map((season) => {
+              const title = season.Name || `Season ${season.IndexNumber ?? ""}`
+              const selected = season.Id === seasonId
+              return (
+                <button key={season.Id} type="button" role="tab" aria-selected={selected} className={selected ? "season-tab on" : "season-tab"} onClick={() => setSeasonId(season.Id)}>
+                  {title}
+                </button>
+              )
+            })}
           </div>
-        </div>
+        </section>
       )}
-      {seasonId && <EpisodeList seriesId={series.Id} seasonId={seasonId} nextId={nextEpisode?.Id || ""} />}
+      {seasonId && <EpisodeList seriesId={series.Id} seasonId={seasonId} nextId={nextEpisode?.Id || ""} series={series} />}
       {seasonId && <Extras itemId={seasonId} />}
       <PeopleRows people={series.People} />
       <Similar item={series} />
@@ -308,10 +313,11 @@ function SeriesBody({ series }: { series: Item }) {
   )
 }
 
-function EpisodeList({ seriesId, seasonId, nextId = "" }: { seriesId: string; seasonId: string; nextId?: string }) {
+function EpisodeList({ seriesId, seasonId, nextId = "", series = null }: { seriesId: string; seasonId: string; nextId?: string; series?: Item | null }) {
   const { userId } = useSession()
   const [episodes, setEpisodes] = useState<Item[] | null>(null)
   const landed = useRef("")
+  useEpisodeStage(true)
 
   useEffect(() => {
     let cancel = false
@@ -342,34 +348,86 @@ function EpisodeList({ seriesId, seasonId, nextId = "" }: { seriesId: string; se
 
   return (
     <div className="episodes">
-      {episodes.map((episode) => {
-        const progress = progressPct(episode)
-        return (
-          <Link key={episode.Id} className={episode.Id === nextId ? "episode is-next" : "episode"} to={`/item/${episode.Id}`} data-episode={episode.Id}>
-            <span className="episode-art">
-              <MediaImage src={primarySrc(episode, 480) || backdropSrc(episode)} alt="" />
-              {progress > 1 && progress < 98 && (
-                <span className="progress">
-                  <span style={{ width: `${progress}%` }} />
-                </span>
-              )}
-              <span className="episode-play" aria-hidden="true">
-                <PlayIcon size={18} />
-              </span>
-            </span>
-            <div className="episode-copy">
-              <h3>
-                {episodeCode(episode) ? `${episodeCode(episode)}  ·  ` : ""}
-                {episode.Name}
-                {episode.Id === nextId ? <span className="episode-flag">Up next</span> : null}
-              </h3>
-              <p className="hint">{[formatRuntime(episode.RunTimeTicks), airedLabel(episode)].filter(Boolean).join("  ·  ")}</p>
-              {episode.Overview && <p className="overview clamp">{episode.Overview}</p>}
-            </div>
-          </Link>
-        )
-      })}
+      {episodes.map((episode) => (
+        <EpisodeCard key={episode.Id} episode={episode} series={series} next={episode.Id === nextId} />
+      ))}
     </div>
+  )
+}
+
+function EpisodeCard({ episode, series, next }: { episode: Item; series: Item | null; next: boolean }) {
+  const { hover } = useStage()
+  const release = useRef(0)
+  const cancelHover = useRef<(() => void) | null>(null)
+  useEffect(
+    () => () => {
+      window.clearTimeout(release.current)
+      cancelHover.current?.()
+    },
+    [],
+  )
+
+  function point(item: Item | null) {
+    cancelHover.current = hover(item)
+  }
+
+  function stayingOnCard(target: EventTarget | null) {
+    return target instanceof Element && Boolean(target.closest("[data-stage]"))
+  }
+
+  function releaseArt(target: EventTarget | null) {
+    if (stayingOnCard(target)) return
+    window.clearTimeout(release.current)
+    release.current = window.setTimeout(() => {
+      const active = document.activeElement
+      if (active instanceof Element && active.closest("[data-stage]")) return
+      point(null)
+    }, 0)
+  }
+
+  const width = artWidth("wide")
+  const image = episodeStillSrc(episode, width, series)
+  const seriesArt = series && series.Id !== episode.Id ? primarySrc(series, width) || thumbSrc(series, width) : null
+  const progress = progressPct(episode)
+  const code = episodeCode(episode)
+  const runtime = formatRuntime(episode.RunTimeTicks)
+
+  return (
+    <Link
+      className={next ? "episode is-next" : "episode"}
+      data-stage=""
+      data-episode={episode.Id}
+      to={`/item/${episode.Id}`}
+      onMouseEnter={() => point(episode)}
+      onMouseLeave={(event) => {
+        if (event.currentTarget === document.activeElement) return
+        if (stayingOnCard(event.relatedTarget)) return
+        point(null)
+      }}
+      onFocus={() => {
+        window.clearTimeout(release.current)
+        point(episode)
+      }}
+      onBlur={(event) => releaseArt(event.relatedTarget)}
+    >
+      <span className="episode-art">
+        <MediaImage src={image} fallback={seriesArt && seriesArt !== image ? seriesArt : null} alt="" loading="lazy" />
+        {progress > 1 && progress < 98 && (
+          <span className="progress" aria-hidden="true">
+            <span style={{ width: `${progress}%` }} />
+          </span>
+        )}
+      </span>
+      <span className="episode-copy">
+        <span className="episode-title">
+          {code ? <span className="episode-code">{code}</span> : null}
+          {code && episode.Name ? " · " : ""}
+          {episode.Name}
+          {next ? <span className="episode-flag">Up next</span> : null}
+        </span>
+        {runtime ? <span className="episode-meta">{runtime}</span> : null}
+      </span>
+    </Link>
   )
 }
 
@@ -399,7 +457,7 @@ function ChildrenBody({ item }: { item: Item }) {
   return (
     <div className={wide ? "grid wide-grid" : "grid"}>
       {items.map((entry) => (
-        <PosterCard key={entry.Id} item={entry} layout={entry.Type === "Episode" || entry.Type === "Audio" ? "wide" : "poster"} href={entry.Type === "Audio" ? `/play/${entry.Id}?resume=0` : `/item/${entry.Id}`} />
+        <PosterCard key={entry.Id} item={entry} layout={entry.Type === "Episode" || entry.Type === "Audio" ? "wide" : "poster"} href={`/item/${entry.Id}`} />
       ))}
     </div>
   )
@@ -417,13 +475,121 @@ function titleKey(value?: string) {
     .trim()
 }
 
+const BACKDROP_DWELL_MS = 15000
+const BACKDROP_PRELOAD = 3
+
+function filmographySlides(list: Item[]) {
+  const slides: Item[] = []
+  const seen = new Set<string>()
+  for (const entry of list) {
+    if (entry.Type !== "Movie" && entry.Type !== "Series") continue
+    const url = wideBackdrop(entry)
+    if (!url || seen.has(url)) continue
+    seen.add(url)
+    slides.push(entry)
+  }
+  return slides
+}
+
+function pageAllowsBackdropMotion() {
+  return document.visibilityState !== "hidden" && !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+}
+
+async function nextReadySlide(slides: Item[], from: number) {
+  const current = wideBackdrop(slides[from])
+  for (let step = 1; step < slides.length; step += 1) {
+    const candidate = (from + step) % slides.length
+    const url = wideBackdrop(slides[candidate])
+    if (!url || url === current) continue
+    if (await loadImage(url)) return candidate
+  }
+  return null
+}
+
+function usePersonBackdrop(items: Item[] | null, focused: boolean) {
+  const slides = useMemo(() => filmographySlides(items || []), [items])
+  const slideKey = slides.map((entry) => entry.Id).join(",")
+  const [index, setIndex] = useState(0)
+  const [playing, setPlaying] = useState(pageAllowsBackdropMotion)
+
+  useEffect(() => {
+    setIndex(0)
+  }, [slideKey])
+
+  useEffect(() => {
+    const sync = () => setPlaying(pageAllowsBackdropMotion())
+    document.addEventListener("visibilitychange", sync)
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)")
+    motion.addEventListener("change", sync)
+    return () => {
+      document.removeEventListener("visibilitychange", sync)
+      motion.removeEventListener("change", sync)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (slides.length === 0) return
+    const first = wideBackdrop(slides[0])
+    if (!first) return
+    let cancel = false
+    void loadImage(first).then((ok) => {
+      if (cancel || ok) return
+      void nextReadySlide(slides, 0).then((next) => {
+        if (!cancel && next != null) setIndex(next)
+      })
+    })
+    return () => {
+      cancel = true
+    }
+  }, [slideKey, slides])
+
+  useEffect(() => {
+    if (!playing || focused || slides.length < 2) return
+    const currentUrl = wideBackdrop(slides[index])
+    if (!currentUrl) return
+    let cancel = false
+    let timer = 0
+    for (let step = 1; step <= BACKDROP_PRELOAD && step < slides.length; step += 1) {
+      const url = wideBackdrop(slides[(index + step) % slides.length])
+      if (url) void loadImage(url)
+    }
+    void loadImage(currentUrl).then((ok) => {
+      if (cancel || !ok) return
+      timer = window.setTimeout(() => {
+        void nextReadySlide(slides, index).then((next) => {
+          if (!cancel && next != null) setIndex(next)
+        })
+      }, BACKDROP_DWELL_MS)
+    })
+    return () => {
+      cancel = true
+      window.clearTimeout(timer)
+    }
+  }, [focused, index, playing, slides])
+
+  return slides[index] || null
+}
+
+function warmFilmography(items: Item[], focusId?: string) {
+  if (!focusId) return
+  const art = items.filter((entry) => wideBackdrop(entry))
+  const index = art.findIndex((entry) => entry.Id === focusId)
+  if (index < 0) return
+  for (const entry of art.slice(Math.max(0, index - 1), index + 2)) warmImage(wideBackdrop(entry))
+}
+
 function PersonBody({ person }: { person: Item }) {
   const { userId } = useSession()
+  const { hovered } = useStage()
   const [items, setItems] = useState<Item[] | null>(null)
   const [known, setKnown] = useState<KnownWork[] | null>(null)
+  const backdrop = usePersonBackdrop(items, Boolean(hovered))
+  usePinnedArt(backdrop, false, false)
+  useFilmographyStage(true)
 
   useEffect(() => {
     let cancel = false
+    setItems(null)
     api
       .filmography(userId, person.Id)
       .then((result) => {
@@ -438,7 +604,13 @@ function PersonBody({ person }: { person: Item }) {
   }, [person.Id, userId])
 
   useEffect(() => {
+    if (!items) return
+    warmFilmography(items, hovered?.Id)
+  }, [hovered?.Id, items])
+
+  useEffect(() => {
     let cancel = false
+    setKnown(null)
     knownFor(person.Name || "")
       .then((works) => {
         if (!cancel) setKnown(works)
@@ -565,15 +737,25 @@ function libraryTarget(item: Item, libraries: Item[]) {
 
 function PeopleRows({ people }: { people: Item["People"] }) {
   const list = people || []
-  const directors = list.filter((person) => person.Type === "Director" && person.Id && person.Name)
-  const writers = list.filter((person) => person.Type === "Writer" && person.Id && person.Name)
   const cast = list.filter((person) => person.Id && person.Name && person.Type !== "Director" && person.Type !== "Writer" && person.Type !== "Producer").slice(0, 18)
+  const writers = list.filter((person) => person.Type === "Writer" && person.Id && person.Name)
+  const directors = list.filter((person) => person.Type === "Director" && person.Id && person.Name)
+  const row = [...cast, ...writers, ...directors]
+  if (row.length === 0) return null
   return (
-    <>
-      <People title={directors.length === 1 ? "Director" : "Directors"} people={directors} />
-      <People title={writers.length === 1 ? "Writer" : "Writers"} people={writers} />
-      <People title="Cast" people={cast} />
-    </>
+    <section className="row people-row">
+      <div className="scroller">
+        {row.map((person) => (
+          <Link key={`${person.Id}-${person.Type || ""}-${person.Role || ""}`} className="person" to={`/item/${person.Id}`}>
+            <MediaImage src={person.PrimaryImageTag && person.Id ? imageUrl(person.Id, "Primary", { maxWidth: 520, tag: person.PrimaryImageTag }) : null} alt="" className="avatar" />
+            <span className="person-copy">
+              <span className="card-title">{person.Name}</span>
+              <span className="card-sub">{person.Role || person.Type}</span>
+            </span>
+          </Link>
+        ))}
+      </div>
+    </section>
   )
 }
 
@@ -629,28 +811,11 @@ function Extras({ itemId }: { itemId: string }) {
       {keys.map((key) => (
         <Row key={key} title={EXTRA_LABELS[key] || "Extras"}>
           {(groups.get(key) || []).map((extra) => (
-            <PosterCard key={extra.Id} item={extra} layout="wide" href={`/play/${extra.Id}?resume=0`} />
+            <PosterCard key={extra.Id} item={extra} layout="wide" href={`/item/${extra.Id}`} />
           ))}
         </Row>
       ))}
     </>
-  )
-}
-
-function People({ title, people }: { title: string; people: Person[] }) {
-  if (people.length === 0) return null
-  return (
-    <Row title={title}>
-      {people.map((person) => (
-        <Link key={`${person.Id}-${person.Role || ""}`} className="person" to={`/item/${person.Id}`}>
-          <MediaImage src={person.PrimaryImageTag && person.Id ? imageUrl(person.Id, "Primary", { maxWidth: 420, tag: person.PrimaryImageTag }) : null} alt="" className="avatar" />
-          <span className="person-copy">
-            <span className="card-title">{person.Name}</span>
-            {person.Role && <span className="card-sub">{person.Role}</span>}
-          </span>
-        </Link>
-      ))}
-    </Row>
   )
 }
 

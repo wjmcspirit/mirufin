@@ -106,10 +106,7 @@ export function LoginPage() {
     <main className="gate">
       <form className="panel" onSubmit={onSubmit}>
         <div className="gate-brand">
-          <span className="gate-lockup">
-            <img className="gate-mark" src="/mirufin-m.png" alt="" />
-            <img className="gate-logo" src="/mirufin-name.png" alt="Mirufin" />
-          </span>
+          <img className="gate-logo" src="/mirufin-logo.png" alt="Mirufin" />
           <p className="eyebrow">{serverName || "Jellyfin"}{serverVersion ? `  ·  ${serverVersion}` : ""}</p>
           <h1>Sign in</h1>
         </div>

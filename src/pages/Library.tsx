@@ -14,7 +14,98 @@ import { usePrefs, useSession } from "../session"
 
 const PAGE = 60
 const ADDED_PAGE = 180
+const BACKDROP_DWELL = 15000
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")
+
+function shuffle<T>(list: T[]) {
+  const next = [...list]
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const swap = Math.floor(Math.random() * (index + 1))
+    const item = next[index]
+    next[index] = next[swap]
+    next[swap] = item
+  }
+  return next
+}
+
+function backdropSlides(list: Item[]) {
+  const slides: Item[] = []
+  const seen = new Set<string>()
+  for (const entry of list) {
+    const tags = entry.BackdropImageTags?.filter(Boolean) || []
+    for (const tag of tags) {
+      const slide = tags.length === 1 ? entry : { ...entry, BackdropImageTags: [tag] }
+      const url = backdropSrc(slide)
+      if (!url || seen.has(url)) continue
+      seen.add(url)
+      slides.push(slide)
+    }
+  }
+  return slides
+}
+
+function useCollectionBackdrop(userId: string, enabled: boolean, boxsets: Item[]) {
+  const [deck, setDeck] = useState<Item[]>([])
+  const [index, setIndex] = useState(0)
+  const latest = useRef(boxsets)
+  latest.current = boxsets
+  const key = enabled ? boxsets.map((item) => item.Id).join(",") : ""
+
+  useEffect(() => {
+    if (!enabled || !key) {
+      setDeck((current) => (current.length ? [] : current))
+      return
+    }
+    const current = latest.current
+    const own = backdropSlides(current)
+    if (own.length >= 2) {
+      const slides = shuffle(own).slice(0, 24)
+      setDeck(slides)
+      setIndex(Math.floor(Math.random() * slides.length))
+      return
+    }
+    let cancel = false
+    const sample = shuffle(current.filter((item) => !item.BackdropImageTags?.length)).slice(0, 12)
+    if (sample.length === 0) {
+      setDeck(own)
+      setIndex(0)
+      return
+    }
+    Promise.all(sample.map((item) => api.childBackdrops(userId, item.Id).catch(() => ({ Items: [] as Item[] }))))
+      .then((lists) => {
+        if (cancel) return
+        const members = lists.flatMap((list) => list.Items || [])
+        const slides = shuffle(backdropSlides([...current, ...members])).slice(0, 24)
+        setDeck(slides)
+        setIndex(slides.length ? Math.floor(Math.random() * slides.length) : 0)
+      })
+      .catch(() => {
+        if (!cancel) setDeck(own)
+      })
+    return () => {
+      cancel = true
+    }
+  }, [enabled, key, userId])
+
+  useEffect(() => {
+    if (deck.length < 2) return
+    const timer = window.setInterval(() => setIndex((current) => current + 1), BACKDROP_DWELL)
+    return () => window.clearInterval(timer)
+  }, [deck])
+
+  useEffect(() => {
+    if (deck.length < 2) return
+    const next = deck[(index + 1) % deck.length]
+    const url = next ? backdropSrc(next) : null
+    if (!url) return
+    const image = new Image()
+    image.crossOrigin = "anonymous"
+    image.src = url
+  }, [deck, index])
+
+  if (!enabled || deck.length === 0) return null
+  return deck[index % deck.length]
+}
 
 const SORTS = [
   { id: "SortName", label: "Title" },
@@ -42,10 +133,12 @@ export function LibraryPage() {
   const [studioName, setStudioName] = useState(() => params.get("studioName") || "")
   const [letter, setLetter] = useState("")
   const [appliedKey, setAppliedKey] = useState("")
-  const [menu, setMenu] = useState<"view" | "sort" | "filter" | null>(null)
+  const [menu, setMenu] = useState<"view" | "sort" | "filter" | "letters" | null>(null)
   const [status, setStatus] = useState<"loading" | "ready" | "error" | "more">("loading")
+  const [morePass, setMorePass] = useState(0)
   const [error, setError] = useState("")
   const [heroId, setHeroId] = useState("")
+  const [movieDeck, setMovieDeck] = useState<Item[] | null>(null)
   const [heroHold, setHeroHold] = useState(false)
   const [trailerHold, setTrailerHold] = useState(false)
   const [quiet, setQuiet] = useState<Record<string, true>>({})
@@ -56,6 +149,7 @@ export function LibraryPage() {
   const [onNow, setOnNow] = useState<Record<string, string>>({})
   const [saved, setSaved] = useState<Item[]>([])
   const toolsRef = useRef<HTMLDivElement>(null)
+  const lettersRef = useRef<HTMLElement>(null)
   const shownLibrary = useRef("")
   const shownMovie = useRef<Item | null>(null)
   const shownShow = useRef<Item | null>(null)
@@ -87,9 +181,16 @@ export function LibraryPage() {
   }, [search])
 
   useEffect(() => {
+    if (menu !== "letters") return
+    lettersRef.current?.querySelector<HTMLButtonElement>('[aria-pressed="true"]')?.focus()
+  }, [menu])
+
+  useEffect(() => {
     if (!menu) return
     function close(event: PointerEvent) {
-      if (!toolsRef.current?.contains(event.target as Node)) setMenu(null)
+      const target = event.target as Node
+      if (toolsRef.current?.contains(target) || lettersRef.current?.contains(target)) return
+      setMenu(null)
     }
     document.addEventListener("pointerdown", close)
     return () => document.removeEventListener("pointerdown", close)
@@ -244,6 +345,10 @@ export function LibraryPage() {
     }
   }, [episodes, filter, genreId, studioId, id, letter, library, listKey, order, query.sort, query.types, sort, userId])
 
+  const sentinel = useRef<HTMLDivElement>(null)
+  const loadingMore = useRef(false)
+  const loadMoreRef = useRef<() => Promise<void>>(async () => {})
+
   async function loadMore() {
     setStatus("more")
     try {
@@ -268,6 +373,7 @@ export function LibraryPage() {
         setAddedMore(batch.length === ADDED_PAGE)
         setTotal(ordered.length)
         setStatus("ready")
+        setMorePass((pass) => pass + 1)
         return
       }
       const result = await api.libraryItems(userId, id, {
@@ -278,11 +384,14 @@ export function LibraryPage() {
       setItems((current) => [...current, ...(result.Items || [])])
       setTotal(result.TotalRecordCount || total)
       setStatus("ready")
+      setMorePass((pass) => pass + 1)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load more.")
       setStatus("error")
     }
   }
+
+  loadMoreRef.current = loadMore
 
   function chooseGenre(next: string) {
     const nextParams = new URLSearchParams(params)
@@ -301,12 +410,42 @@ export function LibraryPage() {
   }
 
   const movies = library?.CollectionType === "movies"
-  const { hovered, holdPin } = useStage()
+  const { hovered, hover, holdPin } = useStage()
   const settled = appliedKey === listKey
-  const heroPool = useMemo(
-    () => (movies ? items.filter((entry) => entry.Type === "Movie" && backdropSrc(entry)) : []),
-    [items, movies],
-  )
+
+  useEffect(() => {
+    return () => {
+      hover(null)
+    }
+  }, [hover])
+
+  useEffect(() => {
+    if (!movies || !id) {
+      setMovieDeck(null)
+      return
+    }
+    let cancel = false
+    setMovieDeck(null)
+    api
+      .randomLibraryMovies(userId, id)
+      .then((result) => {
+        if (cancel) return
+        setMovieDeck((result.Items || []).filter((entry) => entry.Type === "Movie" && backdropSrc(entry)))
+      })
+      .catch(() => {
+        if (!cancel) setMovieDeck([])
+      })
+    return () => {
+      cancel = true
+    }
+  }, [id, movies, userId])
+
+  const heroPool = useMemo(() => {
+    if (!movies) return []
+    if (movieDeck?.length) return movieDeck
+    if (movieDeck) return items.filter((entry) => entry.Type === "Movie" && backdropSrc(entry))
+    return []
+  }, [items, movieDeck, movies])
   const heroItem = heroPool.find((entry) => entry.Id === heroId) || null
   const cardMovie = hovered?.Type === "Movie" ? hovered : null
   const featured = cardMovie || heroItem
@@ -332,7 +471,7 @@ export function LibraryPage() {
         if (others.length === 0) return current
         return others[Math.floor(Math.random() * others.length)].Id
       })
-    }, 12000)
+    }, 5000)
     return () => window.clearInterval(timer)
   }, [cardMovie, heroPaused, heroPool, letter, movies, settled])
 
@@ -364,7 +503,7 @@ export function LibraryPage() {
         const index = recent.findIndex((entry) => entry.seriesId === current)
         return recent[(index + 1) % recent.length]?.seriesId || current
       })
-    }, 12000)
+    }, 5000)
     return () => window.clearInterval(timer)
   }, [addedMode, heroPaused, letter, recent, settled, shows])
 
@@ -382,7 +521,7 @@ export function LibraryPage() {
         const index = pool.findIndex((item) => item.Id === current)
         return pool[(index + 1) % pool.length]?.Id || current
       })
-    }, 12000)
+    }, 5000)
     return () => window.clearInterval(timer)
   }, [addedMode, heroPaused, items, letter, settled])
 
@@ -392,6 +531,12 @@ export function LibraryPage() {
     return () => holdPin(false)
   }, [addedHero, holdPin, letter, movies, showSeries, shows])
 
+  const collections = library?.CollectionType === "boxsets"
+  const collectionArt = useCollectionBackdrop(
+    userId,
+    Boolean(collections && settled),
+    collections && settled ? items.filter((item) => item.Type === "BoxSet").slice(0, PAGE) : [],
+  )
   const spotlight = items.find((entry) => backdropSrc(entry)) || library
   const pinned = movies
     ? letter
@@ -405,13 +550,36 @@ export function LibraryPage() {
         : !settled
           ? shownShow.current || showSeries || spotlight
           : addedHero || showSeries || spotlight
-      : spotlight
-  usePinnedArt(pinned, Boolean(letter && (movies || shows)))
+      : collectionArt || spotlight
+  usePinnedArt(pinned, Boolean(letter && (movies || shows)), Boolean(collectionArt))
+
+  const live = library?.CollectionType === "livetv"
+  const hasMore = settled && status !== "error" && status !== "loading" && (addedMore || items.length < total) && !live
+
+  useEffect(() => {
+    const node = sentinel.current
+    if (!node || !hasMore) return
+    const root = node.closest(".main")
+    let dropped = false
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (dropped || loadingMore.current || !entries.some((entry) => entry.isIntersecting)) return
+        loadingMore.current = true
+        void loadMoreRef.current().finally(() => {
+          loadingMore.current = false
+        })
+      },
+      { root: root instanceof HTMLElement ? root : null, rootMargin: "800px" },
+    )
+    observer.observe(node)
+    return () => {
+      dropped = true
+      observer.disconnect()
+    }
+  }, [hasMore, items.length, morePass])
 
   if (status === "loading") return <Loading label="Loading library" />
   if (status === "error" && items.length === 0) return <Problem message={error} />
-
-  const live = library?.CollectionType === "livetv"
   const wide = live || library?.CollectionType === "homevideos" || prefs.libraryStyle === "landscape"
   const name = library?.Name || "Library"
   const sorts = library?.CollectionType === "tvshows" ? [...SORTS, { id: "EpisodeAdded", label: "Recently added episodes" }] : SORTS
@@ -420,17 +588,20 @@ export function LibraryPage() {
   const style: HomeCardStyle = wide ? "landscape" : "poster"
 
   const count = total ? `${total.toLocaleString()} titles` : "No titles"
+  const countLine = letter ? (settled && total ? `Starts with ${letter} · ${count}` : `Starts with ${letter}`) : count
   const viewOn = prefs.libraryStyle !== "poster" || prefs.librarySize !== "medium"
   const sortOn = sort !== "SortName" || order !== "Ascending"
   const filterOn = Boolean(filter || genreId || studioId)
+  const byTitle = sort === "SortName"
 
   return (
-    <div className={live ? "library-page" : "library-page with-rail"}>
+    <div className="library-page">
       <div className="library-body">
       {movies && movieHero && (
         <div className="library-hero">
           <Hero
             item={movieHero}
+            focused={Boolean(cardMovie)}
             onHold={setHeroHold}
             onTrailer={setTrailerHold}
           />
@@ -460,7 +631,7 @@ export function LibraryPage() {
         <div>
           <p className="eyebrow">Library</p>
           <h1>{name}</h1>
-          <p className="count-line">{count}</p>
+          <p className="count-line">{countLine}</p>
         </div>
         {!live && (
           <div className="library-icons" ref={toolsRef}>
@@ -487,6 +658,7 @@ export function LibraryPage() {
                   onClick={() => {
                     setSort(option.id)
                     setOrder(option.id === "SortName" ? "Ascending" : "Descending")
+                    if (option.id !== "SortName") setLetter("")
                     setMenu(null)
                   }}
                 >
@@ -532,13 +704,42 @@ export function LibraryPage() {
                 </button>
               ))}
             </ToolMenu>
+            {byTitle && (
+              <button
+                className={letter ? "tool-btn tool-az active" : "tool-btn tool-az"}
+                type="button"
+                aria-label="A to Z"
+                aria-expanded={menu === "letters"}
+                onClick={() => setMenu(menu === "letters" ? null : "letters")}
+              >
+                A–Z
+              </button>
+            )}
           </div>
         )}
       </header>
+      {!live && byTitle && menu === "letters" && (
+        <nav className="letter-row" ref={lettersRef} aria-label="Jump to letter">
+          <button type="button" className="letter-all" aria-pressed={letter === ""} onClick={() => setLetter("")}>
+            All
+          </button>
+          {LETTERS.map((entry) => (
+            <button
+              key={entry}
+              type="button"
+              className={quiet[entry] ? "is-empty" : undefined}
+              aria-pressed={letter === entry}
+              onClick={() => setLetter(letter === entry ? "" : entry)}
+            >
+              {entry}
+            </button>
+          ))}
+        </nav>
+      )}
       {live && saved.length > 0 && (
         <Row title="Recordings">
           {saved.map((entry) => (
-            <PosterCard key={entry.Id} item={entry} layout="wide" href={`/play/${entry.Id}?resume=0`} />
+            <PosterCard key={entry.Id} item={entry} layout="wide" size="medium" href={`/item/${entry.Id}`} />
           ))}
         </Row>
       )}
@@ -553,33 +754,16 @@ export function LibraryPage() {
               key={entry.Id}
               item={entry}
               layout={layout}
-              href={entry.Type === "TvChannel" ? `/play/${entry.Id}?resume=0` : `/item/${entry.Id}`}
+              size={size}
+              href={`/item/${entry.Id}`}
               note={onNow[entry.Id] || addedInfo[entry.Id]?.note || ""}
             />
           ))}
         </div>
       )}
-      {status !== "error" && (addedMore || items.length < total) && !live && (
-        <div className="more">
-          <button className="btn" type="button" onClick={() => void loadMore()} disabled={status === "more"}>
-            {status === "more" ? "Loading…" : "Load more"}
-          </button>
-        </div>
-      )}
+      {hasMore && <div ref={sentinel} className="more-sentinel" aria-hidden="true" />}
       {status === "error" && <p className="error">{error}</p>}
       </div>
-      {!live && (
-        <nav className="letter-rail" aria-label="Jump to letter">
-          <button type="button" className="letter-all" aria-pressed={letter === ""} onClick={() => setLetter("")}>
-            All
-          </button>
-          {LETTERS.map((entry) => (
-            <button key={entry} type="button" className={quiet[entry] ? "is-empty" : undefined} aria-pressed={letter === entry} onClick={() => setLetter(letter === entry ? "" : entry)}>
-              {entry}
-            </button>
-          ))}
-        </nav>
-      )}
     </div>
   )
 }

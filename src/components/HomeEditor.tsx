@@ -29,9 +29,9 @@ export function HomeEditor() {
   }
 
   return (
-    <section className="setting" aria-label="Customize Home">
-      <h2>Home</h2>
-      <p className="hint">Customize Home</p>
+    <div className="settings-block" aria-label="Home layout">
+      <h3>Home layout</h3>
+      <p className="hint">These options only change the Home screen.</p>
       <div className="home-editor">
         <div className="home-row-edit">
           <strong>Featured title</strong>
@@ -83,6 +83,6 @@ export function HomeEditor() {
           )
         })}
       </div>
-    </section>
+    </div>
   )
 }

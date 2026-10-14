@@ -2,12 +2,13 @@ import { useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import { useNavigate } from "react-router-dom"
 import * as api from "../lib/api"
+import { backdropSrc, primarySrc, thumbSrc } from "../lib/images"
 import { nativeEngine } from "../lib/nativePlayer"
 import { holdBack, isBackKey } from "../lib/remote"
-import { youtubeEmbed } from "../lib/trailer"
+import { youtubeEmbed, youtubeThumb } from "../lib/trailer"
 import type { Item } from "../lib/types"
 import { useSession } from "../session"
-import { TrailerIcon } from "./Icons"
+import { PlayIcon, TrailerIcon } from "./Icons"
 import { TrailerPopup } from "./TrailerPopup"
 
 interface Choice {
@@ -16,12 +17,15 @@ interface Choice {
   source: string
   localId?: string
   url?: string
+  image?: string | null
+  imageFallback?: string | null
 }
 
 export function TrailerButton({ item, onOpen }: { item: Item; onOpen?: (open: boolean) => void }) {
   const { userId } = useSession()
   const navigate = useNavigate()
   const [choices, setChoices] = useState<Choice[]>([])
+  const [title, setTitle] = useState(item.Name || "Trailers")
   const [picking, setPicking] = useState(false)
   const [remote, setRemote] = useState<Choice | null>(null)
 
@@ -36,19 +40,35 @@ export function TrailerButton({ item, onOpen }: { item: Item; onOpen?: (open: bo
         api.specialFeatures(userId, target.Id).catch(() => [] as Item[]),
       ])
       if (cancel) return
+      const parentArt = backdropSrc(target) || primarySrc(target)
       const local = new Map<string, Choice>()
       for (const trailer of [...(saved.Items || []), ...(features || []).filter((entry) => entry.ExtraType === "Trailer")]) {
         if (!trailer.Id || local.has(trailer.Id)) continue
-        local.set(trailer.Id, { id: trailer.Id, name: trailer.Name || "Trailer", source: "On this server", localId: trailer.Id })
+        local.set(trailer.Id, {
+          id: trailer.Id,
+          name: trailer.Name || "Trailer",
+          source: "On this server",
+          localId: trailer.Id,
+          image: thumbSrc(trailer) || parentArt,
+        })
       }
       const remoteChoices: Choice[] = nativeEngine()
         ? []
         : (target.RemoteTrailers || []).flatMap((trailer) => {
             if (!trailer.Url || !youtubeEmbed(trailer.Url)) return []
-            return [{ id: trailer.Url, name: trailer.Name || "Trailer", source: "YouTube", url: trailer.Url }]
+            return [{
+              id: trailer.Url,
+              name: trailer.Name || "Trailer",
+              source: "YouTube",
+              url: trailer.Url,
+              image: youtubeThumb(trailer.Url, "max"),
+              imageFallback: youtubeThumb(trailer.Url, "hq"),
+            }]
           })
+      setTitle(target.Name || item.Name || "Trailers")
       setChoices([...local.values(), ...remoteChoices])
     }
+    setTitle(item.Name || "Trailers")
     setChoices([])
     setPicking(false)
     setRemote(null)
@@ -67,7 +87,8 @@ export function TrailerButton({ item, onOpen }: { item: Item; onOpen?: (open: bo
       navigate(`/play/${choice.localId}?resume=0`)
       return
     }
-    setRemote(choice)
+    const names = choices.map((entry) => entry.name)
+    setRemote({ ...choice, name: choiceLabel(choice.name, Math.max(0, choices.indexOf(choice)), names) })
     onOpen?.(true)
   }
 
@@ -94,13 +115,50 @@ export function TrailerButton({ item, onOpen }: { item: Item; onOpen?: (open: bo
         <TrailerIcon size={16} />
         {choices.length > 1 ? "Trailers" : "Trailer"}
       </button>
-      {picking && <TrailerChoices choices={choices} onPlay={play} onClose={() => { setPicking(false); onOpen?.(false) }} />}
+      {picking && <TrailerChoices title={title} choices={choices} onPlay={play} onClose={() => { setPicking(false); onOpen?.(false) }} />}
       {remote?.url && <TrailerPopup url={remote.url} title={remote.name} onClose={closeRemote} />}
     </>
   )
 }
 
-function TrailerChoices({ choices, onPlay, onClose }: { choices: Choice[]; onPlay: (choice: Choice) => void; onClose: () => void }) {
+function choiceLabel(name: string, index: number, names: string[]) {
+  const key = name.trim().toLowerCase()
+  if (names.filter((entry) => entry.trim().toLowerCase() === key).length < 2) return name
+  const order = names.slice(0, index + 1).filter((entry) => entry.trim().toLowerCase() === key).length
+  return `${name} ${order}`
+}
+
+function TrailerArt({ src, fallback }: { src?: string | null; fallback?: string | null }) {
+  const [url, setUrl] = useState(src || fallback || "")
+  useEffect(() => setUrl(src || fallback || ""), [src, fallback])
+  if (!url) {
+    return (
+      <span className="trailer-art-empty">
+        <TrailerIcon size={28} />
+      </span>
+    )
+  }
+  return (
+    <img
+      src={url}
+      alt=""
+      onLoad={(event) => {
+        if (event.currentTarget.naturalWidth > 120 || !fallback || url === fallback) return
+        setUrl(fallback)
+      }}
+      onError={() => {
+        if (fallback && url !== fallback) setUrl(fallback)
+        else setUrl("")
+      }}
+    />
+  )
+}
+
+function TrailerChoices({ title, choices, onPlay, onClose }: { title: string; choices: Choice[]; onPlay: (choice: Choice) => void; onClose: () => void }) {
+  const [active, setActive] = useState(0)
+  const names = choices.map((choice) => choice.name)
+  const current = choices[Math.min(active, choices.length - 1)]
+
   useEffect(() => {
     const release = holdBack()
     function onKey(event: KeyboardEvent) {
@@ -116,25 +174,51 @@ function TrailerChoices({ choices, onPlay, onClose }: { choices: Choice[]; onPla
     }
   }, [onClose])
 
+  if (!current) return null
+
   return createPortal(
-    <div className="trailer-pop" role="dialog" aria-modal="true" aria-label="Trailers">
+    <div className="trailer-pop trailer-gallery" role="dialog" aria-modal="true" aria-label="Trailers">
       <div className="trailer-backdrop" onClick={onClose} />
-      <div className="trailer-sheet trailer-choices">
+      <div className="trailer-sheet">
         <div className="trailer-bar">
-          <p>Trailers</p>
-          <button className="btn tiny" type="button" onClick={onClose}>
+          <div className="trailer-heading">
+            <p className="kicker">Trailers</p>
+            <h2>{title}</h2>
+          </div>
+          <button className="btn tiny trailer-close" type="button" onClick={onClose}>
             Close
           </button>
         </div>
-        {choices.map((choice, index) => (
-          <button key={choice.id} className="trailer-choice" type="button" autoFocus={index === 0} onClick={() => onPlay(choice)}>
-            <TrailerIcon size={22} />
-            <span>
-              <strong>{choice.name}</strong>
-              <span className="hint">{choice.source}</span>
-            </span>
-          </button>
-        ))}
+        <div className="trailer-stage" onClick={() => onPlay(current)}>
+          <TrailerArt src={current.image} fallback={current.imageFallback} />
+          <span className="trailer-source">{current.source}</span>
+          <span className="trailer-play">
+            <PlayIcon size={28} />
+          </span>
+        </div>
+        <div className="trailer-strip">
+          {choices.map((choice, index) => {
+            const label = choiceLabel(choice.name, index, names)
+            return (
+              <button
+                key={choice.id}
+                className="trailer-card"
+                type="button"
+                autoFocus={index === 0}
+                aria-current={index === active ? "true" : undefined}
+                aria-label={`${label}, ${choice.source}`}
+                onFocus={() => setActive(index)}
+                onMouseEnter={() => setActive(index)}
+                onClick={() => onPlay(choice)}
+              >
+                <span className="trailer-card-art">
+                  <TrailerArt src={choice.image} fallback={choice.imageFallback} />
+                </span>
+                <span className="trailer-card-name">{label}</span>
+              </button>
+            )
+          })}
+        </div>
       </div>
     </div>,
     document.body,

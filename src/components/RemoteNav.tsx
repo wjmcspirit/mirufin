@@ -3,7 +3,7 @@ import { Capacitor } from "@capacitor/core"
 import { useEffect } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { useLocalProxy } from "../lib/media"
-import { backHeld, focusables, isBackKey, moveFocus, remoteKey } from "../lib/remote"
+import { backHeld, focusables, isBackKey, moveFocus, placeFocus, remoteKey } from "../lib/remote"
 
 const ARROWS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])
 const TEXT_TYPES = new Set(["text", "password", "search", "url", "email", "tel"])
@@ -42,7 +42,10 @@ export function RemoteNav() {
     document.documentElement.classList.add("remote")
     const active = document.activeElement
     if (active instanceof HTMLElement && active !== document.body) return
-    focusables()[0]?.focus()
+    const items = focusables()
+    const content = items.find((item) => !item.closest(".side") && item.closest(".hero .btn-primary, .detail-hero .btn-primary, .hero, .detail-hero, .card")) || items.find((item) => !item.closest(".side"))
+    if (content) placeFocus(content)
+    else if (items[0]) placeFocus(items[0])
   }, [location.pathname])
 
   useEffect(() => {
@@ -65,6 +68,16 @@ export function RemoteNav() {
   }, [location.pathname, navigate])
 
   useEffect(() => {
+    if (Capacitor.isNativePlatform()) return
+    function onPointer(event: PointerEvent) {
+      if (event.pointerType !== "mouse") return
+      document.documentElement.classList.remove("remote")
+    }
+    window.addEventListener("pointermove", onPointer)
+    return () => window.removeEventListener("pointermove", onPointer)
+  }, [])
+
+  useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (location.pathname.startsWith("/play/")) return
       const key = remoteKey(event)
@@ -73,6 +86,11 @@ export function RemoteNav() {
       if (field instanceof HTMLElement) {
         if (isBackKey(event)) {
           event.preventDefault()
+          if (location.pathname === "/settings") {
+            if (backHeld()) return
+            navigate(-1)
+            return
+          }
           field.blur()
           return
         }

@@ -6,9 +6,9 @@ import { Loading, Problem } from "../components/Status"
 import { usePinnedArt, useStage } from "../components/Stage"
 import { useThemeSong } from "../components/Theme"
 import * as api from "../lib/api"
-import { continueWatching } from "../lib/format"
+import { comingUpEpisodes, continueWatching, resumeCardDetail, resumeCardTitle, upNextCardDetail, upNextCardTitle } from "../lib/format"
 import { followingEpisodes } from "../lib/watch"
-import { latestTitle, libraryRowId, mergeHomeRows } from "../lib/homeLayout"
+import { isShowLibrary, latestTitle, libraryRowId, mergeHomeRows } from "../lib/homeLayout"
 import { backdropSrc } from "../lib/images"
 import type { Item } from "../lib/types"
 import { usePrefs, useSession } from "../session"
@@ -16,6 +16,28 @@ import { usePrefs, useSession } from "../session"
 interface LatestRow {
   view: Item
   items: Item[]
+}
+
+function addedStamp(item: Item) {
+  const created = Date.parse(item.DateCreated || "")
+  const media = Date.parse(item.DateLastMediaAdded || "")
+  return Math.max(Number.isFinite(created) ? created : 0, Number.isFinite(media) ? media : 0)
+}
+
+function recentHeroItems(rows: LatestRow[]) {
+  const ranked = rows
+    .flatMap((row) => row.items)
+    .filter((item) => item.Id && backdropSrc(item))
+    .sort((a, b) => addedStamp(b) - addedStamp(a))
+  const seen = new Set<string>()
+  const list: Item[] = []
+  for (const item of ranked) {
+    if (seen.has(item.Id)) continue
+    seen.add(item.Id)
+    list.push(item)
+    if (list.length >= 10) break
+  }
+  return list
 }
 
 async function settle<T>(work: Promise<T>, fallback: T) {
@@ -32,8 +54,6 @@ export function HomePage() {
   const [resumeItems, setResumeItems] = useState<Item[]>([])
   const [nextItems, setNextItems] = useState<Item[]>([])
   const [upcomingItems, setUpcomingItems] = useState<Item[]>([])
-  const [airedItems, setAiredItems] = useState<Item[]>([])
-  const [soonItems, setSoonItems] = useState<Item[]>([])
   const [rows, setRows] = useState<LatestRow[]>([])
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
   const [error, setError] = useState("")
@@ -42,12 +62,10 @@ export function HomePage() {
     setStatus("loading")
     const run = async () => {
       const library = await api.views(userId)
-      const [resumeList, nextList, playedList, airedList, soonList, latestRows] = await Promise.all([
+      const [resumeList, nextList, playedList, latestRows] = await Promise.all([
         settle(api.resume(userId), { Items: [] }),
         settle(api.nextUp(userId), { Items: [] }),
         settle(api.playedEpisodes(userId), { Items: [] }),
-        settle(api.airedRecently(userId), { Items: [] }),
-        settle(api.upcomingPremieres(userId, { startOffset: 1, days: 14, limit: 18 }), { Items: [] }),
         Promise.all(
           (library.Items || []).map(async (view) => ({
             view,
@@ -60,8 +78,6 @@ export function HomePage() {
       setResumeItems(resumeList.Items || [])
       setNextItems(nextList.Items || [])
       setUpcomingItems(following)
-      setAiredItems(airedList.Items || [])
-      setSoonItems(soonList.Items || [])
       setRows(latestRows)
       setStatus("ready")
     }
@@ -78,34 +94,46 @@ export function HomePage() {
   }, [userId])
 
   const inProgress = useMemo(() => continueWatching(resumeItems), [resumeItems])
+  const comingUp = useMemo(() => comingUpEpisodes(nextItems, inProgress), [nextItems, inProgress])
   const views = rows.map((row) => row.view)
   const libraryKey = views.map((view) => view.Id).join("\n")
   const sections = useMemo(() => mergeHomeRows(prefs.homeRows, libraryKey ? libraryKey.split("\n") : []), [libraryKey, prefs.homeRows])
   const pool = status === "ready" ? [...resumeItems, ...nextItems, ...rows.flatMap((row) => row.items)] : []
-  const featured = useMemo(() => {
-    const seen = new Set<string>()
-    const list: Item[] = []
-    for (const item of [...resumeItems, ...nextItems, ...rows.flatMap((row) => row.items)]) {
-      if (!item.Id || seen.has(item.Id) || !backdropSrc(item)) continue
-      seen.add(item.Id)
-      list.push(item)
-      if (list.length >= 8) break
-    }
-    return list
-  }, [resumeItems, nextItems, rows])
+  const featured = useMemo(() => recentHeroItems(rows), [rows])
+  const featuredKey = featured.map((item) => item.Id).join("\n")
   const [index, setIndex] = useState(0)
   const [hold, setHold] = useState(false)
   const [trailerHold, setTrailerHold] = useState(false)
-  const { hovered } = useStage()
+  const { hovered, hover } = useStage()
   const current = featured[featured.length ? index % featured.length : 0] || null
   const spot = hovered || current
   const cycling = featured.length > 1 && !hovered
 
   useEffect(() => {
+    return () => {
+      hover(null)
+    }
+  }, [hover])
+
+  useEffect(() => {
+    setIndex(0)
+  }, [featuredKey])
+
+  useEffect(() => {
     if (!cycling || hold || trailerHold) return
-    const timer = window.setInterval(() => setIndex((value) => value + 1), 8000)
+    const timer = window.setInterval(() => setIndex((value) => value + 1), 5_000)
     return () => window.clearInterval(timer)
   }, [cycling, hold, trailerHold])
+
+  useEffect(() => {
+    if (featured.length < 2) return
+    const upcoming = featured[(index + 1) % featured.length]
+    const url = upcoming ? backdropSrc(upcoming) : null
+    if (!url) return
+    const image = new Image()
+    image.crossOrigin = "anonymous"
+    image.src = url
+  }, [featured, index])
 
   usePinnedArt(prefs.showHero ? current : null)
   useThemeSong(spot?.Id)
@@ -120,6 +148,7 @@ export function HomePage() {
       {prefs.showHero && spot ? (
         <Hero
           item={spot}
+          focused={Boolean(hovered)}
           onHold={setHold}
           onTrailer={setTrailerHold}
         />
@@ -136,7 +165,16 @@ export function HomePage() {
           return (
             <Row key={section.id} className={`size-${section.size}`} title="Continue watching">
               {inProgress.map((item) => (
-                <PosterCard key={item.Id} item={item} layout={layout} href={`/play/${item.Id}?resume=1`} remaining />
+                <PosterCard
+                  key={item.Id}
+                  item={item}
+                  layout="poster"
+                  size={section.size}
+                  seriesArt={item.Type === "Episode"}
+                  href={`/item/${item.Id}`}
+                  heading={resumeCardTitle(item)}
+                  detail={resumeCardDetail(item)}
+                />
               ))}
             </Row>
           )
@@ -145,35 +183,36 @@ export function HomePage() {
           return (
             <Row key={section.id} className={`size-${section.size}`} title="Next up">
               {upcomingItems.map((item) => (
-                <PosterCard key={item.Id} item={item} layout={layout} href={`/play/${item.Id}?resume=0`} />
+                <PosterCard key={item.Id} item={item} layout={layout} size={section.size} href={`/item/${item.Id}`} />
               ))}
             </Row>
           )
         }
-        if (section.id === "soon" && soonItems.length > 0) {
+        if (section.id === "soon" && comingUp.length > 0) {
           return (
             <Row key={section.id} className={`size-${section.size}`} title="Coming up">
-              {soonItems.map((item) => (
-                <PosterCard key={item.Id} item={item} layout={layout} href={`/item/${item.Id}`} />
-              ))}
-            </Row>
-          )
-        }
-        if (section.id === "aired" && airedItems.length > 0) {
-          return (
-            <Row key={section.id} className={`size-${section.size}`} title="New this week">
-              {airedItems.map((item) => (
-                <PosterCard key={item.Id} item={item} layout={layout} href={`/item/${item.Id}`} />
+              {comingUp.map((item) => (
+                <PosterCard
+                  key={item.SeriesId || item.Id}
+                  item={item}
+                  layout="poster"
+                  size={section.size}
+                  seriesArt
+                  href={item.SeriesId ? `/item/${item.SeriesId}` : `/item/${item.Id}`}
+                  heading={upNextCardTitle(item)}
+                  detail={upNextCardDetail(item)}
+                />
               ))}
             </Row>
           )
         }
         const row = rows.find((entry) => libraryRowId(entry.view.Id) === section.id)
         if (!row || row.items.length === 0) return null
+        const seriesArt = isShowLibrary(row.view)
         return (
           <Row key={section.id} className={`size-${section.size}`} title={latestTitle(row.view)}>
             {row.items.map((item) => (
-              <PosterCard key={item.Id} item={item} layout={layout} href={`/item/${item.Id}`} />
+              <PosterCard key={item.Id} item={item} layout={layout} size={section.size} seriesArt={seriesArt} href={`/item/${item.Id}`} />
             ))}
           </Row>
         )

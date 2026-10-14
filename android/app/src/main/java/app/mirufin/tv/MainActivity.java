@@ -63,6 +63,7 @@ public class MainActivity extends BridgeActivity {
             params.height = ViewGroup.LayoutParams.MATCH_PARENT;
             webView.setLayoutParams(params);
         }
+        webView.setBackgroundColor(Color.BLACK);
         WebSettings settings = webView.getSettings();
         settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(false);

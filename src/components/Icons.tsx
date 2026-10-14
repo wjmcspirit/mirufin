@@ -28,15 +28,6 @@ export function HeartIcon(props: IconProps) {
   )
 }
 
-export function CalendarIcon(props: IconProps) {
-  return (
-    <Base {...props}>
-      <rect x="4" y="5" width="16" height="15" rx="2" />
-      <path d="M4 10h16M8 3.5v3M16 3.5v3" />
-    </Base>
-  )
-}
-
 export function SearchIcon(props: IconProps) {
   return (
     <Base {...props}>
@@ -51,6 +42,34 @@ export function SettingsIcon(props: IconProps) {
     <Base {...props}>
       <circle cx="12" cy="12" r="3" />
       <path d="M12 3.5v2.2M12 18.3V20.5M3.5 12h2.2M18.3 12h2.2M5.8 5.8l1.6 1.6M16.6 16.6l1.6 1.6M18.2 5.8l-1.6 1.6M7.4 16.6l-1.6 1.6" />
+    </Base>
+  )
+}
+
+export function ServerIcon(props: IconProps) {
+  return (
+    <Base {...props}>
+      <rect x="4" y="4" width="16" height="6" rx="1.5" />
+      <rect x="4" y="14" width="16" height="6" rx="1.5" />
+      <path d="M7.2 7h.01M7.2 17h.01" />
+    </Base>
+  )
+}
+
+export function PlaybackIcon(props: IconProps) {
+  return (
+    <Base {...props}>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M10.2 9.1 15 12l-4.8 2.9z" />
+    </Base>
+  )
+}
+
+export function SkipIcon(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M4.5 7.2v9.6L11 12z" />
+      <path d="M12 7.2v9.6L18.5 12z" />
     </Base>
   )
 }

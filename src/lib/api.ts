@@ -138,8 +138,9 @@ export function views(userId: string) {
 }
 
 export function resume(userId: string) {
+  const fields = `${CARD_FIELDS},SeriesId,SeriesName,SeriesPrimaryImageTag,ParentIndexNumber,IndexNumber`
   return jf<ItemList>(
-    `/Users/${userId}/Items/Resume?Limit=18&MediaTypes=Video&Fields=${CARD_FIELDS}&EnableImageTypes=${CARD_IMAGES}&ImageTypeLimit=1`,
+    `/Users/${userId}/Items/Resume?Limit=18&MediaTypes=Video&Fields=${fields}&EnableImageTypes=${CARD_IMAGES}&ImageTypeLimit=1`,
   )
 }
 
@@ -160,7 +161,7 @@ export function nextUp(userId: string, seriesId?: string, limit = 18) {
   const params = new URLSearchParams({
     userId,
     Limit: String(limit),
-    Fields: `${CARD_FIELDS},SeriesId,SeasonId,ParentIndexNumber`,
+    Fields: `${CARD_FIELDS},SeriesId,SeriesName,SeriesPrimaryImageTag,SeasonId,ParentIndexNumber,IndexNumber`,
     EnableImageTypes: CARD_IMAGES,
     ImageTypeLimit: "1",
   })
@@ -208,26 +209,6 @@ export function recordings(userId: string) {
     ImageTypeLimit: "1",
   })
   return jf<ItemList>(`/LiveTv/Recordings?${params}`).catch(() => ({ Items: [] as Item[] }))
-}
-
-export function airedRecently(userId: string) {
-  const start = new Date()
-  start.setDate(start.getDate() - 7)
-  const end = new Date()
-  end.setDate(end.getDate() + 1)
-  const params = new URLSearchParams({
-    Recursive: "true",
-    IncludeItemTypes: "Episode",
-    SortBy: "PremiereDate",
-    SortOrder: "Descending",
-    MinPremiereDate: dayStamp(start),
-    MaxPremiereDate: dayStamp(end),
-    Limit: "18",
-    Fields: `${CARD_FIELDS},PremiereDate,SeriesName,SeriesId,ParentIndexNumber,IndexNumber`,
-    EnableImageTypes: CARD_IMAGES,
-    ImageTypeLimit: "1",
-  })
-  return jf<ItemList>(`/Users/${userId}/Items?${params}`)
 }
 
 function dayStamp(date: Date) {
@@ -316,7 +297,7 @@ export function latest(userId: string, parentId: string) {
   const params = new URLSearchParams({
     ParentId: parentId,
     Limit: "16",
-    Fields: CARD_FIELDS,
+    Fields: `${CARD_FIELDS},DateCreated,DateLastMediaAdded,Genres,OfficialRating,CommunityRating,Status,PremiereDate,BackdropImageTags,ParentBackdropItemId,ParentBackdropImageTags,SeriesId,SeriesName,SeriesPrimaryImageTag,ParentIndexNumber,IndexNumber`,
     EnableImageTypes: CARD_IMAGES,
     ImageTypeLimit: "1",
   })
@@ -345,10 +326,42 @@ export function libraryItems(
     params.set("CollapseBoxSetItems", "false")
     params.set("Fields", `${CARD_FIELDS},Genres`)
   }
+  if (options.types === "BoxSet") {
+    params.set("Fields", `${CARD_FIELDS},BackdropImageTags`)
+    params.set("ImageTypeLimit", "8")
+  }
   if (options.filters) params.set("Filters", options.filters)
   if (options.genreId) params.set("GenreIds", options.genreId)
   if (options.studioId) params.set("StudioIds", options.studioId)
   if (options.nameStartsWith) params.set("NameStartsWith", options.nameStartsWith)
+  return jf<ItemList>(`/Users/${userId}/Items?${params}`)
+}
+
+export function randomLibraryMovies(userId: string, parentId: string, limit = 40) {
+  const params = new URLSearchParams({
+    ParentId: parentId,
+    Recursive: "true",
+    IncludeItemTypes: "Movie",
+    ExcludeItemTypes: "BoxSet",
+    CollapseBoxSetItems: "false",
+    SortBy: "Random",
+    Limit: String(limit),
+    Fields: `${CARD_FIELDS},Genres,OfficialRating,CommunityRating,BackdropImageTags`,
+    EnableImageTypes: CARD_IMAGES,
+    ImageTypeLimit: "1",
+  })
+  return jf<ItemList>(`/Users/${userId}/Items?${params}`)
+}
+
+export function childBackdrops(userId: string, parentId: string) {
+  const params = new URLSearchParams({
+    ParentId: parentId,
+    Limit: "6",
+    SortBy: "Random",
+    Fields: `${CARD_FIELDS},BackdropImageTags`,
+    EnableImageTypes: "Backdrop",
+    ImageTypeLimit: "1",
+  })
   return jf<ItemList>(`/Users/${userId}/Items?${params}`)
 }
 
@@ -372,7 +385,13 @@ export function specialFeatures(userId: string, itemId: string) {
 }
 
 export function seasons(userId: string, seriesId: string) {
-  return jf<ItemList>(`/Shows/${seriesId}/Seasons?userId=${userId}&Fields=Overview,ItemCounts,UserData,ImageTags,IndexNumber`)
+  const params = new URLSearchParams({
+    userId,
+    Fields: "Overview,ItemCounts,UserData,ImageTags,IndexNumber,SeriesPrimaryImageTag,BackdropImageTags,ParentThumbItemId,ParentThumbImageTag",
+    EnableImageTypes: "Primary,Thumb,Backdrop",
+    ImageTypeLimit: "1",
+  })
+  return jf<ItemList>(`/Shows/${seriesId}/Seasons?${params}`)
 }
 
 export function episodes(userId: string, seriesId: string, seasonId?: string) {
@@ -412,7 +431,24 @@ export function filmography(userId: string, personId: string) {
     SortBy: "CommunityRating,PremiereDate",
     SortOrder: "Descending",
     Limit: "48",
-    Fields: CARD_FIELDS,
+    Fields: `${CARD_FIELDS},BackdropImageTags,ParentBackdropItemId,ParentBackdropImageTags`,
+    EnableImageTypes: CARD_IMAGES,
+    ImageTypeLimit: "1",
+  })
+  return jf<ItemList>(`/Users/${userId}/Items?${params}`)
+}
+
+export function librarySample(userId: string) {
+  const params = new URLSearchParams({
+    Recursive: "true",
+    IncludeItemTypes: "Movie,Series",
+    ExcludeItemTypes: "BoxSet",
+    CollapseBoxSetItems: "false",
+    SortBy: "Random",
+    Limit: "48",
+    Fields: `${CARD_FIELDS},BackdropImageTags`,
+    EnableImageTypes: CARD_IMAGES,
+    ImageTypeLimit: "1",
   })
   return jf<ItemList>(`/Users/${userId}/Items?${params}`)
 }
@@ -452,7 +488,22 @@ export function favorites(userId: string) {
     SortBy: "SeriesName,ParentIndexNumber,IndexNumber,SortName",
     SortOrder: "Ascending",
     Limit: "80",
-    Fields: CARD_FIELDS,
+    Fields: `${CARD_FIELDS},BackdropImageTags,ParentBackdropItemId,ParentBackdropImageTags`,
+    EnableImageTypes: CARD_IMAGES,
+    ImageTypeLimit: "1",
+  })
+  return jf<ItemList>(`/Users/${userId}/Items?${params}`)
+}
+
+export function randomBackdrops(userId: string) {
+  const params = new URLSearchParams({
+    Recursive: "true",
+    IncludeItemTypes: "Movie,Series",
+    SortBy: "Random",
+    Limit: "24",
+    Fields: `${CARD_FIELDS},BackdropImageTags`,
+    EnableImageTypes: "Backdrop",
+    ImageTypeLimit: "1",
   })
   return jf<ItemList>(`/Users/${userId}/Items?${params}`)
 }
@@ -741,7 +792,12 @@ export async function openPlayback(options: {
   }
 
   if (!options.forceTranscode && !options.burnSubtitle) {
-    const probe = await requestPlayback({ ...base, autoOpen: false, direct: true, subtitleStreamIndex: null })
+    const probe = await requestPlayback({
+      ...base,
+      autoOpen: false,
+      direct: true,
+      subtitleStreamIndex: options.subtitleStreamIndex === -1 ? -1 : null,
+    })
     const source = probe.MediaSources?.[0]
     if (!source) throw new Error("Jellyfin did not return a playable version of this title.")
     const friendly = browserCanPlay(source, options.audioStreamIndex, native)

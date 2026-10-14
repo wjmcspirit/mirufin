@@ -2,28 +2,28 @@ package app.mirufin.tv;
 
 import android.app.Activity;
 import android.graphics.Color;
+import android.util.Log;
 import android.util.TypedValue;
 import android.os.Handler;
 import android.os.Looper;
-import android.view.Display;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.Window;
 import android.view.WindowManager;
 import android.webkit.WebView;
 import androidx.media3.common.C;
-import androidx.media3.common.Format;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.TrackGroup;
 import androidx.media3.common.TrackSelectionOverride;
+import androidx.media3.common.TrackSelectionParameters;
 import androidx.media3.common.Tracks;
 import androidx.media3.datasource.DefaultDataSource;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
@@ -35,19 +35,20 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
 @CapacitorPlugin(name = "NativePlayer")
 public class NativePlayerPlugin extends Plugin {
+    private static final String TAG = "MirufinPlayer";
     private final Handler handler = new Handler(Looper.getMainLooper());
     private ExoPlayer player;
     private PlayerView view;
     private String mediaUrl = "";
     private String cueSize = "medium";
     private float cueRaise = 8f;
-    private int savedModeId = -1;
     private boolean ticking = false;
 
     private final Runnable tick = new Runnable() {
@@ -66,7 +67,6 @@ public class NativePlayerPlugin extends Plugin {
         @Override
         public void onPlaybackStateChanged(int state) {
             publish(null);
-            if (state == Player.STATE_READY) applyFrameRate();
         }
 
         @Override
@@ -78,6 +78,7 @@ public class NativePlayerPlugin extends Plugin {
         public void onPlayerError(PlaybackException error) {
             String detail = error.getErrorCodeName();
             if (error.getMessage() != null) detail = detail + ": " + error.getMessage();
+            Log.e(TAG, detail, error);
             publish(detail);
         }
     };
@@ -115,21 +116,28 @@ public class NativePlayerPlugin extends Plugin {
                 DefaultDataSource.Factory data = new DefaultDataSource.Factory(activity, http);
                 DefaultRenderersFactory renderers = new DefaultRenderersFactory(activity);
                 renderers.setEnableDecoderFallback(true);
+                renderers.setMediaCodecSelector(safeDecoders());
                 ExoPlayer exo = new ExoPlayer.Builder(activity)
                     .setRenderersFactory(renderers)
                     .setMediaSourceFactory(new DefaultMediaSourceFactory(data))
                     .build();
-                exo.setWakeMode(C.WAKE_MODE_NETWORK);
+                player = exo;
+                exo.setVideoChangeFrameRateStrategy(C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF);
+                exo.setTrackSelectionParameters(calmTracks(exo.getTrackSelectionParameters()));
+                try {
+                    exo.setWakeMode(C.WAKE_MODE_NETWORK);
+                } catch (RuntimeException ignored) {
+                    /* Playback continues if the device refuses a wake lock. */
+                }
                 MediaItem.Builder item = new MediaItem.Builder().setUri(url);
                 if (subtitle != null && !subtitle.isEmpty()) item.setSubtitleConfigurations(sidecar(subtitle));
                 exo.setMediaItem(item.build(), Math.max(0L, (long) (start * 1000)));
                 exo.addListener(listener);
-                exo.prepare();
-                exo.play();
-                player = exo;
                 mediaUrl = url;
                 view.setPlayer(exo);
                 view.setVisibility(View.VISIBLE);
+                exo.prepare();
+                exo.play();
                 applyCueStyle();
                 WebView webView = getBridge().getWebView();
                 if (webView != null) webView.setBackgroundColor(Color.TRANSPARENT);
@@ -140,6 +148,9 @@ public class NativePlayerPlugin extends Plugin {
                 }
                 call.resolve();
             } catch (Exception error) {
+                Log.e(TAG, "Playback could not start.", error);
+                if (view != null) view.setPlayer(null);
+                releasePlayer();
                 call.reject(error.getMessage() == null ? "Playback could not start." : error.getMessage());
             }
         });
@@ -293,31 +304,70 @@ public class NativePlayerPlugin extends Plugin {
     }
 
     private void ensureView(Activity activity) {
-        if (view != null) return;
-        WebView webView = getBridge().getWebView();
-        if (webView == null || !(webView.getParent() instanceof ViewGroup)) return;
+        if (view != null && view.isAttachedToWindow()) return;
+        if (view != null) {
+            ViewGroup oldParent = view.getParent() instanceof ViewGroup ? (ViewGroup) view.getParent() : null;
+            if (oldParent != null) oldParent.removeView(view);
+            view = null;
+        }
+        WebView webView = getBridge() == null ? null : getBridge().getWebView();
+        if (webView == null || !(webView.getParent() instanceof ViewGroup)) {
+            throw new IllegalStateException("Mirufin is not on screen.");
+        }
         ViewGroup parent = (ViewGroup) webView.getParent();
-        PlayerView created = new PlayerView(activity);
+        PlayerView created = (PlayerView) activity.getLayoutInflater().inflate(R.layout.native_player, parent, false);
         created.setUseController(false);
         created.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
         created.setBackgroundColor(Color.BLACK);
         created.setVisibility(View.GONE);
-        parent.addView(created, 0, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        parent.addView(created, 0);
         view = created;
     }
 
+    private MediaCodecSelector safeDecoders() {
+        return (mimeType, requiresSecureDecoder, requiresTunnelingDecoder) -> {
+            List<androidx.media3.exoplayer.mediacodec.MediaCodecInfo> infos = MediaCodecSelector.DEFAULT.getDecoderInfos(
+                mimeType,
+                requiresSecureDecoder,
+                requiresTunnelingDecoder
+            );
+            if (!MimeTypes.VIDEO_DOLBY_VISION.equals(mimeType)) return infos;
+            List<androidx.media3.exoplayer.mediacodec.MediaCodecInfo> safe = new ArrayList<>();
+            for (androidx.media3.exoplayer.mediacodec.MediaCodecInfo info : infos) {
+                String name = info.name.toLowerCase(Locale.US);
+                if (name.contains("dolby")) continue;
+                safe.add(info);
+            }
+            return safe;
+        };
+    }
+
+    private TrackSelectionParameters calmTracks(TrackSelectionParameters current) {
+        return current.buildUpon()
+            .setAudioOffloadPreferences(
+                new TrackSelectionParameters.AudioOffloadPreferences.Builder()
+                    .setAudioOffloadMode(TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_DISABLED)
+                    .build()
+            )
+            .build();
+    }
+
     private void publish(String error) {
-        if (player == null && error == null) return;
-        JSObject data = new JSObject();
-        long position = player == null ? 0 : player.getCurrentPosition();
-        long duration = player == null ? 0 : player.getDuration();
-        data.put("seconds", position / 1000.0);
-        data.put("duration", duration > 0 ? duration / 1000.0 : 0);
-        data.put("paused", player == null || !player.isPlaying());
-        data.put("buffering", player != null && player.getPlaybackState() == Player.STATE_BUFFERING);
-        data.put("ended", player != null && player.getPlaybackState() == Player.STATE_ENDED);
-        if (error != null) data.put("error", error);
-        notifyListeners("state", data);
+        try {
+            if (player == null && error == null) return;
+            JSObject data = new JSObject();
+            long position = player == null ? 0 : Math.max(0L, player.getCurrentPosition());
+            long duration = player == null ? 0 : player.getDuration();
+            data.put("seconds", position / 1000.0);
+            data.put("duration", duration > 0 ? duration / 1000.0 : 0);
+            data.put("paused", player == null || !player.isPlaying());
+            data.put("buffering", player != null && player.getPlaybackState() == Player.STATE_BUFFERING);
+            data.put("ended", player != null && player.getPlaybackState() == Player.STATE_ENDED);
+            if (error != null) data.put("error", error);
+            notifyListeners("state", data);
+        } catch (RuntimeException failure) {
+            Log.w(TAG, "Could not report playback.", failure);
+        }
     }
 
     private void applyCueStyle() {
@@ -329,34 +379,6 @@ public class NativePlayerPlugin extends Plugin {
         subs.setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
         float fraction = Math.max(0f, Math.min(0.4f, cueRaise / 100f));
         subs.setBottomPaddingFraction(fraction);
-    }
-
-    private void applyFrameRate() {
-        Activity activity = getActivity();
-        if (activity == null || player == null) return;
-        Format format = player.getVideoFormat();
-        if (format == null || format.frameRate < 10) return;
-        Display display = activity.getWindowManager().getDefaultDisplay();
-        Display.Mode current = display.getMode();
-        if (savedModeId < 0) savedModeId = current.getModeId();
-        Display.Mode best = null;
-        float bestScore = 2f;
-        float fps = format.frameRate;
-        for (Display.Mode mode : display.getSupportedModes()) {
-            if (mode.getPhysicalWidth() != current.getPhysicalWidth() || mode.getPhysicalHeight() != current.getPhysicalHeight()) continue;
-            float rate = mode.getRefreshRate();
-            float score = Math.min(Math.abs(rate - fps), Math.abs(rate - (fps * 2f)));
-            if (score < bestScore) {
-                bestScore = score;
-                best = mode;
-            }
-        }
-        if (best == null || bestScore > 0.8f) return;
-        Window window = activity.getWindow();
-        WindowManager.LayoutParams params = window.getAttributes();
-        if (params.preferredDisplayModeId == best.getModeId()) return;
-        params.preferredDisplayModeId = best.getModeId();
-        window.setAttributes(params);
     }
 
     private List<MediaItem.SubtitleConfiguration> sidecar(String url) {
@@ -375,6 +397,11 @@ public class NativePlayerPlugin extends Plugin {
         player = null;
     }
 
+    @Override
+    protected void handleOnDestroy() {
+        teardown(getActivity());
+    }
+
     private void teardown(Activity activity) {
         handler.removeCallbacks(tick);
         ticking = false;
@@ -386,13 +413,6 @@ public class NativePlayerPlugin extends Plugin {
         }
         WebView webView = getBridge() == null ? null : getBridge().getWebView();
         if (webView != null) webView.setBackgroundColor(Color.parseColor("#09090b"));
-        Window window = activity.getWindow();
-        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        if (savedModeId >= 0) {
-            WindowManager.LayoutParams params = window.getAttributes();
-            params.preferredDisplayModeId = savedModeId;
-            window.setAttributes(params);
-            savedModeId = -1;
-        }
+        if (activity != null) activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 }

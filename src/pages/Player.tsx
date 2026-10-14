@@ -10,11 +10,16 @@ import { episodeCode, formatClock, secondsToTicks, ticksToSeconds } from "../lib
 import { isBackKey, remoteKey } from "../lib/remote"
 import { backdropSrc, primarySrc, trickplayUrl } from "../lib/images"
 import { nativeEngine, nativePlayer } from "../lib/nativePlayer"
+import { isTrailerItem } from "../lib/trailer"
 import { pickTrickplay, segmentAt, segmentEnd, segmentKey, segmentLabel } from "../lib/segments"
 import type { Chapter, Item, MediaSegment, SegmentType, TrickplayInfo } from "../lib/types"
 import { usePrefs, useSession } from "../session"
 
 const PASS_OUT = 3
+
+function ignoreNativeFailure(promise: Promise<unknown>) {
+  void promise.catch(() => undefined)
+}
 
 interface PlayRequest {
   startTicks: number
@@ -169,10 +174,23 @@ export function PlayerPage() {
 
   useEffect(() => {
     if (!nativeEngine()) return
-    void nativePlayer.subtitleStyle({ size: prefs.subtitleSize, raise: prefs.subtitleRaise }).catch(() => undefined)
+    ignoreNativeFailure(nativePlayer.subtitleStyle({ size: prefs.subtitleSize, raise: prefs.subtitleRaise }))
   }, [prefs.subtitleRaise, prefs.subtitleSize])
 
   const source = prelude ?? item
+  const trailerPlayback = Boolean(prelude) || isTrailerItem(source)
+
+  useEffect(() => {
+    if (!trailerPlayback) return
+    const video = videoRef.current
+    if (!video) return
+    const mute = () => {
+      for (const track of video.textTracks) track.mode = "disabled"
+    }
+    mute()
+    video.textTracks.addEventListener("addtrack", mute)
+    return () => video.textTracks.removeEventListener("addtrack", mute)
+  }, [plan, trailerPlayback])
 
   useEffect(() => {
     if (!source || !request) return
@@ -239,7 +257,7 @@ export function PlayerPage() {
       }
       setEnded(true)
     }
-    const onError = () => {
+    const onError = (detail?: string | Event) => {
       if (cancel) return
       if (playback.mode !== "hls" && !fallback.current) {
         fallback.current = true
@@ -248,7 +266,8 @@ export function PlayerPage() {
         )
         return
       }
-      setError("Playback failed. Jellyfin could not play this file.")
+      const message = typeof detail === "string" ? detail : ""
+      setError(message ? `Playback failed: ${message}` : "Playback failed. Jellyfin could not play this file.")
       setLoading(false)
     }
 
@@ -270,7 +289,7 @@ export function PlayerPage() {
         userId,
         startTicks,
         audioStreamIndex: request.audioStreamIndex,
-        subtitleStreamIndex: request.burnSubtitle ? request.subtitleStreamIndex : null,
+        subtitleStreamIndex: trailerPlayback ? -1 : request.burnSubtitle ? request.subtitleStreamIndex : null,
         burnSubtitle: request.burnSubtitle,
         forceTranscode: request.forceTranscode,
         native: nativeEngine(),
@@ -295,7 +314,7 @@ export function PlayerPage() {
         nativeListening = await nativePlayer.addListener("state", (event) => {
           if (cancel) return
           if (event.error) {
-            onError()
+            onError(event.error)
             return
           }
           const base = playback.mode === "hls" ? ticksToSeconds(playback.offsetTicks) : 0
@@ -329,6 +348,7 @@ export function PlayerPage() {
           startSeconds: nextPlan.mode === "hls" ? 0 : offset,
           headers: { Authorization: authorization, "X-Emby-Authorization": authorization },
         })
+        if (trailerPlayback) ignoreNativeFailure(nativePlayer.selectText({ ordinal: -1 }))
         setLoading(false)
         return
       }
@@ -380,8 +400,8 @@ export function PlayerPage() {
       cancel = true
       window.clearInterval(progressTimer)
       document.documentElement.classList.remove("native-playing")
-      void nativeListening?.remove()
-      if (nativeEngine()) void nativePlayer.stop()
+      if (nativeListening) ignoreNativeFailure(nativeListening.remove())
+      if (nativeEngine()) ignoreNativeFailure(nativePlayer.stop())
       video.removeEventListener("timeupdate", onTime)
       video.removeEventListener("play", onPlay)
       video.removeEventListener("pause", onPause)
@@ -395,7 +415,7 @@ export function PlayerPage() {
       video.load()
       if (playback.mode === "hls" && playback.playSessionId) void api.stopEncoding(playback.playSessionId)
     }
-  }, [prelude, request, source, userId])
+  }, [prelude, request, source, trailerPlayback, userId])
 
   useEffect(() => {
     rootRef.current?.focus()
@@ -403,7 +423,7 @@ export function PlayerPage() {
 
   useEffect(() => {
     if (nativeEngine()) {
-      void nativePlayer.volume({ volume: muted ? 0 : volume })
+      ignoreNativeFailure(nativePlayer.volume({ volume: muted ? 0 : volume }))
       return
     }
     const video = videoRef.current
@@ -436,7 +456,7 @@ export function PlayerPage() {
 
   useEffect(() => {
     if (nativeEngine()) {
-      void nativePlayer.rate({ rate })
+      ignoreNativeFailure(nativePlayer.rate({ rate }))
       return
     }
     const video = videoRef.current
@@ -531,8 +551,8 @@ export function PlayerPage() {
   function toggle() {
     touchUser()
     if (nativeEngine()) {
-      if (paused) void nativePlayer.resume()
-      else void nativePlayer.pause()
+      if (paused) ignoreNativeFailure(nativePlayer.resume())
+      else ignoreNativeFailure(nativePlayer.pause())
       return
     }
     const video = videoRef.current
@@ -557,7 +577,7 @@ export function PlayerPage() {
       const base = plan?.mode === "hls" ? ticksToSeconds(plan.offsetTicks) : 0
       positionRef.current = next
       setPosition(next)
-      void nativePlayer.seek({ seconds: Math.max(0, next - base) })
+      ignoreNativeFailure(nativePlayer.seek({ seconds: Math.max(0, next - base) }))
       return
     }
     if (!video) return
@@ -582,14 +602,14 @@ export function PlayerPage() {
     focusControl(menuButton.current)
     if (nativeEngine()) {
       if (index == null) {
-        void nativePlayer.subtitle({ url: "" })
-        void nativePlayer.selectText({ ordinal: -1 })
+        ignoreNativeFailure(nativePlayer.subtitle({ url: "" }))
+        ignoreNativeFailure(nativePlayer.selectText({ ordinal: -1 }))
         return
       }
       const choice = plan?.subtitles.find((subtitle) => subtitle.index === index)
       const ordinal = plan?.subtitles.findIndex((subtitle) => subtitle.index === index) ?? -1
       if (!burn && choice?.src) {
-        void nativePlayer.subtitle({ url: choice.src })
+        ignoreNativeFailure(nativePlayer.subtitle({ url: choice.src }))
         return
       }
       void nativePlayer.selectText({ ordinal }).then((result) => {
@@ -602,7 +622,7 @@ export function PlayerPage() {
           startTicks: secondsToTicks(positionRef.current),
           nonce: request.nonce + 1,
         })
-      })
+      }).catch(() => undefined)
       return
     }
     if (!burn && video) {
@@ -638,7 +658,7 @@ export function PlayerPage() {
     focusControl(menuButton.current)
     if (nativeEngine()) {
       const ordinal = plan?.audio.findIndex((track) => track.index === index) ?? 0
-      void nativePlayer.selectAudio({ ordinal })
+      ignoreNativeFailure(nativePlayer.selectAudio({ ordinal }))
       return
     }
     setRequest({
@@ -866,11 +886,12 @@ export function PlayerPage() {
       }}
     >
       <video key={id} ref={videoRef} playsInline preload="auto" muted={muted}>
-        {plan?.subtitles
-          .filter((subtitle) => subtitle.src)
-          .map((subtitle) => (
-            <track key={`${id}-${subtitle.index}`} kind="subtitles" label={subtitle.label} srcLang={subtitle.label} src={subtitle.src} />
-          ))}
+        {!trailerPlayback &&
+          plan?.subtitles
+            .filter((subtitle) => subtitle.src)
+            .map((subtitle) => (
+              <track key={`${id}-${subtitle.index}`} kind="subtitles" label={subtitle.label} srcLang={subtitle.label} src={subtitle.src} />
+            ))}
       </video>
       {!showChrome && duration > 0 && (
         <div className="edge-progress" aria-hidden="true">
@@ -1070,7 +1091,7 @@ export function PlayerPage() {
                   Audio
                 </button>
               )}
-              {plan && plan.subtitles.length > 0 && (
+              {!trailerPlayback && plan && plan.subtitles.length > 0 && (
                 <button className={subtitleIndex == null ? "transport-chip" : "transport-chip is-on"} type="button" onClick={() => openMenu("subs")} onFocus={(event) => event.currentTarget.classList.add("dpad-focus")} onBlur={(event) => event.currentTarget.classList.remove("dpad-focus")}>
                   <CaptionsIcon />
                   Subtitles
@@ -1102,7 +1123,7 @@ export function PlayerPage() {
               ))}
             </Menu>
           )}
-          {menu === "subs" && plan && (
+          {menu === "subs" && plan && !trailerPlayback && (
             <Menu title="Subtitles">
               <div className="cue-row">
                 {(["small", "medium", "large"] as const).map((size) => (

@@ -1,10 +1,71 @@
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { createPortal } from "react-dom"
 import { holdBack, isBackKey } from "../lib/remote"
 import { youtubeEmbed } from "../lib/trailer"
 
+interface CaptionPlayer {
+  unloadModule: (module: string) => void
+  setOption: (module: string, option: string, value: unknown) => void
+}
+
+interface YouTubeApi {
+  Player: new (
+    element: HTMLElement,
+    options: {
+      events?: {
+        onReady?: (event: { target: CaptionPlayer }) => void
+        onStateChange?: (event: { target: CaptionPlayer }) => void
+      }
+    },
+  ) => CaptionPlayer
+}
+
+declare global {
+  interface Window {
+    YT?: YouTubeApi
+    onYouTubeIframeAPIReady?: () => void
+  }
+}
+
+let youtubeApi: Promise<void> | null = null
+
+function loadYouTube() {
+  if (window.YT?.Player) return Promise.resolve()
+  if (!youtubeApi) {
+    youtubeApi = new Promise((resolve, reject) => {
+      const previous = window.onYouTubeIframeAPIReady
+      window.onYouTubeIframeAPIReady = () => {
+        previous?.()
+        resolve()
+      }
+      const script = document.createElement("script")
+      script.src = "https://www.youtube.com/iframe_api"
+      script.onerror = () => {
+        youtubeApi = null
+        reject(new Error("YouTube did not load"))
+      }
+      document.head.appendChild(script)
+    })
+  }
+  return youtubeApi
+}
+
+function silenceCaptions(player: CaptionPlayer) {
+  try {
+    player.setOption("captions", "track", {})
+  } catch {
+    // The captions module may already be gone.
+  }
+  try {
+    player.unloadModule("captions")
+  } catch {
+    // The player can reject the module before it is ready.
+  }
+}
+
 export function TrailerPopup({ url, title, onClose }: { url: string; title: string; onClose: () => void }) {
   const embed = youtubeEmbed(url)
+  const frame = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
     const release = holdBack()
@@ -27,6 +88,26 @@ export function TrailerPopup({ url, title, onClose }: { url: string; title: stri
     }
   }, [onClose])
 
+  useEffect(() => {
+    const iframe = frame.current
+    if (!embed || !iframe) return
+    let cancel = false
+    void loadYouTube()
+      .then(() => {
+        if (cancel || !window.YT?.Player || !frame.current) return
+        new window.YT.Player(frame.current, {
+          events: {
+            onReady: (event) => silenceCaptions(event.target),
+            onStateChange: (event) => silenceCaptions(event.target),
+          },
+        })
+      })
+      .catch(() => undefined)
+    return () => {
+      cancel = true
+    }
+  }, [embed])
+
   return createPortal(
     <div className="trailer-pop trailer-screen" role="dialog" aria-modal="true" aria-label={`${title} trailer`}>
       <div className="trailer-backdrop" onClick={onClose} />
@@ -38,7 +119,7 @@ export function TrailerPopup({ url, title, onClose }: { url: string; title: stri
           </button>
         </div>
         {embed ? (
-          <iframe className="trailer-frame" src={embed} title={`${title} trailer`} allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />
+          <iframe ref={frame} className="trailer-frame" src={embed} title={`${title} trailer`} allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />
         ) : (
           <div className="trailer-frame trailer-missing">
             <p>This title does not have a trailer saved on the server.</p>

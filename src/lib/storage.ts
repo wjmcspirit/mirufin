@@ -1,4 +1,5 @@
 import type { HomeCardSize, HomeCardStyle, HomeRowSetting, Preferences, SegmentType, SkipMode } from "./types"
+import { generateUuid } from "./uuid"
 
 const SERVER = "mirufin.server"
 const SERVER_NAME = "mirufin.serverName"
@@ -8,8 +9,19 @@ const USER_ID = "mirufin.userId"
 const USER_NAME = "mirufin.userName"
 const DEVICE = "mirufin.device"
 const PREFS = "mirufin.prefs"
+const SKIP_SCHEMA = "mirufin.skipSchema"
+const SKIP_SCHEMA_VERSION = "3"
 
 const SKIP_MODES: SkipMode[] = ["ask", "auto", "off"]
+
+/** Factory values from before automatic skip. Only these are upgraded, and only once. */
+const LEGACY_SKIP: Partial<Record<SegmentType, SkipMode>> = {
+  Intro: "ask",
+  Outro: "ask",
+  Recap: "ask",
+  Preview: "off",
+  Commercial: "ask",
+}
 
 export const DEFAULT_PREFS: Preferences = {
   showTitles: true,
@@ -32,16 +44,20 @@ export const DEFAULT_PREFS: Preferences = {
   libraryStyle: "poster",
   librarySize: "medium",
   skip: {
-    Intro: "ask",
-    Outro: "ask",
-    Recap: "ask",
-    Preview: "off",
-    Commercial: "ask",
+    Intro: "auto",
+    Outro: "auto",
+    Recap: "auto",
+    Preview: "auto",
+    Commercial: "auto",
   },
 }
 
 function skipMode(value: unknown, fallback: SkipMode): SkipMode {
   return SKIP_MODES.includes(value as SkipMode) ? (value as SkipMode) : fallback
+}
+
+function subtitleChoice(value: unknown): Preferences["subtitleSize"] {
+  return value === "small" || value === "large" ? value : "medium"
 }
 
 export function normalizeServer(input: string) {
@@ -74,7 +90,7 @@ export function clearServerCookie() {
 export function getDeviceId() {
   let id = localStorage.getItem(DEVICE)
   if (!id) {
-    id = crypto.randomUUID()
+    id = generateUuid()
     localStorage.setItem(DEVICE, id)
   }
   return id
@@ -136,14 +152,24 @@ export function clearServer() {
 export function loadPrefs(): Preferences {
   try {
     const raw = localStorage.getItem(PREFS)
-    if (!raw) return { ...DEFAULT_PREFS }
+    if (!raw) {
+      localStorage.setItem(SKIP_SCHEMA, SKIP_SCHEMA_VERSION)
+      return { ...DEFAULT_PREFS, skip: { ...DEFAULT_PREFS.skip } }
+    }
     const parsed = JSON.parse(raw) as Partial<Preferences>
     const skip = { ...DEFAULT_PREFS.skip }
     if (parsed.skip) {
       for (const key of Object.keys(skip) as SegmentType[]) skip[key] = skipMode(parsed.skip[key], skip[key])
     }
+    const upgradeSkip = localStorage.getItem(SKIP_SCHEMA) !== SKIP_SCHEMA_VERSION
+    if (upgradeSkip) {
+      for (const key of Object.keys(LEGACY_SKIP) as SegmentType[]) {
+        const stored = parsed.skip?.[key]
+        if (stored == null || stored === LEGACY_SKIP[key]) skip[key] = DEFAULT_PREFS.skip[key]
+      }
+    }
     const nextUp = parsed.nextUp === "end" || parsed.nextUp === "never" || parsed.nextUp === "credits" ? parsed.nextUp : DEFAULT_PREFS.nextUp
-    return {
+    const prefs: Preferences = {
       ...DEFAULT_PREFS,
       ...parsed,
       showTitles: parsed.showTitles !== false,
@@ -159,7 +185,7 @@ export function loadPrefs(): Preferences {
       skipForward: clampNumber(parsed.skipForward, 5, 90, DEFAULT_PREFS.skipForward),
       screensaverMinutes: clampNumber(parsed.screensaverMinutes, 0, 60, DEFAULT_PREFS.screensaverMinutes),
       maxBitrate: Number(parsed.maxBitrate) || DEFAULT_PREFS.maxBitrate,
-      subtitleSize: parsed.subtitleSize === "small" || parsed.subtitleSize === "large" ? parsed.subtitleSize : "medium",
+      subtitleSize: subtitleChoice(parsed.subtitleSize),
       subtitleRaise: clampNumber(parsed.subtitleRaise, 0, 32, DEFAULT_PREFS.subtitleRaise),
       showHero: parsed.showHero !== false,
       homeRows: normalizeHomeRows(parsed.homeRows),
@@ -167,8 +193,13 @@ export function loadPrefs(): Preferences {
       librarySize: HOME_SIZES.includes(parsed.librarySize as HomeCardSize) ? (parsed.librarySize as HomeCardSize) : "medium",
       skip,
     }
+    if (upgradeSkip) {
+      savePrefs(prefs)
+      localStorage.setItem(SKIP_SCHEMA, SKIP_SCHEMA_VERSION)
+    }
+    return prefs
   } catch {
-    return { ...DEFAULT_PREFS }
+    return { ...DEFAULT_PREFS, skip: { ...DEFAULT_PREFS.skip } }
   }
 }
 

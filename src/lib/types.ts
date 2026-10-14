@@ -108,6 +108,7 @@ export interface Item {
   CriticRating?: number
   OfficialRating?: string
   ImageTags?: Record<string, string>
+  PrimaryImageAspectRatio?: number
   BackdropImageTags?: string[]
   ParentBackdropItemId?: string
   ParentBackdropImageTags?: string[]

@@ -34,6 +34,13 @@ export function episodeCode(item: Item) {
   return `S${item.ParentIndexNumber}:E${item.IndexNumber}`
 }
 
+function seasonEpisode(item: Item) {
+  if (item.ParentIndexNumber != null && item.IndexNumber != null) return episodeCode(item)
+  if (item.ParentIndexNumber != null) return `S${item.ParentIndexNumber}`
+  if (item.IndexNumber != null) return `E${item.IndexNumber}`
+  return ""
+}
+
 /** Newest episodes in this library land within about a week, so two weeks is the recent window. */
 const RECENT_EPISODE_WINDOW = 14 * 24 * 60 * 60 * 1000
 
@@ -265,6 +272,45 @@ export function remainingLabel(item: Item) {
 
 export function continueWatching(items: Item[]) {
   return items.filter((item) => (item.Type === "Movie" || item.Type === "Episode") && isInProgress(item))
+}
+
+export function resumeCardTitle(item: Item) {
+  if (item.Type === "Episode") return item.SeriesName || item.Name || "Untitled"
+  return item.Name || "Untitled"
+}
+
+export function resumeCardDetail(item: Item) {
+  const left = remainingLabel(item)
+  if (item.Type === "Episode") {
+    const name = item.SeriesName ? item.Name || "" : ""
+    return [seasonEpisode(item), name, left].filter(Boolean).join("  ·  ")
+  }
+  const year = item.ProductionYear ? String(item.ProductionYear) : ""
+  return [year, criticLabel(item), left].filter(Boolean).join("  ·  ")
+}
+
+/** One Next Up episode per series, in the order Jellyfin returned them. */
+export function comingUpEpisodes(nextUp: Item[], watching: Item[]) {
+  const watchingIds = new Set(watching.map((item) => item.Id))
+  const seen = new Set<string>()
+  const list: Item[] = []
+  for (const item of nextUp) {
+    if ((item.Type && item.Type !== "Episode") || !item.SeriesId) continue
+    if (item.UserData?.Played || isInProgress(item) || watchingIds.has(item.Id)) continue
+    if (seen.has(item.SeriesId)) continue
+    seen.add(item.SeriesId)
+    list.push(item)
+  }
+  return list
+}
+
+export function upNextCardTitle(item: Item) {
+  return item.SeriesName || item.Name || "Untitled"
+}
+
+export function upNextCardDetail(item: Item) {
+  const name = item.SeriesName ? item.Name || "" : ""
+  return [seasonEpisode(item), name].filter(Boolean).join("  ·  ")
 }
 
 export function qualityLabel(height?: number, width?: number) {

@@ -1,8 +1,9 @@
 import { type ReactNode } from "react"
 
 export function Row({ title, className, children }: { title: string; className?: string; children: ReactNode }) {
+  const sized = className?.split(/\s+/).some((name) => name.startsWith("size-")) ? className : `size-medium${className ? ` ${className}` : ""}`
   return (
-    <section className={className ? `row ${className}` : "row"}>
+    <section className={`row ${sized}`}>
       <div className="row-head">
         <h2>{title}</h2>
       </div>

@@ -33,22 +33,13 @@ export function isBackKey(event: { key: string; keyCode?: number }) {
 }
 
 function visible(node: HTMLElement) {
+  if (node.closest("[inert]")) return false
   const rect = node.getBoundingClientRect()
   return rect.width > 0 && rect.height > 0 && getComputedStyle(node).visibility !== "hidden"
 }
 
 export function focusables() {
   return [...document.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(visible)
-}
-
-function layoutScale() {
-  const scale = Number(document.documentElement.style.zoom)
-  return scale > 0 ? scale : 1
-}
-
-function layoutViewport() {
-  const scale = layoutScale()
-  return { width: window.innerWidth / scale, height: window.innerHeight / scale }
 }
 
 function center(node: HTMLElement) {
@@ -65,7 +56,9 @@ let focusedMark: HTMLElement | null = null
 
 function markFocus(node: HTMLElement) {
   if (focusedMark !== node) {
-    focusedMark?.classList.remove("dpad-focus")
+    document.querySelectorAll(".dpad-focus").forEach((el) => {
+      if (el !== node) el.classList.remove("dpad-focus")
+    })
     focusedMark = node
   }
   node.classList.add("dpad-focus")
@@ -77,39 +70,89 @@ export function placeFocus(node: HTMLElement) {
 
 function focusNode(node: HTMLElement) {
   markFocus(node)
-  if (place(node) === "main" && !node.closest(".letter-rail, .tool-pop, .trailer-pop")) returnMain = node
+  if (place(node) === "main" && !node.closest(".tool-pop, .trailer-pop")) returnMain = node
   node.focus({ preventScroll: true })
-  const setting = node.closest(".settings .check, .settings .field, .settings .seconds, .settings .setting")
-  if (setting instanceof HTMLElement) {
-    setting.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" })
-  }
   if (node.closest(".side")) {
     const rail = node.closest(".side-nav")
     if (rail instanceof HTMLElement) scrollInside(rail, node)
     return
   }
+  reveal(node)
+}
+
+let revealToken = 0
+
+function reveal(node: HTMLElement) {
+  if (node.closest(".tool-pop, .trailer-pop")) return
+  const token = ++revealToken
+  const run = () => {
+    if (token !== revealToken || !node.isConnected) return
+    placeReveal(node)
+  }
+  run()
+  requestAnimationFrame(() => {
+    run()
+    requestAnimationFrame(run)
+  })
+}
+
+function placeReveal(node: HTMLElement) {
   const scroller = node.closest(".scroller")
   if (scroller instanceof HTMLElement) {
     const left = node.offsetLeft - (scroller.clientWidth - node.offsetWidth) / 2
-    scroller.scrollTo({ left: Math.max(0, left), behavior: "smooth" })
-    const row = scroller.closest(".row")
-    const target = row instanceof HTMLElement ? row : scroller
-    const rect = target.getBoundingClientRect()
-    const view = layoutViewport()
-    if (rect.top < 72 || rect.bottom > view.height - 16) {
-      target.scrollIntoView({ block: "nearest", behavior: "smooth" })
-    }
+    const next = Math.max(0, left)
+    if (Math.abs(scroller.scrollLeft - next) > 2) scroller.scrollTo({ left: next, behavior: "auto" })
+  }
+  const main = node.closest(".main")
+  if (!(main instanceof HTMLElement)) return
+  const view = () => main.getBoundingClientRect()
+  const hero = node.closest(".hero, .detail-hero")
+  const row = node.closest<HTMLElement>(".row, .season-block")
+  if (hero && !row) {
+    const rect = node.getBoundingClientRect()
+    const box = view()
+    if (rect.top >= box.top + 8 && rect.bottom <= box.bottom - 16 && main.scrollTop < 24) return
+    main.scrollTop = 0
+    const shown = node.getBoundingClientRect()
+    const nextBox = view()
+    if (shown.bottom > nextBox.bottom - 16) main.scrollTop += shown.bottom - nextBox.bottom + 24
     return
   }
-  node.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" })
+  if (row) {
+    park(main, row, 4)
+    return
+  }
+  const band = containerOf(node)
+  if (band && kind(band) === "grid") {
+    park(main, node, 16)
+    return
+  }
+  const rect = node.getBoundingClientRect()
+  const box = view()
+  if (rect.top >= box.top + 12 && rect.bottom <= box.bottom - 20) return
+  const slot = box.top + Math.min(96, box.height * 0.2)
+  main.scrollTop += rect.top - slot
+}
+
+function park(main: HTMLElement, target: HTMLElement, pad: number) {
+  const delta = target.getBoundingClientRect().top - (main.getBoundingClientRect().top + pad)
+  if (Math.abs(delta) < 3) return
+  const max = main.scrollHeight - main.clientHeight
+  main.scrollTop = Math.max(0, Math.min(max, main.scrollTop + delta))
 }
 
 function scrollInside(scroller: HTMLElement, node: HTMLElement) {
   const box = scroller.getBoundingClientRect()
   const rect = node.getBoundingClientRect()
+  if (scroller.scrollWidth > scroller.clientWidth + 8) {
+    if (rect.left >= box.left + 8 && rect.right <= box.right - 8) return
+    const left = scroller.scrollLeft + rect.left - box.left - (box.width - rect.width) / 2
+    scroller.scrollTo({ left: Math.max(0, left), behavior: "auto" })
+    return
+  }
   if (rect.top >= box.top + 4 && rect.bottom <= box.bottom - 4) return
   const top = scroller.scrollTop + rect.top - box.top - (box.height - rect.height) / 2
-  scroller.scrollTo({ top: Math.max(0, top), behavior: "smooth" })
+  scroller.scrollTo({ top: Math.max(0, top), behavior: "auto" })
 }
 
 function nearest(current: HTMLElement, items: HTMLElement[], key: "ArrowUp" | "ArrowDown") {
@@ -169,15 +212,71 @@ function stepList(current: HTMLElement, items: HTMLElement[], key: "ArrowUp" | "
   return items[index + (key === "ArrowDown" ? 1 : -1)] || null
 }
 
-function aligned(from: HTMLElement, items: HTMLElement[]) {
-  const y = center(from).y
-  let best: HTMLElement | null = null
-  let bestDy = Number.POSITIVE_INFINITY
+const BAND = ".scroller, .grid, .card-board, .episodes, .library-icons, .letter-row, .actions, .meta-links, .settings-row, .choice, .seconds"
+
+function containerOf(node: HTMLElement) {
+  return node.closest<HTMLElement>(BAND)
+}
+
+function kind(band: HTMLElement): "strip" | "grid" | "list" {
+  if (band.classList.contains("grid") || band.classList.contains("card-board") || band.classList.contains("episodes")) return "grid"
+  if (
+    band.classList.contains("scroller") ||
+    band.classList.contains("actions") ||
+    band.classList.contains("library-icons") ||
+    band.classList.contains("letter-row") ||
+    band.classList.contains("meta-links") ||
+    band.classList.contains("settings-row") ||
+    band.classList.contains("choice") ||
+    band.classList.contains("seconds")
+  ) {
+    return "strip"
+  }
+  return "list"
+}
+
+function ordered(items: HTMLElement[]) {
+  return [...items].sort((a, b) => {
+    const ar = a.getBoundingClientRect()
+    const br = b.getBoundingClientRect()
+    if (Math.abs(ar.top - br.top) > Math.max(20, ar.height * 0.45)) return ar.top - br.top
+    return ar.left - br.left
+  })
+}
+
+function bandsOf(items: HTMLElement[]) {
+  const bands: HTMLElement[] = []
   for (const item of items) {
-    const dy = Math.abs(center(item).y - y)
-    if (dy < bestDy) {
+    const band = containerOf(item)
+    if (!band || bands.includes(band)) continue
+    bands.push(band)
+  }
+  return bands.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)
+}
+
+let lane = 0
+
+function rememberLane(node: HTMLElement, items: HTMLElement[]) {
+  const index = ordered(items).indexOf(node)
+  if (index >= 0) lane = index
+}
+
+function landing(band: HTMLElement, items: HTMLElement[], from: HTMLElement, dir: number) {
+  const list = ordered(items)
+  if (list.length === 0) return null
+  if (kind(band) === "list") return dir < 0 ? list[list.length - 1] : list[0]
+  if (kind(band) === "strip") return list[Math.min(lane, list.length - 1)]
+  const fromX = center(from).x
+  const top = list[0].getBoundingClientRect().top
+  const firstRow = list.filter((item) => Math.abs(item.getBoundingClientRect().top - top) < 28)
+  const pool = dir < 0 ? list.filter((item) => Math.abs(item.getBoundingClientRect().top - list[list.length - 1].getBoundingClientRect().top) < 28) : firstRow
+  let best = pool[0] || list[0]
+  let bestDx = Number.POSITIVE_INFINITY
+  for (const item of pool.length ? pool : list) {
+    const dx = Math.abs(center(item).x - fromX)
+    if (dx < bestDx) {
       best = item
-      bestDy = dy
+      bestDx = dx
     }
   }
   return best
@@ -227,46 +326,71 @@ export function moveFocus(key: string) {
   const trap = current.closest(".tool-pop, .trailer-pop")
   if (trap instanceof HTMLElement) {
     const inside = items.filter((item) => trap.contains(item))
-    const next = key === "ArrowUp" || key === "ArrowDown" ? stepList(current, inside, key) : key === "ArrowLeft" || key === "ArrowRight" ? rowNeighbor(current, inside, key) : null
-    if (next) focusNode(next)
+    let next: HTMLElement | null = null
+    if (trap.classList.contains("trailer-gallery")) {
+      if (key === "ArrowLeft" || key === "ArrowRight") next = rowNeighbor(current, inside, key)
+      else if (key === "ArrowUp" && current.classList.contains("trailer-card")) next = inside.find((item) => item.classList.contains("trailer-close")) || null
+      else if (key === "ArrowDown" && current.classList.contains("trailer-close")) {
+        next = inside.find((item) => item.getAttribute("aria-current") === "true" && item.classList.contains("trailer-card")) || inside.find((item) => item.classList.contains("trailer-card")) || null
+      }
+    } else {
+      next = key === "ArrowUp" || key === "ArrowDown" ? stepList(current, inside, key) : key === "ArrowLeft" || key === "ArrowRight" ? rowNeighbor(current, inside, key) : null
+    }
+    if (next && next !== current) focusNode(next)
     return
   }
-  const list = current.closest(".side, .letter-rail")
-  if ((key === "ArrowUp" || key === "ArrowDown") && list instanceof HTMLElement) {
-    const next = stepList(current, items.filter((item) => list.contains(item)), key)
-    if (next) focusNode(next)
-    return
-  }
-  const area = place(current)
   const main = items.filter((item) => place(item) === "main")
   const side = items.filter((item) => place(item) === "side")
-  if (current.closest(".letter-rail") && key === "ArrowLeft") {
-    const content = main.filter((item) => !item.closest(".letter-rail") && item.getBoundingClientRect().right <= current.getBoundingClientRect().left + 4)
-    const next = aligned(current, content)
-    if (next) focusNode(next)
-    return
-  }
-  if (area === "side") {
-    if (key !== "ArrowRight") return
-    const remembered = current === returnSide && alive(returnMain) && !returnMain.closest(".letter-rail") ? returnMain : null
-    const next = remembered || enterRow(current, main.filter((item) => !item.closest(".letter-rail")))
-    if (next) cross(current, next)
-    return
-  }
-  if (key === "ArrowLeft" || key === "ArrowRight") {
-    const beside = rowNeighbor(current, main, key)
-    if (beside) {
-      focusNode(beside)
-      return
-    }
-    if (key === "ArrowLeft") {
-      const next = (alive(returnSide) ? returnSide : null) || side.find((item) => item.classList.contains("nav") && item.classList.contains("active")) || side.find((item) => item.classList.contains("nav"))
+  const menu = current.closest(".side")
+  if (menu instanceof HTMLElement) {
+    const tabs = items.filter((item) => menu.contains(item))
+    if (key === "ArrowLeft" || key === "ArrowRight") {
+      const next = rowNeighbor(current, tabs, key)
+      if (next) focusNode(next)
+    } else if (key === "ArrowDown") {
+      const next = (alive(returnMain) ? returnMain : null) || enterRow(current, main)
       if (next) cross(current, next)
     }
     return
   }
-  if (key === "ArrowUp" || key === "ArrowDown") {
-    const next = nearest(current, main, key)
-    if (next) focusNode(next)
+  const band = containerOf(current)
+  const inside = band ? main.filter((item) => band.contains(item)) : []
+  if (key === "ArrowLeft" || key === "ArrowRight") {
+    const pool = band && kind(band) !== "list" ? inside : main
+    const beside = rowNeighbor(current, pool, key)
+    if (beside) {
+      if (band && kind(band) === "strip") rememberLane(beside, inside)
+      focusNode(beside)
+      return
+    }
+    return
   }
+  if (key === "ArrowUp" || key === "ArrowDown") {
+    const dir = key === "ArrowDown" ? 1 : -1
+    if (!band) {
+      const next = nearest(current, main, key)
+      if (next) focusNode(next)
+      else if (dir < 0) focusMenu(current, side)
+      return
+    }
+    if (kind(band) !== "strip") {
+      const next = kind(band) === "grid" ? nearest(current, inside, key) : stepList(current, ordered(inside), key)
+      if (next) {
+        focusNode(next)
+        return
+      }
+    }
+    if (band && kind(band) === "strip") rememberLane(current, inside)
+    const bands = bandsOf(main)
+    const index = band ? bands.indexOf(band) : -1
+    const neighbor = bands[index + dir]
+    const next = neighbor ? landing(neighbor, main.filter((item) => neighbor.contains(item)), current, dir) : nearest(current, main, key)
+    if (next) focusNode(next)
+    else if (dir < 0) focusMenu(current, side)
+  }
+}
+
+function focusMenu(from: HTMLElement, side: HTMLElement[]) {
+  const tab = (alive(returnSide) ? returnSide : null) || side.find((item) => item.classList.contains("nav") && item.classList.contains("active")) || side.find((item) => item.classList.contains("nav"))
+  if (tab) cross(from, tab)
 }

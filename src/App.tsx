@@ -6,7 +6,6 @@ import { UpdatePrompt } from "./components/UpdatePrompt"
 import * as api from "./lib/api"
 import { discoverServers } from "./lib/discover"
 import { normalizeServer } from "./lib/storage"
-import { CalendarPage } from "./pages/Calendar"
 import { ConnectPage } from "./pages/Connect"
 import { FavoritesPage } from "./pages/Favorites"
 import { HomePage } from "./pages/Home"
@@ -26,6 +25,10 @@ function RequireAuth() {
 }
 
 export function App() {
+  useEffect(() => {
+    document.getElementById("boot")?.remove()
+  }, [])
+
   return (
     <>
       <RemoteNav />
@@ -39,7 +42,6 @@ export function App() {
         <Route path="/library/:id" element={<LibraryPage />} />
         <Route path="/item/:id" element={<ItemPage />} />
         <Route path="/search" element={<SearchPage />} />
-        <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/favorites" element={<FavoritesPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<p className="empty">That page is not in Mirufin.</p>} />

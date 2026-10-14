@@ -82,6 +82,8 @@ public class DiscoveryPlugin extends Plugin {
     private void remember(LinkedHashMap<String, JSObject> found, String message) {
         try {
             JSONObject body = new JSONObject(message);
+            String product = body.optString("ProductName", "");
+            if (!product.isEmpty() && !product.toLowerCase().contains("jellyfin")) return;
             String address = cleanAddress(body.optString("Address", ""));
             if (address.isEmpty()) return;
             String id = body.optString("Id", address);
