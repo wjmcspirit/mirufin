@@ -88,6 +88,9 @@ export function RemoteNav() {
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return
     const handle = NativeApp.addListener("backButton", () => {
+      // An open overlay (menu, trailer, media info) owns Back: it closes itself
+      // through its own keydown listener instead of leaving the page.
+      if (backHeld()) return
       const player = document.querySelector(".player")
       if (player) {
         player.dispatchEvent(new KeyboardEvent("keydown", { key: "Back", bubbles: true }))

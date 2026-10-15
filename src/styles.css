@@ -103,6 +103,45 @@ h1, h2, h3 {
   filter: drop-shadow(0 12px 22px rgba(70, 130, 255, 0.28));
 }
 .gate-brand h1 { font-size: 36px; color: var(--text); }
+
+/* Login gate: a compact, balanced card. The gate is measured against the usable
+   app height because a root `zoom` makes `100vh` taller than the screen on the
+   TV, which used to push the card below centre and cut off its lower actions. */
+.gate.gate-login { min-height: var(--app-height, 100vh); padding: 24px 20px; }
+.login-panel {
+  width: min(420px, 100%);
+  gap: 12px;
+  padding: 24px;
+  border-radius: 22px;
+}
+.login-panel .gate-brand { gap: 2px; }
+.login-panel .gate-logo { height: 44px; margin: 0; }
+.login-panel .gate-brand h1 { font-size: 30px; }
+.login-panel .field { gap: 6px; }
+.login-panel .field input { min-height: 44px; padding: 11px 14px; }
+.login-panel .btn { min-height: 44px; }
+.login-panel .quick-code { font-size: 40px; }
+.field-label { color: var(--muted); font-size: 13px; font-weight: 500; }
+.gate-actions { display: grid; gap: 10px; }
+.btn-quiet {
+  background: transparent;
+  border-color: rgba(244, 240, 230, 0.16);
+  color: var(--muted);
+}
+.btn-quiet:hover { background: rgba(255, 255, 255, 0.06); color: var(--text); }
+.gate-alt { display: grid; justify-items: center; gap: 6px; margin-top: 2px; }
+/* Compound selectors: `.text-link`/`.hint` are declared later in this file, so a
+   bare class here would lose the cascade for size and colour. */
+.text-link.text-link-small { color: var(--faint); font-size: 12px; }
+.text-link.text-link-small:hover { color: var(--muted); }
+.hint.gate-server {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .brand {
   flex: 0 0 auto;
   align-items: center;
@@ -787,6 +826,43 @@ html:not(.remote) .nav:hover .nav-label {
   color: #fff;
   text-shadow: 0 0 14px rgba(62, 200, 255, 0.7);
 }
+/* Clickable genres read as pills so the filter links are obvious; the shared
+   `.meta-links` layout (and its D-pad band) stays untouched, and studios or
+   genres without a library keep the plain text look. */
+.meta-links.genre-pills {
+  gap: 8px;
+  align-items: center;
+}
+.meta-links.genre-pills a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 5px 14px;
+  border: 1px solid rgba(62, 200, 255, 0.45);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.34);
+  color: #d9e6f2;
+  font-size: 14px;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+.meta-links.genre-pills a:hover {
+  background: rgba(62, 200, 255, 0.16);
+  border-color: rgba(62, 200, 255, 0.75);
+  color: #fff;
+}
+.meta-links.genre-pills a:focus,
+.meta-links.genre-pills a:focus-visible,
+.meta-links.genre-pills a.dpad-focus {
+  color: #fff;
+  background: rgba(62, 200, 255, 0.22);
+  border-color: #8ee6ff;
+  text-shadow: none;
+  outline: 3px solid #8ee6ff;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px rgba(62, 200, 255, 0.28);
+}
 .hero-copy .overview,
 .detail-copy .overview {
   color: #d5dce8;
@@ -1256,6 +1332,29 @@ html:not(.remote) .nav:hover .nav-label {
 }
 .ph.avatar .ph-mark { width: 48%; max-width: 26px; }
 .ph.avatar .ph-title { display: none; }
+/* External Known For card without artwork: a poster-style title card instead of the Mirufin mark. */
+.ph.ph-known {
+  background:
+    radial-gradient(130% 100% at 24% 6%, hsl(var(--known-hue, 224) 68% 32% / 0.55), transparent 60%),
+    linear-gradient(165deg, #1a2032 0%, #131722 50%, #0d1015 100%);
+}
+.known-poster-mark {
+  position: relative;
+  width: 40px;
+  aspect-ratio: 2 / 3;
+  border: 2px solid rgba(154, 169, 196, 0.55);
+  border-radius: 7px;
+}
+.known-poster-mark::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-42%, -50%);
+  border-style: solid;
+  border-width: 8px 0 8px 13px;
+  border-color: transparent transparent transparent rgba(154, 169, 196, 0.8);
+}
 .card:hover .card-art img { transform: scale(1.04); }
 .card-art img { transition: transform 0.35s ease; }
 .played-mark, .count-pill { position: absolute; top: 8px; }
@@ -1365,6 +1464,12 @@ html:not(.remote) .nav:hover .nav-label {
 .tool-pop button[aria-pressed="true"] { color: var(--accent); background: rgba(62, 200, 255, 0.1); }
 .tool-pop button:hover,
 .tool-pop button:focus-visible { background: rgba(255, 255, 255, 0.06); }
+.tool-pop button:focus-visible,
+.tool-pop button.dpad-focus {
+  background: rgba(62, 200, 255, 0.16);
+  outline: 3px solid #8ee6ff;
+  outline-offset: -2px;
+}
 .tool-label { margin: 8px 10px 2px; color: var(--faint); font-size: 11px; font-weight: 600; }
 .tool-az {
   width: auto;
@@ -1763,11 +1868,28 @@ select {
 }
 .check { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 6px 10px; border-radius: 12px; }
 .check input[type="checkbox"] { width: 22px; height: 22px; accent-color: #3ec8ff; flex: none; }
-.check:focus-within, .field:focus-within {
+.check:focus-within {
   outline: none;
   background: rgba(62, 200, 255, 0.2);
   box-shadow: inset 0 0 0 2px #d7f4ff;
   border-radius: 12px;
+}
+/* A field highlights its input, never the label container: the container box
+   used to paint a cyan block over the label text and the input edge. */
+.field:focus-within {
+  background: none;
+  box-shadow: none;
+  outline: none;
+}
+.field:focus-within .field-label { color: var(--text); }
+.field input:focus,
+.field input:focus-visible,
+.field input.dpad-focus {
+  border-color: #8ee6ff;
+  background: #12141c;
+  outline: 3px solid #8ee6ff;
+  outline-offset: 1px;
+  box-shadow: none;
 }
 .seconds {
   display: flex;
@@ -2152,6 +2274,14 @@ input[type="range"]::-webkit-slider-thumb {
   .settings > h1 { font-size: 56px; }
   .settings .hint { font-size: 22px; }
   .settings-section h2 { font-size: 32px; }
+  .login-panel { width: min(520px, 100%); gap: 16px; padding: 30px; }
+  .login-panel .gate-logo { height: 54px; }
+  .login-panel .gate-brand h1 { font-size: 38px; }
+  .login-panel .field-label { font-size: 17px; }
+  .login-panel .field input { min-height: 54px; padding: 14px 16px; font-size: 19px; }
+  .login-panel .btn { min-height: 54px; font-size: 19px; }
+  .login-panel .quick-code { font-size: 50px; }
+  .login-panel .text-link.text-link-small, .login-panel .hint.gate-server { font-size: 15px; }
 }
 
 @media (min-width: 3200px) {
@@ -2169,6 +2299,14 @@ input[type="range"]::-webkit-slider-thumb {
   .settings > h1 { font-size: 72px; }
   .settings .hint { font-size: 26px; }
   .settings-section h2 { font-size: 44px; }
+  .login-panel { width: min(640px, 100%); gap: 20px; padding: 38px; }
+  .login-panel .gate-logo { height: 64px; }
+  .login-panel .gate-brand h1 { font-size: 46px; }
+  .login-panel .field-label { font-size: 21px; }
+  .login-panel .field input { min-height: 64px; padding: 16px 18px; font-size: 23px; }
+  .login-panel .btn { min-height: 64px; font-size: 23px; }
+  .login-panel .quick-code { font-size: 62px; }
+  .login-panel .text-link.text-link-small, .login-panel .hint.gate-server { font-size: 18px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

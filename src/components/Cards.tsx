@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from "react"
+import { memo, useEffect, useRef, useState, type ReactNode } from "react"
 import { Link } from "react-router-dom"
 import { criticLabel, episodeCode, progressPct, remainingLabel } from "../lib/format"
 import { artWidth, ownPrimarySrc, primarySrc, seriesPosterSrc, thumbSrc } from "../lib/images"
@@ -10,6 +10,7 @@ import { useStageActions } from "./Stage"
 export function MediaImage({
   src,
   fallback,
+  placeholder,
   alt,
   label,
   className,
@@ -17,6 +18,7 @@ export function MediaImage({
 }: {
   src: string | null
   fallback?: string | null
+  placeholder?: ReactNode
   alt: string
   label?: string
   className?: string
@@ -27,6 +29,13 @@ export function MediaImage({
   const chosen = chain[step] || null
   useEffect(() => setStep(0), [src, fallback])
   if (!chosen) {
+    if (placeholder) {
+      return (
+        <div className={`ph ${className || ""}`} aria-hidden="true">
+          {placeholder}
+        </div>
+      )
+    }
     return (
       <div className={`ph ${className || ""}`} aria-hidden="true">
         <img className="ph-mark" src="/mirufin-m.png" alt="" />

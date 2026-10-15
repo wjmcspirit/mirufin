@@ -7,7 +7,9 @@ import { MediaImage } from "../components/Cards"
 import { useSession } from "../session"
 
 export function LoginPage() {
-  const { serverUrl, serverName, serverVersion, userName, accessToken, login, accept } = useSession()
+  // The brand line is Mirufin only. The server's own self-reported name (which
+  // can be anything, including another product's name) is never painted here.
+  const { serverUrl, userName, accessToken, login, accept } = useSession()
   const navigate = useNavigate()
   const [users, setUsers] = useState<PublicUser[]>([])
   const [username, setUsername] = useState("")
@@ -103,25 +105,13 @@ export function LoginPage() {
   }
 
   return (
-    <main className="gate">
-      <form className="panel" onSubmit={onSubmit}>
+    <main className="gate gate-login">
+      <form className="panel login-panel" onSubmit={onSubmit}>
         <div className="gate-brand">
           <img className="gate-logo" src="/mirufin-logo.png" alt="Mirufin" />
-          <p className="eyebrow">{serverName || "Jellyfin"}{serverVersion ? `  ·  ${serverVersion}` : ""}</p>
           <h1>Sign in</h1>
         </div>
         {offline && <p className="error">{offline}</p>}
-        {code ? (
-          <div className="quick-connect">
-            <p className="hint">On your phone, open Jellyfin and approve this code.</p>
-            <p className="quick-code">{code}</p>
-          </div>
-        ) : (
-          <button className="btn" type="button" onClick={() => { setQuickError(""); setQuick(true) }}>
-            Use a code from another device
-          </button>
-        )}
-        {quickError && <p className="error">{quickError}</p>}
         {users.length > 0 && (
           <div className="user-row">
             {users.map((user) => (
@@ -142,25 +132,42 @@ export function LoginPage() {
           </div>
         )}
         <label className="field">
-          Username
+          <span className="field-label">Username</span>
           <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" required />
         </label>
         <label className="field">
-          Password
+          <span className="field-label">Password</span>
           <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" />
         </label>
         {error && <p className="error">{error}</p>}
-        <button className="btn btn-primary" type="submit" disabled={pending}>
-          {pending ? "Signing in…" : "Sign in"}
-        </button>
-        {accessToken && userName && (
-          <Link className="text-link" to="/">
-            Continue as {userName}
-          </Link>
+        <div className="gate-actions">
+          <button className="btn btn-primary" type="submit" disabled={pending}>
+            {pending ? "Signing in…" : "Sign in"}
+          </button>
+          {!code && (
+            <button className="btn btn-quiet" type="button" onClick={() => { setQuickError(""); setQuick(true) }}>
+              Quick Connect
+            </button>
+          )}
+        </div>
+        {code && (
+          <div className="quick-connect">
+            <p className="hint">On your phone, open Jellyfin and approve this code.</p>
+            <p className="quick-code">{code}</p>
+          </div>
         )}
-        <Link className="text-link" to="/connect">
-          Use a different server
-        </Link>
+        {quickError && <p className="error">{quickError}</p>}
+        <div className="gate-alt">
+          {accessToken && userName && (
+            <Link className="text-link" to="/">
+              Continue as {userName}
+            </Link>
+          )}
+          <Link className="text-link text-link-small" to="/connect">
+            Change server
+          </Link>
+          {serverUrl && <p className="hint gate-server">{serverUrl}</p>}
+        </div>
       </form>
     </main>
   )

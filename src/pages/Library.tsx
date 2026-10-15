@@ -9,6 +9,7 @@ import { usePinnedArt, useStage } from "../components/Stage"
 import * as api from "../lib/api"
 import { episodeCode, heroPlayTarget, libraryItemTypes, mergeAddedSeries, recentlyAddedSeries, seriesFallback, seriesFromAddedEpisodes, addedSeriesNote, type AddedSeries, type RecentSeries } from "../lib/format"
 import { backdropSrc } from "../lib/images"
+import { holdBack, isBackKey, placeFocus } from "../lib/remote"
 import type { HomeCardSize, HomeCardStyle, Item } from "../lib/types"
 import { usePrefs, useSession } from "../session"
 
@@ -783,13 +784,65 @@ function ToolMenu({
   onToggle: () => void
   children: ReactNode
 }) {
+  const toolRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const popRef = useRef<HTMLDivElement>(null)
+  const wasOpen = useRef(false)
+
+  // The remote drives whatever is focused, so hand it the menu as soon as it
+  // mounts, preferring the option that is currently applied.
+  useEffect(() => {
+    if (!open) {
+      // Closing (Back, a selection, or a toggle) should put the viewer back on
+      // the icon that opened the menu. Skip this when focus already moved
+      // somewhere deliberate, such as a click on a card behind the menu.
+      if (wasOpen.current) {
+        const focused = document.activeElement
+        const lost = !(focused instanceof HTMLElement) || focused === document.body || Boolean(toolRef.current?.contains(focused))
+        if (lost && buttonRef.current) placeFocus(buttonRef.current)
+      }
+      wasOpen.current = false
+      return
+    }
+    wasOpen.current = true
+    const pop = popRef.current
+    if (!pop) return
+    const selected = pop.querySelector<HTMLElement>('button[aria-pressed="true"]') || pop.querySelector<HTMLElement>("button")
+    if (selected) placeFocus(selected)
+  }, [open])
+
+  // Back/Escape must close the menu and return focus to its icon, not let the
+  // global remote handler navigate away from the library.
+  useEffect(() => {
+    if (!open) return
+    const release = holdBack()
+    function onKey(event: KeyboardEvent) {
+      if (!isBackKey(event)) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      onToggle()
+    }
+    window.addEventListener("keydown", onKey, true)
+    return () => {
+      release()
+      window.removeEventListener("keydown", onKey, true)
+    }
+  }, [open, onToggle])
+
   return (
-    <div className="tool">
-      <button className={active ? "tool-btn active" : "tool-btn"} type="button" aria-label={label} aria-expanded={open} onClick={onToggle}>
+    <div className="tool" ref={toolRef}>
+      <button
+        ref={buttonRef}
+        className={active ? "tool-btn active" : "tool-btn"}
+        type="button"
+        aria-label={label}
+        aria-expanded={open}
+        onClick={onToggle}
+      >
         {icon}
       </button>
       {open && (
-        <div className="tool-pop" role="menu" aria-label={label}>
+        <div className="tool-pop" role="menu" aria-label={label} ref={popRef}>
           {children}
         </div>
       )}

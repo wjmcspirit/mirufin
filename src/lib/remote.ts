@@ -93,6 +93,13 @@ function focusNode(node: HTMLElement) {
     if (rail instanceof HTMLElement) scrollInside(rail, node)
     return
   }
+  // A toolbar dropdown is a scrollable trap: keep the focused option visible
+  // without letting reveal() scroll the page behind the open menu.
+  const pop = node.closest<HTMLElement>(".tool-pop")
+  if (pop) {
+    scrollInside(pop, node)
+    return
+  }
   reveal(node)
 }
 

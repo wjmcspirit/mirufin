@@ -108,6 +108,8 @@ export interface Item {
   CriticRating?: number
   OfficialRating?: string
   ImageTags?: Record<string, string>
+  /** Jellyfin provider identifiers (Tmdb, Imdb, Tvdb, ...) used to match external titles. */
+  ProviderIds?: Record<string, string>
   PrimaryImageAspectRatio?: number
   BackdropImageTags?: string[]
   ParentBackdropItemId?: string

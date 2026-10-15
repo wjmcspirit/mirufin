@@ -3,9 +3,8 @@ import { createPortal } from "react-dom"
 import { useNavigate } from "react-router-dom"
 import * as api from "../lib/api"
 import { backdropSrc, primarySrc, thumbSrc } from "../lib/images"
-import { nativeEngine } from "../lib/nativePlayer"
 import { holdBack, isBackKey } from "../lib/remote"
-import { youtubeEmbed, youtubeThumb } from "../lib/trailer"
+import { trailerSearch, youtubeEmbed, youtubeThumb } from "../lib/trailer"
 import type { Item } from "../lib/types"
 import { useSession } from "../session"
 import { PlayIcon, TrailerIcon } from "./Icons"
@@ -28,6 +27,10 @@ export function TrailerButton({ item, onOpen }: { item: Item; onOpen?: (open: bo
   const [title, setTitle] = useState(item.Name || "Trailers")
   const [picking, setPicking] = useState(false)
   const [remote, setRemote] = useState<Choice | null>(null)
+  // A title without a trailer on the server keeps the action: it opens the
+  // YouTube search for the title in the same popup instead of the button
+  // disappearing from the details page.
+  const search = trailerSearch(item)
 
   useEffect(() => {
     let cancel = false
@@ -52,19 +55,17 @@ export function TrailerButton({ item, onOpen }: { item: Item; onOpen?: (open: bo
           image: thumbSrc(trailer) || parentArt,
         })
       }
-      const remoteChoices: Choice[] = nativeEngine()
-        ? []
-        : (target.RemoteTrailers || []).flatMap((trailer) => {
-            if (!trailer.Url || !youtubeEmbed(trailer.Url)) return []
-            return [{
-              id: trailer.Url,
-              name: trailer.Name || "Trailer",
-              source: "YouTube",
-              url: trailer.Url,
-              image: youtubeThumb(trailer.Url, "max"),
-              imageFallback: youtubeThumb(trailer.Url, "hq"),
-            }]
-          })
+      const remoteChoices: Choice[] = (target.RemoteTrailers || []).flatMap((trailer) => {
+        if (!trailer.Url || !youtubeEmbed(trailer.Url)) return []
+        return [{
+          id: trailer.Url,
+          name: trailer.Name || "Trailer",
+          source: "YouTube",
+          url: trailer.Url,
+          image: youtubeThumb(trailer.Url, "max"),
+          imageFallback: youtubeThumb(trailer.Url, "hq"),
+        }]
+      })
       setTitle(target.Name || item.Name || "Trailers")
       setChoices([...local.values(), ...remoteChoices])
     }
@@ -97,7 +98,13 @@ export function TrailerButton({ item, onOpen }: { item: Item; onOpen?: (open: bo
     onOpen?.(false)
   }
 
-  if (choices.length === 0) return null
+  function openSearch() {
+    setPicking(false)
+    setRemote({ id: search, name: title, source: "YouTube", url: search })
+    onOpen?.(true)
+  }
+
+  const label = choices.length > 1 ? "Trailers" : "Trailer"
 
   return (
     <>
@@ -105,7 +112,8 @@ export function TrailerButton({ item, onOpen }: { item: Item; onOpen?: (open: bo
         className="btn icon-btn"
         type="button"
         onClick={() => {
-          if (choices.length === 1) play(choices[0])
+          if (choices.length === 0) openSearch()
+          else if (choices.length === 1) play(choices[0])
           else {
             setPicking(true)
             onOpen?.(true)
@@ -113,7 +121,7 @@ export function TrailerButton({ item, onOpen }: { item: Item; onOpen?: (open: bo
         }}
       >
         <TrailerIcon size={16} />
-        {choices.length > 1 ? "Trailers" : "Trailer"}
+        {label}
       </button>
       {picking && <TrailerChoices title={title} choices={choices} onPlay={play} onClose={() => { setPicking(false); onOpen?.(false) }} />}
       {remote?.url && <TrailerPopup url={remote.url} title={remote.name} onClose={closeRemote} />}

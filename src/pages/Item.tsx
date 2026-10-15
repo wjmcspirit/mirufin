@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { MediaImage, PosterCard } from "../components/Cards"
 import { CheckIcon, HeartIcon, InfoIcon, PlayIcon, SeasonIcon } from "../components/Icons"
@@ -673,7 +673,21 @@ function PersonBody({ person }: { person: Item }) {
   if (!items && !known) return <Loading label="Loading titles" />
   const movies = (items || []).filter((entry) => entry.Type === "Movie")
   const shows = (items || []).filter((entry) => entry.Type === "Series")
-  const owned = new Map((items || []).map((entry) => [`${entry.Type}:${titleKey(entry.Name)}`, entry]))
+  const ownedTitle = new Map((items || []).map((entry) => [`${entry.Type}:${titleKey(entry.Name)}`, entry]))
+  // Stable provider ids beat fuzzy title matching: TMDb ids are kind-qualified
+  // (movie and TV ids live in separate namespaces) and IMDb ids are unique.
+  const ownedTmdb = new Map<string, Item>()
+  const ownedImdb = new Map<string, Item>()
+  for (const entry of items || []) {
+    const kind = entry.Type === "Movie" ? "movie" : entry.Type === "Series" ? "series" : ""
+    if (!kind) continue
+    for (const [provider, value] of Object.entries(entry.ProviderIds || {})) {
+      if (!value) continue
+      const key = provider.toLowerCase()
+      if (key === "tmdb") ownedTmdb.set(`${kind}:${value}`, entry)
+      if (key === "imdb") ownedImdb.set(value.toLowerCase(), entry)
+    }
+  }
   const empty = items && known && movies.length === 0 && shows.length === 0 && known.length === 0
 
   return (
@@ -681,7 +695,10 @@ function PersonBody({ person }: { person: Item }) {
       {known && known.length > 0 && (
         <Row title="Known for">
           {known.map((work) => {
-            const match = owned.get(`${work.kind}:${titleKey(work.name)}`)
+            const match =
+              (work.tmdb ? ownedTmdb.get(`${work.kind === "Series" ? "series" : "movie"}:${work.tmdb}`) : undefined) ||
+              (work.imdb ? ownedImdb.get(work.imdb.toLowerCase()) : undefined) ||
+              ownedTitle.get(`${work.kind}:${titleKey(work.name)}`)
             if (match) return <PosterCard key={work.id} item={match} layout="poster" href={`/item/${match.Id}`} />
             return <KnownCard key={work.id} work={work} />
           })}
@@ -708,10 +725,24 @@ function PersonBody({ person }: { person: Item }) {
 
 function KnownCard({ work }: { work: KnownWork }) {
   const subtitle = [work.kind === "Series" ? "TV" : "Movie", work.year].filter(Boolean).join("  ·  ")
+  // A quiet per-title hue keeps the no-artwork fallback from repeating identically.
+  let hue = 0
+  for (const char of work.name) hue = (hue * 31 + char.charCodeAt(0)) % 360
   const body = (
     <>
-      <span className="card-art">
-        <MediaImage src={work.image} alt={work.name} />
+      <span className="card-art" style={{ "--known-hue": hue } as CSSProperties}>
+        <MediaImage
+          src={work.image}
+          alt={work.name}
+          className="ph-known"
+          loading="lazy"
+          placeholder={
+            <>
+              <span className="known-poster-mark" aria-hidden="true" />
+              <span className="ph-title">{work.name}</span>
+            </>
+          }
+        />
       </span>
       <span className="card-copy">
         <span className="card-title">{work.name}</span>
@@ -745,7 +776,7 @@ function FactLinks({ item }: { item: Item }) {
   return (
     <>
       {genres.length > 0 && (
-        <p className="meta-links">
+        <p className="meta-links genre-pills">
           {genres.map((genre) =>
             libraryId && genre.Id ? (
               <Link key={genre.Id} to={`/library/${libraryId}?genre=${encodeURIComponent(genre.Id)}`}>
