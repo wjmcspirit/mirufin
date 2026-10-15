@@ -312,26 +312,31 @@ function alive(node: HTMLElement | null): node is HTMLElement {
 let returnSide: HTMLElement | null = null
 let returnMain: HTMLElement | null = null
 
-// Last-focused link per pathname, used to restore focus when returning to a
-// page. Main-content links only; sidebar links are transient navigation.
+// Last-focused link per route, used to restore focus when returning to a page.
+// The query string is part of the key so a season view keeps its own memory.
+// Main-content links only; sidebar links are transient navigation.
 const focusMemory = new Map<string, string>()
 const FOCUS_MEMORY_MAX = 40
+
+function focusKey() {
+  return window.location.pathname + window.location.search
+}
 
 function rememberFocus(node: HTMLElement) {
   if (!(node instanceof HTMLAnchorElement)) return
   const href = node.getAttribute("href")
   if (!href || node.closest(".side")) return
-  const path = window.location.pathname
-  focusMemory.delete(path)
-  focusMemory.set(path, href)
+  const key = focusKey()
+  focusMemory.delete(key)
+  focusMemory.set(key, href)
   if (focusMemory.size > FOCUS_MEMORY_MAX) {
     const oldest = focusMemory.keys().next().value
     if (oldest) focusMemory.delete(oldest)
   }
 }
 
-export function rememberedHref(pathname: string) {
-  return focusMemory.get(pathname) || null
+export function rememberedHref(key: string) {
+  return focusMemory.get(key) || null
 }
 
 function cross(from: HTMLElement, to: HTMLElement) {

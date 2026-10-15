@@ -181,8 +181,9 @@ const ITEM_FIELDS = [
 const CARD_FIELDS = "PrimaryImageAspectRatio,ProductionYear,Overview,ParentId,UserData,ImageTags,RunTimeTicks,RemoteTrailers,CriticRating"
 const CARD_IMAGES = "Primary,Backdrop,Thumb,Logo"
 
-export function publicInfo() {
-  return jf<PublicInfo>("/System/Info/Public")
+/** Public server info. Pass a signal to bound the check (used for reachability probes). */
+export function publicInfo(signal?: AbortSignal) {
+  return jf<PublicInfo>("/System/Info/Public", signal ? { signal } : undefined)
 }
 
 export function publicUsers() {

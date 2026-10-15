@@ -43,7 +43,7 @@ export function RemoteNav() {
     document.documentElement.classList.add("remote")
     const active = document.activeElement
     if (active instanceof HTMLElement && active !== document.body) return
-    const remembered = rememberedHref(location.pathname)
+    const remembered = rememberedHref(location.pathname + location.search)
     let cancelled = false
     let attempts = 0
     let timer = 0
@@ -66,7 +66,15 @@ export function RemoteNav() {
           return
         }
       }
-      const content = items.find((item) => !item.closest(".side") && item.closest(".hero .btn-primary, .detail-hero .btn-primary, .hero, .detail-hero, .card")) || items.find((item) => !item.closest(".side"))
+      // Prefer a non-text control so entering a page never opens the TV keyboard.
+      // The viewer can still move onto a field to type when they choose to.
+      const outside = items.filter((item) => !item.closest(".side"))
+      const controls = outside.filter((item) => !isTextField(item))
+      const content =
+        controls.find((item) => item.closest(".hero .btn-primary, .detail-hero .btn-primary, .hero, .detail-hero, .card")) ||
+        controls[0] ||
+        outside.find((item) => item.closest(".hero .btn-primary, .detail-hero .btn-primary, .hero, .detail-hero, .card")) ||
+        outside[0]
       if (content) placeFocus(content)
       else if (items[0]) placeFocus(items[0])
     }

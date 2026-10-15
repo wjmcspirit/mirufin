@@ -67,6 +67,11 @@ export function seriesPosterSrc(item: Item, maxWidth: number = ART_WIDTH.poster.
   return primarySrc(item, maxWidth)
 }
 
+/** Season artwork: the season's own poster, then the series poster. Episode stills are left out. */
+export function seasonArtSrc(season: Item, series?: Item | null, maxWidth: number = ART_WIDTH.poster.medium) {
+  return ownPrimarySrc(season, maxWidth) || (series ? primarySrc(series, maxWidth) : null)
+}
+
 function backdropUrl(item: Item, maxWidth: number) {
   if (item.BackdropImageTags?.[0]) {
     return imageUrl(item.Id, "Backdrop", { maxWidth, tag: item.BackdropImageTags[0] })

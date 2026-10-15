@@ -50,6 +50,7 @@ public class NativePlayerPlugin extends Plugin {
     private String cueSize = "medium";
     private float cueRaise = 8f;
     private boolean ticking = false;
+    private boolean revealed = false;
 
     private final Runnable tick = new Runnable() {
         @Override
@@ -71,7 +72,13 @@ public class NativePlayerPlugin extends Plugin {
 
         @Override
         public void onIsPlayingChanged(boolean playing) {
+            if (playing) reveal();
             publish(null);
+        }
+
+        @Override
+        public void onRenderedFirstFrame() {
+            reveal();
         }
 
         @Override
@@ -136,11 +143,15 @@ public class NativePlayerPlugin extends Plugin {
                 mediaUrl = url;
                 view.setPlayer(exo);
                 view.setVisibility(View.VISIBLE);
+                revealed = false;
+                // Keep the WebView opaque and dark until the player actually renders a
+                // frame. The native surface (shutter/controller) is never exposed in
+                // between, so no gray placeholder or stray play button can appear.
+                WebView webView = getBridge() == null ? null : getBridge().getWebView();
+                if (webView != null) webView.setBackgroundColor(Color.parseColor("#09090b"));
                 exo.prepare();
                 exo.play();
                 applyCueStyle();
-                WebView webView = getBridge().getWebView();
-                if (webView != null) webView.setBackgroundColor(Color.TRANSPARENT);
                 activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                 if (!ticking) {
                     ticking = true;
@@ -151,6 +162,8 @@ public class NativePlayerPlugin extends Plugin {
                 Log.e(TAG, "Playback could not start.", error);
                 if (view != null) view.setPlayer(null);
                 releasePlayer();
+                WebView webView = getBridge() == null ? null : getBridge().getWebView();
+                if (webView != null) webView.setBackgroundColor(Color.parseColor("#09090b"));
                 call.reject(error.getMessage() == null ? "Playback could not start." : error.getMessage());
             }
         });
@@ -317,6 +330,11 @@ public class NativePlayerPlugin extends Plugin {
         ViewGroup parent = (ViewGroup) webView.getParent();
         PlayerView created = (PlayerView) activity.getLayoutInflater().inflate(R.layout.native_player, parent, false);
         created.setUseController(false);
+        created.setControllerAutoShow(false);
+        created.setUseArtwork(false);
+        created.setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER);
+        created.setShutterBackgroundColor(Color.BLACK);
+        created.setKeepContentOnPlayerReset(false);
         created.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
         created.setBackgroundColor(Color.BLACK);
         created.setVisibility(View.GONE);
@@ -390,6 +408,18 @@ public class NativePlayerPlugin extends Plugin {
         return list;
     }
 
+    private void reveal() {
+        if (revealed || view == null) return;
+        revealed = true;
+        if (Looper.myLooper() == Looper.getMainLooper()) applyReveal();
+        else handler.post(this::applyReveal);
+    }
+
+    private void applyReveal() {
+        WebView webView = getBridge() == null ? null : getBridge().getWebView();
+        if (webView != null) webView.setBackgroundColor(Color.TRANSPARENT);
+    }
+
     private void releasePlayer() {
         if (player == null) return;
         player.removeListener(listener);
@@ -405,6 +435,7 @@ public class NativePlayerPlugin extends Plugin {
     private void teardown(Activity activity) {
         handler.removeCallbacks(tick);
         ticking = false;
+        revealed = false;
         releasePlayer();
         mediaUrl = "";
         if (view != null) {

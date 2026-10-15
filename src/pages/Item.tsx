@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Link, useNavigate, useParams } from "react-router-dom"
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { MediaImage, PosterCard } from "../components/Cards"
 import { CheckIcon, HeartIcon, InfoIcon, PlayIcon, SeasonIcon } from "../components/Icons"
 import { TrailerButton } from "../components/TrailerButton"
@@ -14,7 +14,7 @@ import { canPlayDirectly, episodeCode, formatRuntime, metaLine, personFacts, pro
 import { hasMediaInfo } from "../lib/mediaInfo"
 import { placeFocus } from "../lib/remote"
 import { knownFor, type KnownWork } from "../lib/knownFor"
-import { artWidth, backdropSrc, episodeStillSrc, imageUrl, loadImage, primarySrc, thumbSrc, warmImage, wideBackdrop } from "../lib/images"
+import { artWidth, backdropSrc, episodeStillSrc, imageUrl, loadImage, primarySrc, seasonArtSrc, thumbSrc, warmImage, wideBackdrop } from "../lib/images"
 import type { Item } from "../lib/types"
 import { useSession } from "../session"
 
@@ -210,13 +210,28 @@ function SeriesPlay({ series }: { series: Item }) {
   const { userId } = useSession()
   const navigate = useNavigate()
   const [pending, setPending] = useState(false)
+  const [nextEpisode, setNextEpisode] = useState<Item | null>(null)
+
+  useEffect(() => {
+    let cancel = false
+    api
+      .nextUp(userId, series.Id, 1)
+      .then((next) => {
+        if (!cancel) setNextEpisode(next.Items?.[0] || null)
+      })
+      .catch(() => {
+        if (!cancel) setNextEpisode(null)
+      })
+    return () => {
+      cancel = true
+    }
+  }, [series.Id, userId])
 
   async function play(rest: boolean) {
     setPending(true)
     try {
-      const next = await api.nextUp(userId, series.Id, 1)
-      const episode = next.Items?.[0]
       const suffix = rest ? "&rest=season" : ""
+      const episode = nextEpisode || (await api.nextUp(userId, series.Id, 1)).Items?.[0]
       if (episode) {
         navigate(`/play/${episode.Id}?resume=1${suffix}`)
         return
@@ -233,7 +248,7 @@ function SeriesPlay({ series }: { series: Item }) {
     <>
       <button className="btn btn-primary" type="button" onClick={() => void play(false)} disabled={pending}>
         <PlayIcon />
-        {pending ? "Finding episode…" : "Play"}
+        {pending ? "Finding episode…" : nextEpisode ? "Resume" : "Play"}
       </button>
       <button className="btn icon-btn" type="button" onClick={() => void play(true)} disabled={pending}>
         <SeasonIcon size={16} />
@@ -262,9 +277,11 @@ function ItemBody({ item }: { item: Item }) {
 
 function SeriesBody({ series }: { series: Item }) {
   const { userId } = useSession()
-  const [seasons, setSeasons] = useState<Item[]>([])
-  const [seasonId, setSeasonId] = useState<string>("")
+  const [params] = useSearchParams()
+  const seasonId = params.get("season") || ""
+  const [seasons, setSeasons] = useState<Item[] | null>(null)
   const [nextEpisode, setNextEpisode] = useState<Item | null>(null)
+  const lastSeason = useRef("")
 
   useEffect(() => {
     let cancel = false
@@ -273,13 +290,8 @@ function SeriesBody({ series }: { series: Item }) {
       api.nextUp(userId, series.Id, 1).catch(() => ({ Items: [] as Item[] })),
     ]).then(([result, next]) => {
       if (cancel) return
-      const list = result.Items || []
-      const episode = next.Items?.[0] || null
-      setSeasons(list)
-      setNextEpisode(episode)
-      const season = episode?.SeasonId || episode?.ParentId
-      const match = list.find((item) => item.Id === season) || list.find((item) => episode?.ParentIndexNumber != null && item.IndexNumber === episode.ParentIndexNumber)
-      setSeasonId(match?.Id || list[0]?.Id || "")
+      setSeasons(result.Items || [])
+      setNextEpisode(next.Items?.[0] || null)
     }).catch(() => {
       if (!cancel) setSeasons([])
     })
@@ -288,25 +300,62 @@ function SeriesBody({ series }: { series: Item }) {
     }
   }, [series.Id, userId])
 
+  const selected = seasonId && seasons?.some((season) => season.Id === seasonId) ? seasonId : ""
+
+  // Leaving a season (Back clears the query) keeps the viewer on that season card.
+  useEffect(() => {
+    if (!selected && lastSeason.current) {
+      const node = document.querySelector<HTMLElement>(`[data-season="${lastSeason.current}"]`)
+      if (node) placeFocus(node)
+    }
+    lastSeason.current = selected
+  }, [selected])
+
+  const current = seasons?.find((season) => season.Id === selected) || null
+  const currentTitle = current ? current.Name || `Season ${current.IndexNumber ?? ""}` : ""
+
   return (
     <div className="detail-body">
-      {seasons.length > 0 && (
+      {seasons && seasons.length > 0 && (
         <section className="season-block">
-          <div className="scroller season-scroller" role="tablist" aria-label="Seasons">
+          <div className="row-head">
+            <h2>Seasons</h2>
+          </div>
+          <div className="scroller season-scroller">
             {seasons.map((season) => {
               const title = season.Name || `Season ${season.IndexNumber ?? ""}`
-              const selected = season.Id === seasonId
+              const count = season.ChildCount ?? season.RecursiveItemCount
+              const on = season.Id === selected
               return (
-                <button key={season.Id} type="button" role="tab" aria-selected={selected} className={selected ? "season-tab on" : "season-tab"} onClick={() => setSeasonId(season.Id)}>
-                  {title}
-                </button>
+                <Link
+                  key={season.Id}
+                  className={on ? "card season-card on" : "card season-card"}
+                  data-season={season.Id}
+                  to={{ search: `?season=${encodeURIComponent(season.Id)}` }}
+                  aria-current={on ? "true" : undefined}
+                >
+                  <span className="card-art">
+                    <MediaImage src={seasonArtSrc(season, series)} fallback={primarySrc(series, artWidth("poster"))} alt="" label={title} />
+                  </span>
+                  <span className="card-copy">
+                    <span className="card-title">{title}</span>
+                    {count != null && <span className="card-sub">{count === 1 ? "1 episode" : `${count} episodes`}</span>}
+                  </span>
+                </Link>
               )
             })}
           </div>
         </section>
       )}
-      {seasonId && <EpisodeList seriesId={series.Id} seasonId={seasonId} nextId={nextEpisode?.Id || ""} series={series} />}
-      {seasonId && <Extras itemId={seasonId} />}
+      {selected && (
+        <section className="episode-block">
+          <div className="row-head">
+            <h2>{currentTitle || "Episodes"}</h2>
+          </div>
+          <EpisodeList seriesId={series.Id} seasonId={selected} nextId={nextEpisode?.Id || ""} series={series} />
+        </section>
+      )}
+      {selected && <Extras itemId={selected} />}
       <PeopleRows people={series.People} />
       <Similar item={series} />
     </div>
@@ -316,7 +365,6 @@ function SeriesBody({ series }: { series: Item }) {
 function EpisodeList({ seriesId, seasonId, nextId = "", series = null }: { seriesId: string; seasonId: string; nextId?: string; series?: Item | null }) {
   const { userId } = useSession()
   const [episodes, setEpisodes] = useState<Item[] | null>(null)
-  const landed = useRef("")
   useEpisodeStage(true)
 
   useEffect(() => {
@@ -334,14 +382,6 @@ function EpisodeList({ seriesId, seasonId, nextId = "", series = null }: { serie
       cancel = true
     }
   }, [seasonId, seriesId, userId])
-
-  useEffect(() => {
-    if (!nextId || !episodes?.some((episode) => episode.Id === nextId) || landed.current === nextId) return
-    const node = document.querySelector<HTMLElement>(`[data-episode="${nextId}"]`)
-    if (!node) return
-    landed.current = nextId
-    placeFocus(node)
-  }, [episodes, nextId])
 
   if (!episodes) return <Loading label="Loading episodes" />
   if (episodes.length === 0) return <p className="hint">No episodes in this season.</p>
@@ -412,6 +452,11 @@ function EpisodeCard({ episode, series, next }: { episode: Item; series: Item | 
     >
       <span className="episode-art">
         <MediaImage src={image} fallback={seriesArt && seriesArt !== image ? seriesArt : null} alt="" loading="lazy" />
+        {episode.UserData?.Played && (
+          <span className="played-mark" aria-hidden="true">
+            <CheckIcon />
+          </span>
+        )}
         {progress > 1 && progress < 98 && (
           <span className="progress" aria-hidden="true">
             <span style={{ width: `${progress}%` }} />
@@ -424,8 +469,10 @@ function EpisodeCard({ episode, series, next }: { episode: Item; series: Item | 
           {code && episode.Name ? " · " : ""}
           {episode.Name}
           {next ? <span className="episode-flag">Up next</span> : null}
+          {episode.UserData?.Played ? <span className="episode-flag watched">Watched</span> : null}
         </span>
         {runtime ? <span className="episode-meta">{runtime}</span> : null}
+        {episode.Overview ? <span className="episode-overview">{episode.Overview}</span> : null}
       </span>
     </Link>
   )

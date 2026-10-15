@@ -57,6 +57,7 @@ export function PlayerPage() {
   const [loading, setLoading] = useState(true)
   const [paused, setPaused] = useState(true)
   const [buffering, setBuffering] = useState(true)
+  const [ready, setReady] = useState(false)
   const [position, setPosition] = useState(0)
   const [duration, setDuration] = useState(0)
   const [volume, setVolume] = useState(1)
@@ -209,6 +210,7 @@ export function PlayerPage() {
 
     setLoading(true)
     setBuffering(true)
+    setReady(false)
     setError("")
     setEnded(false)
 
@@ -237,6 +239,7 @@ export function PlayerPage() {
     const onPlay = () => {
       setPaused(false)
       setBuffering(false)
+      setReady(true)
       if (!playback.started) {
         playback.started = true
         report("start", false)
@@ -332,6 +335,7 @@ export function PlayerPage() {
           if (!event.paused) {
             setPaused(false)
             setLoading(false)
+            setReady(true)
             if (!playback.started) {
               playback.started = true
               report("start", false)
@@ -382,6 +386,7 @@ export function PlayerPage() {
         // center play button never flashes over a black screen first.
         await video.play()
         setLoading(false)
+        setReady(true)
       } catch {
         setPaused(true)
         setBuffering(false)
@@ -923,7 +928,7 @@ export function PlayerPage() {
           <Loading label={loading ? "Starting playback" : "Buffering"} />
         </div>
       )}
-      {paused && !loading && !ended && !error && (
+      {ready && paused && !loading && !ended && !error && (
         <button className="center-play" type="button" onClick={toggle} aria-label="Play">
           <PlayIcon size={28} />
         </button>
