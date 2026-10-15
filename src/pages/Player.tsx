@@ -1,6 +1,6 @@
 import { Capacitor } from "@capacitor/core"
 import Hls from "hls.js"
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react"
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react"
 import { useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { Loading } from "../components/Status"
 import { AudioIcon, CaptionsIcon, ChaptersIcon, ForwardIcon, FullscreenIcon, PauseIcon, PlayIcon, RewindIcon, VolumeIcon } from "../components/Icons"
@@ -349,7 +349,8 @@ export function PlayerPage() {
           headers: { Authorization: authorization, "X-Emby-Authorization": authorization },
         })
         if (trailerPlayback) ignoreNativeFailure(nativePlayer.selectText({ ordinal: -1 }))
-        setLoading(false)
+        // The state listener below clears loading once ExoPlayer is actually playing;
+        // clearing it here would flash the play button during the initial buffer.
         return
       }
 
@@ -376,12 +377,15 @@ export function PlayerPage() {
         }
         video.addEventListener("loadedmetadata", seek, { once: true })
       }
-      setLoading(false)
       try {
+        // Hold the "Starting playback" spinner until frames actually roll so the
+        // center play button never flashes over a black screen first.
         await video.play()
+        setLoading(false)
       } catch {
         setPaused(true)
         setBuffering(false)
+        setLoading(false)
       }
     }
 
@@ -420,6 +424,25 @@ export function PlayerPage() {
   useEffect(() => {
     rootRef.current?.focus()
   }, [id])
+
+  // Back must work no matter where focus sits (it can drift to <body> when a
+  // focused control unmounts), so handle it at the window level. Menus still
+  // close first; a second Back then leaves the player.
+  useEffect(() => {
+    function onBack(event: KeyboardEvent) {
+      if (!isBackKey(event)) return
+      event.preventDefault()
+      event.stopPropagation()
+      if (menu) {
+        setMenu(null)
+        focusControl(menuButton.current)
+        return
+      }
+      leave()
+    }
+    window.addEventListener("keydown", onBack, true)
+    return () => window.removeEventListener("keydown", onBack, true)
+  }, [item, menu])
 
   useEffect(() => {
     if (nativeEngine()) {
@@ -523,7 +546,9 @@ export function PlayerPage() {
         if (current <= 1) {
           window.clearInterval(timer)
           sessionStorage.setItem("mirufin.autoplayStreak", String(streak + 1))
-          navigate(`/play/${upcoming.Id}?resume=0${restSeason ? "&rest=season" : ""}`)
+          // Replace so binge episodes never stack history; Back then returns
+          // to the details page instead of replaying the previous episode.
+          navigate(`/play/${upcoming.Id}?resume=0${restSeason ? "&rest=season" : ""}`, { replace: true })
           return 0
         }
         return current - 1
@@ -562,8 +587,16 @@ export function PlayerPage() {
   }
 
   function leave() {
-    if (item) navigate(`/item/${item.Id}`)
-    else navigate(-1)
+    // Pop back to the page the user came from so returning cannot re-enter
+    // playback. When the player was deep-linked (no in-app history), swap it
+    // for the details page instead of stacking another entry.
+    const idx = window.history.state?.idx
+    if (typeof idx === "number" && idx > 0) {
+      navigate(-1)
+      return
+    }
+    if (item) navigate(`/item/${item.Id}`, { replace: true })
+    else navigate("/", { replace: true })
   }
 
   function seekTo(seconds: number) {
@@ -732,18 +765,9 @@ export function PlayerPage() {
     wake()
   }
 
-  function onKey(event: KeyboardEvent) {
+  function onKey(event: ReactKeyboardEvent) {
     const key = remoteKey(event)
     const target = event.target as HTMLElement
-    if (isBackKey(event)) {
-      event.preventDefault()
-      event.stopPropagation()
-      if (menu) {
-        setMenu(null)
-        focusControl(menuButton.current)
-      } else leave()
-      return
-    }
     if (menu) {
       const items = [...(rootRef.current?.querySelectorAll<HTMLElement>(".pop-menu button") || [])]
       if (key === "ArrowDown" || key === "ArrowUp") {
@@ -858,7 +882,7 @@ export function PlayerPage() {
   function playNextNow() {
     if (!next) return
     sessionStorage.setItem("mirufin.autoplayStreak", "0")
-    navigate(`/play/${next.Id}?resume=0${restSeason ? "&rest=season" : ""}`)
+    navigate(`/play/${next.Id}?resume=0${restSeason ? "&rest=season" : ""}`, { replace: true })
   }
 
   const shown = scrub ?? seekPreview?.seconds ?? position
@@ -893,11 +917,6 @@ export function PlayerPage() {
               <track key={`${id}-${subtitle.index}`} kind="subtitles" label={subtitle.label} srcLang={subtitle.label} src={subtitle.src} />
             ))}
       </video>
-      {!showChrome && duration > 0 && (
-        <div className="edge-progress" aria-hidden="true">
-          <span style={{ width: `${Math.min(100, (position / duration) * 100)}%` }} />
-        </div>
-      )}
       {audioOnly && artwork && <img className="player-art" src={artwork} alt="" />}
       {(loading || (buffering && !paused && !error)) && (
         <div className="player-center">

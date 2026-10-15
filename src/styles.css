@@ -1991,16 +1991,6 @@ html.native-playing .player video { opacity: 0; }
   font-size: 16px;
 }
 .trickplay-frame { background-repeat: no-repeat; background-color: #111; }
-.edge-progress {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.18);
-  z-index: 6;
-}
-.edge-progress span { display: block; height: 100%; background: #49d0ff; }
 .skip-prompt { position: absolute; right: 48px; bottom: 168px; z-index: 7; }
 input[type="range"] {
   -webkit-appearance: none;
