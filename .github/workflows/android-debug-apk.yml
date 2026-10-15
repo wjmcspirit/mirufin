@@ -1,0 +1,160 @@
+name: Build Android debug APK
+
+# Separate from the GitHub Pages deployment workflow (deploy-download-page.yml).
+# This workflow builds a DEBUG-signed APK and publishes it as:
+#   1. a workflow artifact named "mirufin-debug-apk" (retained 30 days), and
+#   2. a clearly-labelled "dev-latest" PRE-RELEASE asset.
+# It never touches the stable release that the download page uses
+# (releases/latest/download/mirufin.apk stays release-signed and intact).
+#
+# Required repository setting:
+#   Settings > Actions > General > Workflow permissions
+#   must allow "Read and write permissions" so the GITHUB_TOKEN can create the
+#   dev-latest pre-release. If it is set to "Read repository contents only",
+#   the "Publish development build" step fails with HTTP 403.
+
+on:
+  push:
+    branches: ["master"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: "android-debug-apk"
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "22"
+  JAVA_VERSION: "21"
+  APK_NAME: mirufin-debug.apk
+  ARTIFACT_NAME: mirufin-debug-apk
+  DEV_TAG: dev-latest
+
+jobs:
+  apk:
+    name: Build and publish debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Sync Capacitor Android project
+        run: npx cap sync android
+
+      - name: Ensure Android SDK packages
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          echo "Android SDK: ${SDK:-<unset>}"
+          SDKMGR=""
+          for candidate in \
+            "$SDK/cmdline-tools/latest/bin/sdkmanager" \
+            "$SDK/cmdline-tools/bin/sdkmanager" \
+            "$(command -v sdkmanager 2>/dev/null || true)"; do
+            if [ -n "$candidate" ] && [ -x "$candidate" ]; then SDKMGR="$candidate"; break; fi
+          done
+          if [ -z "$SDKMGR" ]; then
+            echo "sdkmanager not found; using the runner's preinstalled SDK."
+            exit 0
+          fi
+          yes | "$SDKMGR" --licenses >/dev/null 2>&1 || true
+          # Best effort: Gradle fails clearly below if the platform is truly missing.
+          "$SDKMGR" "platforms;android-36" "build-tools;36.0.0" || \
+            echo "::warning::sdkmanager could not install the SDK packages; continuing with the preinstalled SDK."
+
+      - name: Build debug APK
+        working-directory: android
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew :app:assembleDebug --no-daemon --console=plain
+
+      - name: Stage APK
+        run: |
+          set -euo pipefail
+          BUILT="android/app/build/outputs/apk/debug/app-debug.apk"
+          if [ ! -f "$BUILT" ]; then
+            echo "::error::Gradle finished without producing $BUILT"
+            exit 1
+          fi
+          cp "$BUILT" "$APK_NAME"
+
+      - name: Verify APK
+        run: |
+          set -euo pipefail
+          if [ ! -f "$APK_NAME" ]; then
+            echo "::error::APK was not staged at $APK_NAME"
+            exit 1
+          fi
+          SIZE="$(stat -c%s "$APK_NAME")"
+          echo "APK: $APK_NAME ($SIZE bytes)"
+          if [ "$SIZE" -lt 1000000 ]; then
+            echo "::error::$APK_NAME is suspiciously small ($SIZE bytes)"
+            exit 1
+          fi
+          if ! unzip -l "$APK_NAME" | grep -q "AndroidManifest.xml"; then
+            echo "::error::$APK_NAME does not contain AndroidManifest.xml"
+            exit 1
+          fi
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.APK_NAME }}
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Publish development build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TITLE="Mirufin development build"
+          NOTES="Development build of the master branch at $(git rev-parse --short HEAD).
+
+          This is a **debug-signed** APK: it cannot be installed over a release-signed Mirufin build, so uninstall the existing app first (app data, including saved server and sign-in, is removed).
+
+          The stable download is unchanged: https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/mirufin.apk"
+          if gh release view "$DEV_TAG" >/dev/null 2>&1; then
+            gh release edit "$DEV_TAG" --title "$TITLE" --notes "$NOTES" --prerelease
+          else
+            gh release create "$DEV_TAG" --prerelease --title "$TITLE" --notes "$NOTES" --target "${GITHUB_SHA}"
+          fi
+          gh release upload "$DEV_TAG" "$APK_NAME#mirufin-debug.apk" --clobber
+
+      - name: Summarize
+        run: |
+          {
+            echo "### Mirufin Android debug APK"
+            echo ""
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Commit | \`${GITHUB_SHA}\` |"
+            echo "| Artifact | \`${ARTIFACT_NAME}\` (30-day retention, on this run's summary page) |"
+            echo "| Latest development build | https://github.com/${GITHUB_REPOSITORY}/releases/download/${DEV_TAG}/mirufin-debug.apk |"
+            echo "| Stable download (unchanged) | https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/mirufin.apk |"
+            echo ""
+            echo "The development APK is debug-signed, so it installs only on a clean device or after uninstalling the release build."
+          } >> "$GITHUB_STEP_SUMMARY"
