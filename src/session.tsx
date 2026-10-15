@@ -94,6 +94,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const normalized = normalizeServer(url)
         const previous = getServer()
         saveServer(normalized)
+        api.invalidateReads()
         try {
           const info = await api.publicInfo()
           clearAuth()
@@ -117,6 +118,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       async login(username: string, password: string) {
         const result = await api.authenticate(username, password)
         saveAuth(result.AccessToken, result.User.Id, result.User.Name)
+        api.invalidateReads()
         setSession((current) => ({
           ...current,
           accessToken: result.AccessToken,
@@ -126,6 +128,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       },
       accept(result: AuthResult) {
         saveAuth(result.AccessToken, result.User.Id, result.User.Name)
+        api.invalidateReads()
         setSession((current) => ({
           ...current,
           accessToken: result.AccessToken,
@@ -135,12 +138,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       },
       logout() {
         clearAuth()
+        api.invalidateReads()
         setSession((current) => ({ ...current, accessToken: "", userId: "", userName: "", libraries: [] }))
         navigate("/login")
       },
       disconnect() {
         clearAuth()
         clearServer()
+        api.invalidateReads()
         setSession({
           serverUrl: "",
           serverName: "",

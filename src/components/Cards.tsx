@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from "react"
+import { memo, useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { criticLabel, episodeCode, progressPct, remainingLabel } from "../lib/format"
 import { artWidth, ownPrimarySrc, primarySrc, seriesPosterSrc, thumbSrc } from "../lib/images"
 import type { HomeCardSize, Item } from "../lib/types"
 import { CheckIcon } from "./Icons"
 import { usePrefs } from "../session"
-import { useStage } from "./Stage"
+import { useStageActions } from "./Stage"
 
 export function MediaImage({
   src,
@@ -47,7 +47,7 @@ export function MediaImage({
   )
 }
 
-export function PosterCard({
+export const PosterCard = memo(function PosterCard({
   item,
   layout,
   href,
@@ -71,7 +71,7 @@ export function PosterCard({
   detail?: string
 }) {
   const { prefs } = usePrefs()
-  const { hover } = useStage()
+  const { hover } = useStageActions()
   const release = useRef(0)
   const cancelHover = useRef<(() => void) | null>(null)
   useEffect(
@@ -173,4 +173,4 @@ export function PosterCard({
       )}
     </Link>
   )
-}
+})

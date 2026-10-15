@@ -37,18 +37,23 @@ const EPISODE_LOOK: StageLook = {
   stills: true,
 }
 
-interface StageValue {
-  pinned: Item | null
-  hovered: Item | null
+interface StageActions {
   pin: (item: Item | null, posterFallback?: boolean, still?: boolean) => void
   hover: (item: Item | null) => () => void
   holdPin: (held: boolean) => void
   setLook: (look: StageLook | null) => void
 }
 
-const FOCUS_SETTLE_MS = 260
+interface StageState {
+  pinned: Item | null
+  hovered: Item | null
+}
 
-const StageContext = createContext<StageValue | null>(null)
+const FOCUS_SETTLE_MS = 260
+const WARM_PREFETCH_MS = 120
+
+const StageActionsContext = createContext<StageActions | null>(null)
+const StageStateContext = createContext<StageState | null>(null)
 
 export function StageProvider({ children }: { children: ReactNode }) {
   const [pinned, setPinned] = useState<Item | null>(null)
@@ -59,6 +64,7 @@ export function StageProvider({ children }: { children: ReactNode }) {
   const [look, setLookState] = useState(DEFAULT_LOOK)
   const hoveredRef = useRef<Item | null>(null)
   const hoverTimer = useRef(0)
+  const warmTimer = useRef(0)
   const hoverGeneration = useRef(0)
   const lookRef = useRef(look)
   const artMotion = useRef<"cinematic" | "quick">("cinematic")
@@ -75,6 +81,7 @@ export function StageProvider({ children }: { children: ReactNode }) {
   const hover = useCallback((item: Item | null) => {
     const generation = ++hoverGeneration.current
     window.clearTimeout(hoverTimer.current)
+    window.clearTimeout(warmTimer.current)
     if (!item) {
       hoveredRef.current = null
       setHovered(null)
@@ -89,7 +96,12 @@ export function StageProvider({ children }: { children: ReactNode }) {
         hoverGeneration.current += 1
       }
     }
-    warmImage(focusArtwork(item, lookRef.current, false))
+    // Warm the backdrop shortly after focus rests, not on every press, so
+    // quick remote scrolling stops downloading a full-size image per card.
+    warmTimer.current = window.setTimeout(() => {
+      if (generation !== hoverGeneration.current) return
+      warmImage(focusArtwork(item, lookRef.current, false))
+    }, WARM_PREFETCH_MS)
     hoverTimer.current = window.setTimeout(() => {
       if (generation !== hoverGeneration.current) return
       hoveredRef.current = item
@@ -98,6 +110,7 @@ export function StageProvider({ children }: { children: ReactNode }) {
     return () => {
       if (generation !== hoverGeneration.current) return
       window.clearTimeout(hoverTimer.current)
+      window.clearTimeout(warmTimer.current)
       hoverGeneration.current += 1
     }
   }, [])
@@ -105,19 +118,22 @@ export function StageProvider({ children }: { children: ReactNode }) {
     return () => {
       hoverGeneration.current += 1
       window.clearTimeout(hoverTimer.current)
+      window.clearTimeout(warmTimer.current)
     }
   }, [])
-  const value = useMemo(
+  // Stable actions: all four callbacks have empty dependency arrays, so this
+  // memo never changes and action-only consumers (cards) never re-render when
+  // the hovered or pinned item changes.
+  const actions = useMemo<StageActions>(
     () => ({
-      pinned,
-      hovered,
       pin,
       hover,
       holdPin,
       setLook,
     }),
-    [holdPin, hover, hovered, pin, pinned, setLook],
+    [holdPin, hover, pin, setLook],
   )
+  const state = useMemo<StageState>(() => ({ pinned, hovered }), [hovered, pinned])
   const focus = still ? pinned : held ? pinned || hovered : hovered || pinned
   const pinnedFocus = Boolean(posterFallback && pinned && focus?.Id === pinned.Id)
   const art = focus ? focusArtwork(focus, look, pinnedFocus) : null
@@ -131,10 +147,12 @@ export function StageProvider({ children }: { children: ReactNode }) {
   const reelId = reelSource?.Type === "Movie" || reelSource?.Type === "Series" ? reelSource.Id : reelSource?.Type === "Episode" ? reelSource.SeriesId || null : null
 
   return (
-    <StageContext.Provider value={value}>
-      <StageArt src={art} reelId={reelId} retain={look.retain} pace={look.pace} quick={artMotion.current === "quick"} atmosphere={look.atmosphere} />
-      {children}
-    </StageContext.Provider>
+    <StageActionsContext.Provider value={actions}>
+      <StageStateContext.Provider value={state}>
+        <StageArt src={art} reelId={reelId} retain={look.retain} pace={look.pace} quick={artMotion.current === "quick"} atmosphere={look.atmosphere} />
+        {children}
+      </StageStateContext.Provider>
+    </StageActionsContext.Provider>
   )
 }
 
@@ -340,14 +358,23 @@ function StageReel({ itemId }: { itemId: string | null }) {
   )
 }
 
-export function useStage() {
-  const value = useContext(StageContext)
+/** Actions are stable; subscribing here never re-renders on hover/pin changes. */
+export function useStageActions() {
+  const value = useContext(StageActionsContext)
   if (!value) throw new Error("Stage is unavailable.")
   return value
 }
 
+/** Full access including hovered/pinned; use only where the view depends on them. */
+export function useStage() {
+  const actions = useContext(StageActionsContext)
+  const state = useContext(StageStateContext)
+  if (!actions || !state) throw new Error("Stage is unavailable.")
+  return { ...state, ...actions }
+}
+
 export function usePinnedArt(item: Item | null, posterFallback = false, still = false, active = true) {
-  const { pin } = useStage()
+  const { pin } = useStageActions()
   const id = item?.Id || ""
   useEffect(() => {
     if (!active) return
@@ -366,7 +393,7 @@ function focusArtwork(item: Item, look: StageLook, pinnedFocus: boolean) {
 }
 
 export function useEpisodeStage(enabled = true) {
-  const { setLook } = useStage()
+  const { setLook } = useStageActions()
   useEffect(() => {
     if (!enabled) return
     setLook(EPISODE_LOOK)
@@ -375,7 +402,7 @@ export function useEpisodeStage(enabled = true) {
 }
 
 export function useFilmographyStage(enabled = true) {
-  const { hover, setLook } = useStage()
+  const { hover, setLook } = useStageActions()
   useEffect(() => {
     if (!enabled) return
     setLook(FILMOGRAPHY_LOOK)

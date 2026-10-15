@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { PosterCard } from "../components/Cards"
 import { Loading, Problem } from "../components/Status"
-import { usePinnedArt, useStage } from "../components/Stage"
+import { usePinnedArt, useStageActions } from "../components/Stage"
 import * as api from "../lib/api"
 import { backdropSrc } from "../lib/images"
 import type { Item } from "../lib/types"
@@ -15,7 +15,7 @@ function pickArt(pool: Item[], currentId: string) {
 
 export function FavoritesPage() {
   const { userId } = useSession()
-  const { hover } = useStage()
+  const { hover } = useStageActions()
   const [items, setItems] = useState<Item[]>([])
   const [libraryArt, setLibraryArt] = useState<Item[]>([])
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")

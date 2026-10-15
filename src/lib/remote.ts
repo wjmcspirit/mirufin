@@ -42,9 +42,24 @@ export function focusables() {
   return [...document.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(visible)
 }
 
-function center(node: HTMLElement) {
-  const rect = node.getBoundingClientRect()
-  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+interface FocusItem {
+  node: HTMLElement
+  rect: DOMRect
+  cx: number
+  cy: number
+}
+
+/** One visibility/geometry pass per keypress; all helpers reuse these rects. */
+function focusSnapshot(): FocusItem[] {
+  const items: FocusItem[] = []
+  for (const node of document.querySelectorAll<HTMLElement>(FOCUSABLE)) {
+    if (node.closest("[inert]")) continue
+    const rect = node.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) continue
+    if (getComputedStyle(node).visibility === "hidden") continue
+    items.push({ node, rect, cx: rect.left + rect.width / 2, cy: rect.top + rect.height / 2 })
+  }
+  return items
 }
 
 function place(node: HTMLElement) {
@@ -71,6 +86,7 @@ export function placeFocus(node: HTMLElement) {
 function focusNode(node: HTMLElement) {
   markFocus(node)
   if (place(node) === "main" && !node.closest(".tool-pop, .trailer-pop")) returnMain = node
+  rememberFocus(node)
   node.focus({ preventScroll: true })
   if (node.closest(".side")) {
     const rail = node.closest(".side-nav")
@@ -155,16 +171,14 @@ function scrollInside(scroller: HTMLElement, node: HTMLElement) {
   scroller.scrollTo({ top: Math.max(0, top), behavior: "auto" })
 }
 
-function nearest(current: HTMLElement, items: HTMLElement[], key: "ArrowUp" | "ArrowDown") {
-  const origin = center(current)
-  const reach = Math.max(220, current.getBoundingClientRect().width * 0.8)
-  let best: HTMLElement | null = null
+function nearest(current: FocusItem, items: FocusItem[], key: "ArrowUp" | "ArrowDown") {
+  const reach = Math.max(220, current.rect.width * 0.8)
+  let best: FocusItem | null = null
   let bestScore = Number.POSITIVE_INFINITY
   for (const item of items) {
     if (item === current) continue
-    const point = center(item)
-    const dx = point.x - origin.x
-    const dy = point.y - origin.y
+    const dx = item.cx - current.cx
+    const dy = item.cy - current.cy
     if (key === "ArrowDown" && dy < 8) continue
     if (key === "ArrowUp" && dy > -8) continue
     if (Math.abs(dx) > Math.max(reach, Math.abs(dy) * 2.2)) continue
@@ -181,22 +195,20 @@ function overlapsY(a: DOMRect, b: DOMRect) {
   return Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 8
 }
 
-function rowNeighbor(current: HTMLElement, items: HTMLElement[], key: "ArrowLeft" | "ArrowRight") {
-  const rect = current.getBoundingClientRect()
-  const mid = rect.left + rect.width / 2
-  const midY = rect.top + rect.height / 2
-  let best: HTMLElement | null = null
+function rowNeighbor(current: FocusItem, items: FocusItem[], key: "ArrowLeft" | "ArrowRight") {
+  const rect = current.rect
+  let best: FocusItem | null = null
   let bestDx = Number.POSITIVE_INFINITY
   let bestDy = Number.POSITIVE_INFINITY
   for (const item of items) {
     if (item === current) continue
-    const other = item.getBoundingClientRect()
+    const other = item.rect
     if (!overlapsY(rect, other)) continue
-    const dx = other.left + other.width / 2 - mid
+    const dx = item.cx - current.cx
     if (key === "ArrowLeft" && dx > -8) continue
     if (key === "ArrowRight" && dx < 8) continue
     const distance = Math.abs(dx)
-    const dy = Math.abs(other.top + other.height / 2 - midY)
+    const dy = Math.abs(item.cy - current.cy)
     if (distance < bestDx - 1 || (Math.abs(distance - bestDx) <= 1 && dy < bestDy)) {
       best = item
       bestDx = distance
@@ -206,9 +218,9 @@ function rowNeighbor(current: HTMLElement, items: HTMLElement[], key: "ArrowLeft
   return best
 }
 
-function stepList(current: HTMLElement, items: HTMLElement[], key: "ArrowUp" | "ArrowDown") {
+function stepList(current: FocusItem, items: FocusItem[], key: "ArrowUp" | "ArrowDown") {
   const index = items.indexOf(current)
-  if (index < 0) return key === "ArrowDown" ? items[0] : items[items.length - 1]
+  if (index < 0) return key === "ArrowDown" ? items[0] || null : items[items.length - 1] || null
   return items[index + (key === "ArrowDown" ? 1 : -1)] || null
 }
 
@@ -235,19 +247,17 @@ function kind(band: HTMLElement): "strip" | "grid" | "list" {
   return "list"
 }
 
-function ordered(items: HTMLElement[]) {
+function ordered(items: FocusItem[]) {
   return [...items].sort((a, b) => {
-    const ar = a.getBoundingClientRect()
-    const br = b.getBoundingClientRect()
-    if (Math.abs(ar.top - br.top) > Math.max(20, ar.height * 0.45)) return ar.top - br.top
-    return ar.left - br.left
+    if (Math.abs(a.rect.top - b.rect.top) > Math.max(20, a.rect.height * 0.45)) return a.rect.top - b.rect.top
+    return a.rect.left - b.rect.left
   })
 }
 
-function bandsOf(items: HTMLElement[]) {
+function bandsOf(items: FocusItem[]) {
   const bands: HTMLElement[] = []
   for (const item of items) {
-    const band = containerOf(item)
+    const band = containerOf(item.node)
     if (!band || bands.includes(band)) continue
     bands.push(band)
   }
@@ -256,24 +266,24 @@ function bandsOf(items: HTMLElement[]) {
 
 let lane = 0
 
-function rememberLane(node: HTMLElement, items: HTMLElement[]) {
+function rememberLane(node: FocusItem, items: FocusItem[]) {
   const index = ordered(items).indexOf(node)
   if (index >= 0) lane = index
 }
 
-function landing(band: HTMLElement, items: HTMLElement[], from: HTMLElement, dir: number) {
+function landing(band: HTMLElement, items: FocusItem[], from: FocusItem, dir: number) {
   const list = ordered(items)
   if (list.length === 0) return null
   if (kind(band) === "list") return dir < 0 ? list[list.length - 1] : list[0]
   if (kind(band) === "strip") return list[Math.min(lane, list.length - 1)]
-  const fromX = center(from).x
-  const top = list[0].getBoundingClientRect().top
-  const firstRow = list.filter((item) => Math.abs(item.getBoundingClientRect().top - top) < 28)
-  const pool = dir < 0 ? list.filter((item) => Math.abs(item.getBoundingClientRect().top - list[list.length - 1].getBoundingClientRect().top) < 28) : firstRow
+  const fromX = from.cx
+  const top = list[0].rect.top
+  const firstRow = list.filter((item) => Math.abs(item.rect.top - top) < 28)
+  const pool = dir < 0 ? list.filter((item) => Math.abs(item.rect.top - list[list.length - 1].rect.top) < 28) : firstRow
   let best = pool[0] || list[0]
   let bestDx = Number.POSITIVE_INFINITY
   for (const item of pool.length ? pool : list) {
-    const dx = Math.abs(center(item).x - fromX)
+    const dx = Math.abs(item.cx - fromX)
     if (dx < bestDx) {
       best = item
       bestDx = dx
@@ -282,13 +292,11 @@ function landing(band: HTMLElement, items: HTMLElement[], from: HTMLElement, dir
   return best
 }
 
-function enterRow(from: HTMLElement, items: HTMLElement[]) {
-  const y = center(from).y
-  let best: HTMLElement | null = null
+function enterRow(from: FocusItem, items: FocusItem[]) {
+  let best: FocusItem | null = null
   let bestScore = Number.POSITIVE_INFINITY
   for (const item of items) {
-    const rect = item.getBoundingClientRect()
-    const score = Math.abs(center(item).y - y) * 8 + rect.left
+    const score = Math.abs(item.cy - from.cy) * 8 + item.rect.left
     if (score < bestScore) {
       best = item
       bestScore = score
@@ -304,6 +312,28 @@ function alive(node: HTMLElement | null): node is HTMLElement {
 let returnSide: HTMLElement | null = null
 let returnMain: HTMLElement | null = null
 
+// Last-focused link per pathname, used to restore focus when returning to a
+// page. Main-content links only; sidebar links are transient navigation.
+const focusMemory = new Map<string, string>()
+const FOCUS_MEMORY_MAX = 40
+
+function rememberFocus(node: HTMLElement) {
+  if (!(node instanceof HTMLAnchorElement)) return
+  const href = node.getAttribute("href")
+  if (!href || node.closest(".side")) return
+  const path = window.location.pathname
+  focusMemory.delete(path)
+  focusMemory.set(path, href)
+  if (focusMemory.size > FOCUS_MEMORY_MAX) {
+    const oldest = focusMemory.keys().next().value
+    if (oldest) focusMemory.delete(oldest)
+  }
+}
+
+export function rememberedHref(pathname: string) {
+  return focusMemory.get(pathname) || null
+}
+
 function cross(from: HTMLElement, to: HTMLElement) {
   if (place(from) === "main" && place(to) === "side") {
     returnMain = from
@@ -316,51 +346,52 @@ function cross(from: HTMLElement, to: HTMLElement) {
 }
 
 export function moveFocus(key: string) {
-  const items = focusables()
+  const items = focusSnapshot()
   if (items.length === 0) return
-  const current = document.activeElement instanceof HTMLElement && items.includes(document.activeElement) ? document.activeElement : null
+  const active = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  const current = active ? items.find((item) => item.node === active) || null : null
   if (!current) {
-    focusNode(items.find((item) => place(item) === "side") || items[0])
+    focusNode((items.find((item) => place(item.node) === "side") || items[0]).node)
     return
   }
-  const trap = current.closest(".tool-pop, .trailer-pop")
+  const trap = current.node.closest(".tool-pop, .trailer-pop")
   if (trap instanceof HTMLElement) {
-    const inside = items.filter((item) => trap.contains(item))
-    let next: HTMLElement | null = null
+    const inside = items.filter((item) => trap.contains(item.node))
+    let next: FocusItem | null = null
     if (trap.classList.contains("trailer-gallery")) {
       if (key === "ArrowLeft" || key === "ArrowRight") next = rowNeighbor(current, inside, key)
-      else if (key === "ArrowUp" && current.classList.contains("trailer-card")) next = inside.find((item) => item.classList.contains("trailer-close")) || null
-      else if (key === "ArrowDown" && current.classList.contains("trailer-close")) {
-        next = inside.find((item) => item.getAttribute("aria-current") === "true" && item.classList.contains("trailer-card")) || inside.find((item) => item.classList.contains("trailer-card")) || null
+      else if (key === "ArrowUp" && current.node.classList.contains("trailer-card")) next = inside.find((item) => item.node.classList.contains("trailer-close")) || null
+      else if (key === "ArrowDown" && current.node.classList.contains("trailer-close")) {
+        next = inside.find((item) => item.node.getAttribute("aria-current") === "true" && item.node.classList.contains("trailer-card")) || inside.find((item) => item.node.classList.contains("trailer-card")) || null
       }
     } else {
       next = key === "ArrowUp" || key === "ArrowDown" ? stepList(current, inside, key) : key === "ArrowLeft" || key === "ArrowRight" ? rowNeighbor(current, inside, key) : null
     }
-    if (next && next !== current) focusNode(next)
+    if (next && next !== current) focusNode(next.node)
     return
   }
-  const main = items.filter((item) => place(item) === "main")
-  const side = items.filter((item) => place(item) === "side")
-  const menu = current.closest(".side")
+  const main = items.filter((item) => place(item.node) === "main")
+  const side = items.filter((item) => place(item.node) === "side")
+  const menu = current.node.closest(".side")
   if (menu instanceof HTMLElement) {
-    const tabs = items.filter((item) => menu.contains(item))
+    const tabs = items.filter((item) => menu.contains(item.node))
     if (key === "ArrowLeft" || key === "ArrowRight") {
       const next = rowNeighbor(current, tabs, key)
-      if (next) focusNode(next)
+      if (next) focusNode(next.node)
     } else if (key === "ArrowDown") {
-      const next = (alive(returnMain) ? returnMain : null) || enterRow(current, main)
-      if (next) cross(current, next)
+      const target = (alive(returnMain) ? returnMain : null) || enterRow(current, main)?.node || null
+      if (target) cross(current.node, target)
     }
     return
   }
-  const band = containerOf(current)
-  const inside = band ? main.filter((item) => band.contains(item)) : []
+  const band = containerOf(current.node)
+  const inside = band ? main.filter((item) => band.contains(item.node)) : []
   if (key === "ArrowLeft" || key === "ArrowRight") {
     const pool = band && kind(band) !== "list" ? inside : main
     const beside = rowNeighbor(current, pool, key)
     if (beside) {
       if (band && kind(band) === "strip") rememberLane(beside, inside)
-      focusNode(beside)
+      focusNode(beside.node)
       return
     }
     return
@@ -369,14 +400,14 @@ export function moveFocus(key: string) {
     const dir = key === "ArrowDown" ? 1 : -1
     if (!band) {
       const next = nearest(current, main, key)
-      if (next) focusNode(next)
-      else if (dir < 0) focusMenu(current, side)
+      if (next) focusNode(next.node)
+      else if (dir < 0) focusMenu(current.node, side.map((item) => item.node))
       return
     }
     if (kind(band) !== "strip") {
       const next = kind(band) === "grid" ? nearest(current, inside, key) : stepList(current, ordered(inside), key)
       if (next) {
-        focusNode(next)
+        focusNode(next.node)
         return
       }
     }
@@ -384,10 +415,17 @@ export function moveFocus(key: string) {
     const bands = bandsOf(main)
     const index = band ? bands.indexOf(band) : -1
     const neighbor = bands[index + dir]
-    const next = neighbor ? landing(neighbor, main.filter((item) => neighbor.contains(item)), current, dir) : nearest(current, main, key)
-    if (next) focusNode(next)
-    else if (dir < 0) focusMenu(current, side)
+    const next = neighbor ? landing(neighbor, main.filter((item) => neighbor.contains(item.node)), current, dir) : nearest(current, main, key)
+    if (next) focusNode(next.node)
+    else if (dir < 0) focusMenu(current.node, side.map((item) => item.node))
   }
+}
+
+/** Clear cross-page focus memory (return targets and strip lane). */
+export function resetFocusState() {
+  lane = 0
+  returnSide = null
+  returnMain = null
 }
 
 function focusMenu(from: HTMLElement, side: HTMLElement[]) {

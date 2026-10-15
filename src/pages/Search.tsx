@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import { createPortal } from "react-dom"
 import { Link, useSearchParams } from "react-router-dom"
 import { PosterCard } from "../components/Cards"
-import { usePinnedArt, useStage } from "../components/Stage"
+import { usePinnedArt, useStageActions } from "../components/Stage"
 import { HomeIcon, LibraryIcon, SearchIcon } from "../components/Icons"
 import { Loading, Problem } from "../components/Status"
 import * as api from "../lib/api"
@@ -77,7 +77,7 @@ export function SearchPage() {
   const [error, setError] = useState("")
   const [recent, setRecent] = useState<string[]>(() => loadRecent())
   const term = text.trim()
-  const { hover } = useStage()
+  const { hover } = useStageActions()
   usePinnedArt(null)
   useEffect(() => {
     hover(null)

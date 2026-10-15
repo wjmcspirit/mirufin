@@ -136,7 +136,9 @@ export function HomePage() {
   }, [featured, index])
 
   usePinnedArt(prefs.showHero ? current : null)
-  useThemeSong(spot?.Id)
+  // Theme music follows only the pinned hero, not every hovered card, so
+  // browsing rows no longer fires a themeSongs request per dwell.
+  useThemeSong(prefs.showHero ? current?.Id : undefined)
 
   if (status === "loading") return <Loading label="Opening your library" />
   if (status === "error") return <Problem message={error} onRetry={load} />

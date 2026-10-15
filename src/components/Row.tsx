@@ -1,6 +1,6 @@
-import { type ReactNode } from "react"
+import { memo, type ReactNode } from "react"
 
-export function Row({ title, className, children }: { title: string; className?: string; children: ReactNode }) {
+export const Row = memo(function Row({ title, className, children }: { title: string; className?: string; children: ReactNode }) {
   const sized = className?.split(/\s+/).some((name) => name.startsWith("size-")) ? className : `size-medium${className ? ` ${className}` : ""}`
   return (
     <section className={`row ${sized}`}>
@@ -10,4 +10,4 @@ export function Row({ title, className, children }: { title: string; className?:
       <div className="scroller">{children}</div>
     </section>
   )
-}
+})

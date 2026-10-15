@@ -3,7 +3,7 @@ import { Capacitor } from "@capacitor/core"
 import { useEffect } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { useLocalProxy } from "../lib/media"
-import { backHeld, focusables, isBackKey, moveFocus, placeFocus, remoteKey } from "../lib/remote"
+import { backHeld, focusables, isBackKey, moveFocus, placeFocus, rememberedHref, remoteKey, resetFocusState } from "../lib/remote"
 
 const ARROWS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])
 const TEXT_TYPES = new Set(["text", "password", "search", "url", "email", "tel"])
@@ -38,14 +38,43 @@ export function RemoteNav() {
   const location = useLocation()
 
   useEffect(() => {
+    resetFocusState()
     if (useLocalProxy()) return
     document.documentElement.classList.add("remote")
     const active = document.activeElement
     if (active instanceof HTMLElement && active !== document.body) return
-    const items = focusables()
-    const content = items.find((item) => !item.closest(".side") && item.closest(".hero .btn-primary, .detail-hero .btn-primary, .hero, .detail-hero, .card")) || items.find((item) => !item.closest(".side"))
-    if (content) placeFocus(content)
-    else if (items[0]) placeFocus(items[0])
+    const remembered = rememberedHref(location.pathname)
+    let cancelled = false
+    let attempts = 0
+    let timer = 0
+    const place = () => {
+      if (cancelled) return
+      const current = document.activeElement
+      // Stop if the user or the page already moved focus somewhere.
+      if (current instanceof HTMLElement && current !== document.body) return
+      const items = focusables()
+      if (remembered) {
+        const target = items.find((item) => !item.closest(".side") && item.getAttribute("href") === remembered)
+        if (target) {
+          placeFocus(target)
+          return
+        }
+        // Content may still be loading; retry briefly before falling back.
+        if (attempts < 25) {
+          attempts += 1
+          timer = window.setTimeout(place, 60)
+          return
+        }
+      }
+      const content = items.find((item) => !item.closest(".side") && item.closest(".hero .btn-primary, .detail-hero .btn-primary, .hero, .detail-hero, .card")) || items.find((item) => !item.closest(".side"))
+      if (content) placeFocus(content)
+      else if (items[0]) placeFocus(items[0])
+    }
+    place()
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
   }, [location.pathname])
 
   useEffect(() => {

@@ -42,7 +42,7 @@ async function readError(response: Response) {
   }
 }
 
-export async function jf<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers)
   const authorization = authHeader()
   headers.set("Authorization", authorization)
@@ -80,6 +80,77 @@ export async function jf<T>(path: string, init?: RequestInit): Promise<T> {
     return JSON.parse(text) as T
   }
   return undefined as T
+}
+
+interface CachedRead {
+  at: number
+  data: unknown
+}
+
+// Short-lived stale-while-revalidate cache for Jellyfin reads. Returning to a
+// page renders instantly from cache and refreshes in the background; every
+// mutation clears it so watched status and resume positions stay fresh.
+const readCache = new Map<string, CachedRead>()
+const READ_FRESH_MS = 30_000
+const READ_STALE_MS = 5 * 60_000
+const READ_MAX_ENTRIES = 300
+let readGeneration = 0
+
+/** Drop every cached read (called after mutations and auth changes). */
+export function invalidateReads() {
+  readGeneration += 1
+  readCache.clear()
+}
+
+function cacheableRead(path: string, init?: RequestInit) {
+  const method = (init?.method || "GET").toUpperCase()
+  if (method !== "GET" || init?.body || init?.signal) return false
+  // Auth and server discovery must always hit the network.
+  if (path.includes("/AuthenticateByName") || path.includes("/QuickConnect/") || path.startsWith("/System/Info/Public")) return false
+  return Boolean(getToken())
+}
+
+async function refresh<T>(path: string, init?: RequestInit) {
+  const generation = readGeneration
+  try {
+    const data = await request<T>(path, init)
+    // A mutation during the refresh invalidates this response.
+    if (generation !== readGeneration) return
+    readCache.set(path, { at: Date.now(), data })
+  } catch {
+    // Keep serving the stale copy when revalidation fails.
+  }
+}
+
+export async function jf<T>(path: string, init?: RequestInit): Promise<T> {
+  const cacheable = cacheableRead(path, init)
+  if (cacheable) {
+    const hit = readCache.get(path)
+    if (hit) {
+      const age = Date.now() - hit.at
+      if (age <= READ_FRESH_MS) return hit.data as T
+      if (age <= READ_STALE_MS) {
+        void refresh(path, init)
+        return hit.data as T
+      }
+    }
+  }
+  const generation = readGeneration
+  const data = await request<T>(path, init)
+  if (cacheable) {
+    // Skip caching if a mutation happened while this read was in flight.
+    if (generation === readGeneration) {
+      readCache.set(path, { at: Date.now(), data })
+      if (readCache.size > READ_MAX_ENTRIES) {
+        const oldest = readCache.keys().next().value
+        if (oldest) readCache.delete(oldest)
+      }
+    }
+  } else if ((init?.method || "GET").toUpperCase() !== "GET") {
+    // Mutations invalidate all reads so stale watched/resume data never lingers.
+    invalidateReads()
+  }
+  return data
 }
 
 const ITEM_FIELDS = [

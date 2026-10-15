@@ -6,7 +6,7 @@ import { TrailerButton } from "../components/TrailerButton"
 import { MediaInfo } from "../components/MediaInfo"
 import { Row } from "../components/Row"
 import { Loading, Problem } from "../components/Status"
-import { useEpisodeStage, useFilmographyStage, usePinnedArt, useStage } from "../components/Stage"
+import { useEpisodeStage, useFilmographyStage, usePinnedArt, useStage, useStageActions } from "../components/Stage"
 import { useThemeSong } from "../components/Theme"
 import { TitleLogo } from "../components/Title"
 import * as api from "../lib/api"
@@ -356,7 +356,7 @@ function EpisodeList({ seriesId, seasonId, nextId = "", series = null }: { serie
 }
 
 function EpisodeCard({ episode, series, next }: { episode: Item; series: Item | null; next: boolean }) {
-  const { hover } = useStage()
+  const { hover } = useStageActions()
   const release = useRef(0)
   const cancelHover = useRef<(() => void) | null>(null)
   useEffect(
