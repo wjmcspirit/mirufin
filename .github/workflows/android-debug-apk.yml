@@ -62,7 +62,7 @@ jobs:
       - name: Sync Capacitor Android project
         run: npx cap sync android
 
-      - name: Ensure Android SDK packages
+      - name: Prepare Android SDK
         run: |
           set -euo pipefail
           SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
@@ -75,13 +75,17 @@ jobs:
             if [ -n "$candidate" ] && [ -x "$candidate" ]; then SDKMGR="$candidate"; break; fi
           done
           if [ -z "$SDKMGR" ]; then
-            echo "sdkmanager not found; using the runner's preinstalled SDK."
+            echo "sdkmanager not found; relying on the runner's preinstalled SDK."
             exit 0
           fi
+          # Accept licences so Gradle can auto-download anything the runner image lacks.
           yes | "$SDKMGR" --licenses >/dev/null 2>&1 || true
-          # Best effort: Gradle fails clearly below if the platform is truly missing.
-          "$SDKMGR" "platforms;android-36" "build-tools;36.0.0" || \
-            echo "::warning::sdkmanager could not install the SDK packages; continuing with the preinstalled SDK."
+          if [ -d "$SDK/platforms/android-36" ]; then
+            echo "Android platform 36 is already present."
+          else
+            "$SDKMGR" "platforms;android-36" || \
+              echo "::warning::Could not install platforms;android-36; Gradle reports clearly if it is required."
+          fi
 
       - name: Build debug APK
         working-directory: android
