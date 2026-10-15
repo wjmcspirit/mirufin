@@ -1812,7 +1812,10 @@ html.native-playing .player {
   background: transparent;
   background-image: none;
 }
-html.native-playing .player video { opacity: 0; }
+/* The native surface owns the screen during playback; leaving the web <video>
+   rendered makes Android WebView draw its giant default play-poster over the
+   whole player until native frames are revealed. */
+html.native-playing .player video { display: none; }
 .player video, .player-art {
   position: absolute;
   inset: 0;

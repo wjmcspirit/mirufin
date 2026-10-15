@@ -72,7 +72,6 @@ public class NativePlayerPlugin extends Plugin {
 
         @Override
         public void onIsPlayingChanged(boolean playing) {
-            if (playing) reveal();
             publish(null);
         }
 
@@ -144,9 +143,10 @@ public class NativePlayerPlugin extends Plugin {
                 view.setPlayer(exo);
                 view.setVisibility(View.VISIBLE);
                 revealed = false;
-                // Keep the WebView opaque and dark until the player actually renders a
-                // frame. The native surface (shutter/controller) is never exposed in
-                // between, so no gray placeholder or stray play button can appear.
+                // Keep the WebView opaque and dark until ExoPlayer renders its first
+                // frame (see onRenderedFirstFrame). isPlaying can turn true before
+                // any frame is exposed, and revealing early exposes the stale web
+                // page plus the WebView's native video placeholder beneath it.
                 WebView webView = getBridge() == null ? null : getBridge().getWebView();
                 if (webView != null) webView.setBackgroundColor(Color.parseColor("#09090b"));
                 exo.prepare();

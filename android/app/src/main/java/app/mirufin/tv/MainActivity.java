@@ -1,5 +1,6 @@
 package app.mirufin.tv;
 
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
@@ -14,6 +15,7 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.BridgeWebChromeClient;
 
 public class MainActivity extends BridgeActivity {
     @Override
@@ -24,6 +26,7 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         fillScreen();
         prepareWebView();
+        suppressVideoPoster();
     }
 
     @Override
@@ -31,6 +34,7 @@ public class MainActivity extends BridgeActivity {
         super.onResume();
         fillScreen();
         prepareWebView();
+        suppressVideoPoster();
     }
 
     @Override
@@ -74,5 +78,24 @@ public class MainActivity extends BridgeActivity {
         getBridge().getWebView().setFocusable(true);
         getBridge().getWebView().setFocusableInTouchMode(true);
         getBridge().getWebView().requestFocus();
+    }
+
+    /**
+     * Android WebView paints its own giant "default video poster" (a round play
+     * button) over any <video> until frames arrive. Mirufin's player video
+     * fills the screen, so that native poster flashes across the whole display
+     * while playback spins up. A transparent poster removes it; the native
+     * player surface covers the web layer during startup anyway.
+     */
+    private void suppressVideoPoster() {
+        if (getBridge() == null) return;
+        WebView webView = getBridge().getWebView();
+        if (webView == null) return;
+        webView.setWebChromeClient(new BridgeWebChromeClient(getBridge()) {
+            @Override
+            public Bitmap getDefaultVideoPoster() {
+                return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888);
+            }
+        });
     }
 }
