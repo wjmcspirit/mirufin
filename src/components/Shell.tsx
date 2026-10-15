@@ -59,9 +59,9 @@ export function Shell() {
     <StageProvider>
     <div className="shell">
       <header className="side">
-        <NavLink to="/" className="brand" end aria-label="Mirufin">
+        <div className="brand" role="img" aria-label="Mirufin">
           <img className="brand-logo" src="/mirufin-logo.png" alt="" />
-        </NavLink>
+        </div>
         <nav
           className="side-nav"
           aria-label="Main"
