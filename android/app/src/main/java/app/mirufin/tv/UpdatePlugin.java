@@ -1,5 +1,6 @@
 package app.mirufin.tv;
 
+import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
@@ -11,6 +12,7 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -19,6 +21,28 @@ import java.net.URL;
 @CapacitorPlugin(name = "Updater")
 public class UpdatePlugin extends Plugin {
     private static final String RELEASE_PREFIX = "https://github.com/wjmcspirit/mirufin/releases/download/";
+
+    /**
+     * The staged APK lives in the app's files directory, never the cache: Android may
+     * clear the cache while the TV installer is still reading the file, and a failed
+     * install leaves the viewer without a working Mirufin.
+     */
+    static final String STAGED_APK = "mirufin-update.apk";
+
+    static File stagedApk(Context context) {
+        return new File(context.getFilesDir(), STAGED_APK);
+    }
+
+    /** A truncated or HTML error page handed to the installer fails and can strand the app. */
+    private static boolean looksLikeApk(File file) {
+        try (InputStream head = new FileInputStream(file)) {
+            byte[] magic = new byte[4];
+            if (head.read(magic) != magic.length) return false;
+            return magic[0] == 0x50 && magic[1] == 0x4B && magic[2] == 0x03 && magic[3] == 0x04;
+        } catch (Exception error) {
+            return false;
+        }
+    }
 
     @PluginMethod
     public void install(PluginCall call) {
@@ -52,11 +76,16 @@ public class UpdatePlugin extends Plugin {
                 call.reject("The update could not be downloaded.");
                 return;
             }
-            File file = new File(getContext().getCacheDir(), "mirufin-update.apk");
+            File file = stagedApk(getContext());
+            // A half-written copy from an earlier attempt would be installed as-is.
+            if (file.exists() && !file.delete()) {
+                call.reject("Mirufin could not clear the previous update download.");
+                return;
+            }
             long length = connection.getContentLengthLong();
+            long received = 0;
             try (InputStream input = connection.getInputStream(); FileOutputStream output = new FileOutputStream(file)) {
                 byte[] buffer = new byte[16384];
-                long received = 0;
                 int reported = -1;
                 int count;
                 while ((count = input.read(buffer)) != -1) {
@@ -72,6 +101,16 @@ public class UpdatePlugin extends Plugin {
                         }
                     }
                 }
+            }
+            if (length > 0 && received != length) {
+                file.delete();
+                call.reject("The update download was incomplete. Choose Install update again.");
+                return;
+            }
+            if (!looksLikeApk(file)) {
+                file.delete();
+                call.reject("The downloaded update is not a valid APK. Choose Install update again.");
+                return;
             }
             Uri uri = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".fileprovider", file);
             Intent intent = new Intent(Intent.ACTION_VIEW);
