@@ -1,15 +1,16 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { PosterCard } from "../components/Cards"
 import { Hero } from "../components/Hero"
 import { Row } from "../components/Row"
 import { Loading, Problem } from "../components/Status"
-import { usePinnedArt, useStage } from "../components/Stage"
+import { useHeroStage, usePinnedArt, useStage } from "../components/Stage"
 import { useThemeSong } from "../components/Theme"
 import * as api from "../lib/api"
 import { comingUpEpisodes, continueWatching, resumeCardDetail, resumeCardTitle, upNextCardDetail, upNextCardTitle } from "../lib/format"
 import { followingEpisodes } from "../lib/watch"
+import { remoteKey } from "../lib/remote"
 import { isShowLibrary, latestTitle, libraryRowId, mergeHomeRows } from "../lib/homeLayout"
-import { backdropSrc } from "../lib/images"
+import { backdropSrc, loadImage, logoSrc, warmImage } from "../lib/images"
 import type { Item } from "../lib/types"
 import { usePrefs, useSession } from "../session"
 
@@ -46,6 +47,47 @@ async function settle<T>(work: Promise<T>, fallback: T) {
   } catch {
     return fallback
   }
+}
+
+const HERO_ROTATE_MS = 15_000
+const HERO_QUIET_MS = 20_000
+const REMOTE_KEYS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter"])
+
+/**
+ * The hero only cycles once the remote has been quiet for HERO_QUIET_MS. Every
+ * D-pad press restarts that window, so a title, its synopsis and its actions can
+ * never be swapped out from under the viewer, and a hero that was in use always
+ * waits before it starts moving again.
+ */
+function useHeroQuiet(engaged: boolean) {
+  const [rested, setRested] = useState(true)
+  const timer = useRef(0)
+  const settle = useCallback(() => {
+    setRested(false)
+    window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => setRested(true), HERO_QUIET_MS)
+  }, [])
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (REMOTE_KEYS.has(remoteKey(event))) settle()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => {
+      window.removeEventListener("keydown", onKey)
+      window.clearTimeout(timer.current)
+    }
+  }, [settle])
+  const wasEngaged = useRef(engaged)
+  useEffect(() => {
+    // A page that just opened is already at rest. Taking the hero into use, then
+    // leaving it again, both start the quiet window.
+    const changed = wasEngaged.current !== engaged
+    wasEngaged.current = engaged
+    if (!changed) return
+    settle()
+    return () => window.clearTimeout(timer.current)
+  }, [engaged, settle])
+  return rested
 }
 
 export function HomePage() {
@@ -107,7 +149,11 @@ export function HomePage() {
   const { hovered, hover } = useStage()
   const current = featured[featured.length ? index % featured.length : 0] || null
   const spot = hovered || current
-  const cycling = featured.length > 1 && !hovered
+  // The hero stands still while the viewer is on it or moving through the rows,
+  // and only starts cycling again after a quiet spell.
+  const engaged = Boolean(hovered) || hold || trailerHold
+  const rested = useHeroQuiet(engaged)
+  const cycling = featured.length > 1 && !engaged && rested
 
   useEffect(() => {
     return () => {
@@ -119,22 +165,39 @@ export function HomePage() {
     setIndex(0)
   }, [featuredKey])
 
-  useEffect(() => {
-    if (!cycling || hold || trailerHold) return
-    const timer = window.setInterval(() => setIndex((value) => value + 1), 5_000)
-    return () => window.clearInterval(timer)
-  }, [cycling, hold, trailerHold])
-
+  // Keep the next backdrop and its title logo decoded while this hero is on
+  // screen, so a rotation never starts against artwork that is still loading.
   useEffect(() => {
     if (featured.length < 2) return
     const upcoming = featured[(index + 1) % featured.length]
-    const url = upcoming ? backdropSrc(upcoming) : null
-    if (!url) return
-    const image = new Image()
-    image.crossOrigin = "anonymous"
-    image.src = url
-  }, [featured, index])
+    warmImage(backdropSrc(upcoming))
+    if (prefs.preferLogos) warmImage(logoSrc(upcoming))
+  }, [featured, index, prefs.preferLogos])
 
+  useEffect(() => {
+    if (!cycling) return
+    let cancelled = false
+    const upcoming = featured[(index + 1) % featured.length]
+    const url = backdropSrc(upcoming)
+    const timer = window.setTimeout(() => {
+      if (!url) {
+        setIndex((value) => value + 1)
+        return
+      }
+      // Hold the current hero until the incoming backdrop has decoded, then move
+      // on, so the copy and the artwork always change together. A URL that never
+      // loads resolves as unusable and is skipped rather than frozen on.
+      void loadImage(url).then(() => {
+        if (!cancelled) setIndex((value) => value + 1)
+      })
+    }, HERO_ROTATE_MS)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [cycling, featured, index])
+
+  useHeroStage(prefs.showHero)
   usePinnedArt(prefs.showHero ? current : null)
   // Theme music follows only the pinned hero, not every hovered card, so
   // browsing rows no longer fires a themeSongs request per dwell.

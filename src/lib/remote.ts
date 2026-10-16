@@ -357,13 +357,41 @@ function cross(from: HTMLElement, to: HTMLElement) {
   focusNode(to)
 }
 
+/**
+ * Where a press lands when nothing measurable is focused. Focus sits on <body>
+ * whenever the control the viewer was using unmounts (a closing overlay, a hero
+ * that swapped its copy, a row that rerendered), and a control can miss one
+ * frame's snapshot while content reloads. Neither is a request to visit the top
+ * navigation, so the answer is always a content target: the last content node
+ * the viewer used, otherwise the first content item on screen, otherwise the
+ * top of the page.
+ */
+function contentAnchor(items: FocusItem[]) {
+  if (alive(returnMain)) return returnMain
+  const main = items.filter((item) => place(item.node) === "main")
+  const shown = main.find((item) => item.rect.bottom > 0 && item.rect.top < window.innerHeight && item.rect.right > 0 && item.rect.left < window.innerWidth)
+  return (shown || main[0])?.node || null
+}
+
 export function moveFocus(key: string) {
   const items = focusSnapshot()
   if (items.length === 0) return
   const active = document.activeElement instanceof HTMLElement ? document.activeElement : null
   const current = active ? items.find((item) => item.node === active) || null : null
   if (!current) {
-    focusNode((items.find((item) => place(item.node) === "side") || items[0]).node)
+    // A control that is still connected and focusable is only missing from this
+    // frame's snapshot: its focus is valid, so leave it where it is and let the
+    // next press measure it again.
+    if (active && active !== document.body && active !== document.documentElement && active.isConnected && !active.closest("[inert]")) return
+    const anchor = contentAnchor(items)
+    if (anchor) {
+      focusNode(anchor)
+      return
+    }
+    // A page with no content at all can still offer the navigation, but only on
+    // a deliberate Up/Left/Right: Down never sends focus to the top navigation.
+    const nav = items.find((item) => place(item.node) === "side")
+    if (nav && key !== "ArrowDown") focusNode(nav.node)
     return
   }
   const trap = current.node.closest(".tool-pop, .trailer-pop")

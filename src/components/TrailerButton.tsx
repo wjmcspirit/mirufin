@@ -20,7 +20,16 @@ interface Choice {
   imageFallback?: string | null
 }
 
-export function TrailerButton({ item, onOpen }: { item: Item; onOpen?: (open: boolean) => void }) {
+export function TrailerButton({
+  item,
+  onOpen,
+  onlyWhenAvailable = false,
+}: {
+  item: Item
+  onOpen?: (open: boolean) => void
+  /** Render nothing unless the server holds a trailer that can actually play. */
+  onlyWhenAvailable?: boolean
+}) {
   const { userId } = useSession()
   const navigate = useNavigate()
   const [choices, setChoices] = useState<Choice[]>([])
@@ -105,6 +114,10 @@ export function TrailerButton({ item, onOpen }: { item: Item; onOpen?: (open: bo
   }
 
   const label = choices.length > 1 ? "Trailers" : "Trailer"
+
+  // The button is held back until a trailer is known, so an episode never shows
+  // an action that would open a search instead of the trailer it promises.
+  if (onlyWhenAvailable && choices.length === 0) return null
 
   return (
     <>

@@ -18,6 +18,46 @@ export function latestTitle(view: Item) {
   return view.Name || "Latest"
 }
 
+/**
+ * Where a library belongs in the navigation rail: Movies, then TV shows, then
+ * Collections, then everything else. A server may identify a view by its
+ * CollectionType, by its name, or by both, so both are folded the same way the
+ * icon picker and the row titles above already fold them.
+ */
+export function libraryRank(view: Item) {
+  const type = (view.CollectionType || "").toLowerCase()
+  const name = (view.Name || "").toLowerCase()
+  if (type === "movies" || name === "movies") return 0
+  if (isShowLibrary(view)) return 1
+  if (type === "boxsets" || name === "collections" || name === "collection") return 2
+  return 3
+}
+
+/**
+ * Navigation order for the views a server reports. A view without an Id has no
+ * route, and a view reported twice is one destination, so the rail never gains a
+ * dead or repeated entry. Views of the same rank fall back to their name, so the
+ * order is identical on every launch, and a library type this app has never seen
+ * still lands after the three it knows.
+ */
+export function sortLibraries(libraries: Item[]) {
+  const seen = new Set<string>()
+  return libraries
+    .filter((library) => {
+      if (!library.Id || seen.has(library.Id)) return false
+      seen.add(library.Id)
+      return true
+    })
+    .map((library, index) => ({ library, index }))
+    .sort((a, b) => {
+      const rank = libraryRank(a.library) - libraryRank(b.library)
+      if (rank) return rank
+      const byName = (a.library.Name || "").localeCompare(b.library.Name || "", undefined, { sensitivity: "base" })
+      return byName || a.index - b.index
+    })
+    .map((entry) => entry.library)
+}
+
 function freshRow(id: string): HomeRowSetting {
   const builtIn = id === "continue" || id === "next" || id === "soon"
   return {

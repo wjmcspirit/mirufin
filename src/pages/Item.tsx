@@ -10,11 +10,11 @@ import { useEpisodeStage, useFilmographyStage, usePinnedArt, useStage, useStageA
 import { useThemeSong } from "../components/Theme"
 import { TitleLogo } from "../components/Title"
 import * as api from "../lib/api"
-import { canPlayDirectly, episodeCode, formatRuntime, metaLine, personFacts, progressPct, techChips } from "../lib/format"
+import { canPlayDirectly, episodeCode, formatRuntime, isInProgress, metaLine, personFacts, progressPct, techChips } from "../lib/format"
 import { hasMediaInfo } from "../lib/mediaInfo"
 import { placeFocus } from "../lib/remote"
 import { knownFor, type KnownWork } from "../lib/knownFor"
-import { artWidth, backdropSrc, episodeStillSrc, imageUrl, loadImage, primarySrc, seasonArtSrc, thumbSrc, warmImage, wideBackdrop } from "../lib/images"
+import { artWidth, backdropSrc, episodeStillSrc, episodeWideStill, imageUrl, loadImage, primarySrc, seasonArtSrc, thumbSrc, warmImage, wideBackdrop } from "../lib/images"
 import type { Item } from "../lib/types"
 import { useSession } from "../session"
 
@@ -87,30 +87,52 @@ export function ItemPage() {
   if (status === "loading") return <Loading label="Loading title" />
   if (status === "error" || !item) return <Problem message={error || "This title is unavailable."} />
 
-  const backdrop = backdropSrc(item)
+  const episode = item.Type === "Episode"
   const poster = primarySrc(item, 900)
-  const portrait = item.Type === "Person" ? poster : poster || backdrop
+  // An episode's panel is a 16:9 still, never a portrait poster stretched into it.
+  const panelArt = episode ? episodeWideStill(item, 1600) : item.Type === "Person" ? poster : poster || backdropSrc(item)
   const progress = progressPct(item)
   const chips = techChips(item)
   const facts = item.Type === "Person" ? personFacts(item) : metaLine(item)
+  const layout = ["detail-layout", episode ? "episode-layout" : "", item.Type === "Person" ? "align-start" : ""].filter(Boolean).join(" ")
+  // A person has one action, and it belongs with the person: the button is drawn
+  // in the copy column under the biography rather than in the action band under
+  // the portrait, so the name, birth details and biography stay together with it.
+  const favoriteAction = (
+    <button
+      className={`btn icon-btn ${item.UserData?.IsFavorite ? "on" : ""}`}
+      type="button"
+      onClick={() => void toggleFavorite()}
+      disabled={busy === "favorite"}
+      aria-pressed={Boolean(item.UserData?.IsFavorite)}
+    >
+      <HeartIcon />
+      {item.UserData?.IsFavorite ? "Favorited" : "Favorite"}
+    </button>
+  )
 
   return (
     <article className={item.Type === "Person" ? "detail person-page" : "detail"}>
       <header className="detail-hero stage-copy">
-        <div className={item.Type === "Person" ? "detail-layout align-start" : "detail-layout"}>
-          <div className="poster-lg">
-            <MediaImage src={portrait} alt="" />
+        <div className={layout}>
+          <div className={episode ? "still-lg" : "poster-lg"}>
+            <MediaImage src={panelArt} alt="" label={episode ? item.Name : undefined} />
+            {episode && progress > 1 && progress < 98 && (
+              <span className="progress" aria-hidden="true">
+                <span style={{ width: `${progress}%` }} />
+              </span>
+            )}
           </div>
           <div className="detail-copy">
-            {item.Type === "Episode" && (
+            {episode && (
               <p className="eyebrow">
                 <Link to={`/item/${item.SeriesId}`}>{item.SeriesName}</Link>
-                {episodeCode(item) ? `  ·  ${episodeCode(item)}` : ""}
+                {episodeCode(item) ? <span className="episode-code">{`  ·  ${episodeCode(item)}`}</span> : ""}
               </p>
             )}
-            {item.Type !== "Episode" && <p className="eyebrow">{kindLabel(item)}</p>}
+            {!episode && <p className="eyebrow">{kindLabel(item)}</p>}
             <TitleLogo item={item} />
-            {item.Type === "Episode" && <p className="hero-episode">{item.Name}</p>}
+            {episode && <p className="hero-episode">{item.Name}</p>}
             {facts && <p className="kicker">{facts}</p>}
             {chips.length > 0 && (
               <p className="chips">
@@ -121,29 +143,35 @@ export function ItemPage() {
             )}
             {item.Taglines?.[0] && <p className="tagline">{item.Taglines[0]}</p>}
             {item.Overview && (item.Type === "Person" ? <Bio text={item.Overview} /> : <p className="overview">{item.Overview}</p>)}
+            {personPage && <div className="actions person-actions">{favoriteAction}</div>}
             <FactLinks item={item} />
           </div>
         </div>
-        <div className="actions detail-actions">
-          <PlayActions item={item} progress={progress} />
-          {(item.Type === "Movie" || item.Type === "Series") && <TrailerButton item={item} />}
-          <button className={`btn icon-btn ${item.UserData?.IsFavorite ? "on" : ""}`} type="button" onClick={() => void toggleFavorite()} disabled={busy === "favorite"} aria-pressed={Boolean(item.UserData?.IsFavorite)}>
-            <HeartIcon />
-            {item.UserData?.IsFavorite ? "Favorited" : "Favorite"}
-          </button>
-          {canPlayDirectly(item) && (
-            <button className={`btn icon-btn ${item.UserData?.Played ? "on" : ""}`} type="button" onClick={() => void togglePlayed()} disabled={busy === "played"}>
-              <CheckIcon size={16} />
-              {item.UserData?.Played ? "Watched" : "Mark watched"}
-            </button>
-          )}
-          {hasMediaInfo(item) && (
-            <button className="btn icon-btn" type="button" onClick={() => setInfoOpen(true)}>
-              <InfoIcon size={16} />
-              Media info
-            </button>
-          )}
-        </div>
+        {/* The band under the portrait carries playback and title actions. A person
+            page has none of them once Favorite sits with the biography, so the band
+            is left out rather than left behind as an empty stop for the remote. */}
+        {(item.Type !== "Person" || hasMediaInfo(item)) && (
+          <div className="actions detail-actions">
+            <PlayActions item={item} progress={progress} />
+            {/* An episode offers the trailer action only when the server has one that plays. */}
+            {(item.Type === "Movie" || item.Type === "Series" || episode) && (
+              <TrailerButton item={item} onlyWhenAvailable={episode} />
+            )}
+            {!personPage && favoriteAction}
+            {canPlayDirectly(item) && (
+              <button className={`btn icon-btn ${item.UserData?.Played ? "on" : ""}`} type="button" onClick={() => void togglePlayed()} disabled={busy === "played"}>
+                <CheckIcon size={16} />
+                {item.UserData?.Played ? "Watched" : "Mark watched"}
+              </button>
+            )}
+            {hasMediaInfo(item) && (
+              <button className="btn icon-btn" type="button" onClick={() => setInfoOpen(true)}>
+                <InfoIcon size={16} />
+                Media info
+              </button>
+            )}
+          </div>
+        )}
         {error && <p className="error">{error}</p>}
       </header>
       {infoOpen && <MediaInfo item={item} onClose={() => setInfoOpen(false)} />}
@@ -227,35 +255,77 @@ function SeriesPlay({ series }: { series: Item }) {
     }
   }, [series.Id, userId])
 
-  async function play(rest: boolean) {
+  // Resume / Play only: it follows Next Up for the whole series, so it never has
+  // to pick a season. Season playback lives with the season it plays.
+  async function play() {
     setPending(true)
     try {
-      const suffix = rest ? "&rest=season" : ""
       const episode = nextEpisode || (await api.nextUp(userId, series.Id, 1)).Items?.[0]
       if (episode) {
-        navigate(`/play/${episode.Id}?resume=1${suffix}`)
+        navigate(`/play/${episode.Id}?resume=1`)
         return
       }
       const list = await api.episodes(userId, series.Id)
       const first = list.Items?.[0]
-      if (first) navigate(`/play/${first.Id}?resume=0${suffix}`)
+      if (first) navigate(`/play/${first.Id}?resume=0`)
     } finally {
       setPending(false)
     }
   }
 
   return (
-    <>
-      <button className="btn btn-primary" type="button" onClick={() => void play(false)} disabled={pending}>
-        <PlayIcon />
-        {pending ? "Finding episode…" : nextEpisode ? "Resume" : "Play"}
-      </button>
-      <button className="btn icon-btn" type="button" onClick={() => void play(true)} disabled={pending}>
-        <SeasonIcon size={16} />
-        Play season
-      </button>
-    </>
+    <button className="btn btn-primary" type="button" onClick={() => void play()} disabled={pending}>
+      <PlayIcon />
+      {pending ? "Finding episode…" : nextEpisode ? "Resume" : "Play"}
+    </button>
   )
+}
+
+/**
+ * Plays one season, in order, and keeps the player inside it (`rest=season`).
+ * The action sits beside the season it plays, so a series with several seasons
+ * never has to guess which one a series-wide button meant. Render it inside an
+ * `.actions` band: the remote walks focus band to band, and a row heading on its
+ * own is not one, so a bare button in a `.row-head` could not be reached.
+ */
+function SeasonPlay({ series, season }: { series: Item; season: Item }) {
+  const { userId } = useSession()
+  const navigate = useNavigate()
+  const [pending, setPending] = useState(false)
+
+  async function play() {
+    setPending(true)
+    try {
+      // The episode rows below already read this list, so it comes from cache.
+      const list = await api.episodes(userId, series.Id, season.Id)
+      const start = seasonStart(list.Items || [])
+      if (start) navigate(`/play/${start.episode.Id}?resume=${start.resume ? "1" : "0"}&rest=season`)
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <button className="btn icon-btn" type="button" onClick={() => void play()} disabled={pending}>
+      <SeasonIcon size={16} />
+      {pending ? "Finding episode…" : "Play season"}
+    </button>
+  )
+}
+
+/**
+ * Where a season begins: the episode already in progress, otherwise the first
+ * episode the viewer has not watched, otherwise the first episode. That is the
+ * rule Next Up applies to a whole series, scoped to one season, so playing a
+ * season continues where the viewer stopped instead of restarting it.
+ */
+function seasonStart(episodes: Item[]) {
+  const inProgress = episodes.find((episode) => isInProgress(episode))
+  if (inProgress) return { episode: inProgress, resume: true }
+  const unwatched = episodes.find((episode) => !episode.UserData?.Played)
+  if (unwatched) return { episode: unwatched, resume: false }
+  const first = episodes[0]
+  return first ? { episode: first, resume: false } : null
 }
 
 function ItemBody({ item }: { item: Item }) {
@@ -313,6 +383,10 @@ function SeriesBody({ series }: { series: Item }) {
 
   const current = seasons?.find((season) => season.Id === selected) || null
   const currentTitle = current ? current.Name || `Season ${current.IndexNumber ?? ""}` : ""
+  // One season is not a choice, so its action is there without selecting
+  // anything. Several seasons each carry their own action, which appears with the
+  // season the viewer selected, so playback can never pick the wrong one.
+  const singleSeason = seasons?.length === 1 ? seasons[0] : null
 
   return (
     <div className="detail-body">
@@ -320,6 +394,11 @@ function SeriesBody({ series }: { series: Item }) {
         <section className="season-block">
           <div className="row-head">
             <h2>Seasons</h2>
+            {singleSeason && (
+              <div className="actions">
+                <SeasonPlay series={series} season={singleSeason} />
+              </div>
+            )}
           </div>
           <div className="scroller season-scroller">
             {seasons.map((season) => {
@@ -351,6 +430,11 @@ function SeriesBody({ series }: { series: Item }) {
         <section className="episode-block">
           <div className="row-head">
             <h2>{currentTitle || "Episodes"}</h2>
+            {current && !singleSeason && (
+              <div className="actions">
+                <SeasonPlay series={series} season={current} />
+              </div>
+            )}
           </div>
           <EpisodeList seriesId={series.Id} seasonId={selected} nextId={nextEpisode?.Id || ""} series={series} />
         </section>
@@ -522,19 +606,67 @@ function titleKey(value?: string) {
     .trim()
 }
 
+/** Library credits keyed the way the Known-for row and the backdrop matcher read them. */
+interface CreditIndex {
+  byTitle: Map<string, Item>
+  byTmdb: Map<string, Item>
+  byImdb: Map<string, Item>
+}
+
+function creditIndex(list: Item[]) {
+  const index: CreditIndex = { byTitle: new Map(), byTmdb: new Map(), byImdb: new Map() }
+  for (const entry of list) {
+    const kind = entry.Type === "Movie" ? "movie" : entry.Type === "Series" ? "series" : ""
+    if (!kind) continue
+    index.byTitle.set(`${entry.Type}:${titleKey(entry.Name)}`, entry)
+    // Stable provider ids beat fuzzy title matching: TMDb ids are kind-qualified
+    // (movie and TV ids live in separate namespaces) and IMDb ids are unique.
+    for (const [provider, value] of Object.entries(entry.ProviderIds || {})) {
+      if (!value) continue
+      const key = provider.toLowerCase()
+      if (key === "tmdb") index.byTmdb.set(`${kind}:${value}`, entry)
+      if (key === "imdb") index.byImdb.set(value.toLowerCase(), entry)
+    }
+  }
+  return index
+}
+
+/** The library title a Known-for work verifiably is, if the library holds it. */
+function knownForCredit(work: KnownWork, index: CreditIndex) {
+  const kind = work.kind === "Series" ? "series" : "movie"
+  return (
+    (work.tmdb ? index.byTmdb.get(`${kind}:${work.tmdb}`) : undefined) ||
+    (work.imdb ? index.byImdb.get(work.imdb.toLowerCase()) : undefined) ||
+    index.byTitle.get(`${work.kind}:${titleKey(work.name)}`)
+  )
+}
+
 const BACKDROP_DWELL_MS = 15000
 const BACKDROP_PRELOAD = 3
 
-function filmographySlides(list: Item[]) {
+/**
+ * The backdrop slides for a person page: the library's own wide artwork for
+ * titles the actor verifiably appears in. Known-for titles the library holds
+ * come first, because those are the parts the actor is recognised for, and the
+ * rest of the filmography follows. A title with no landscape art is left out
+ * rather than padded with borrowed imagery, so nothing unrelated can ever be
+ * painted behind the person.
+ */
+function filmographySlides(list: Item[], known: KnownWork[] | null) {
+  const credits = creditIndex(list)
   const slides: Item[] = []
   const seen = new Set<string>()
-  for (const entry of list) {
-    if (entry.Type !== "Movie" && entry.Type !== "Series") continue
-    const url = wideBackdrop(entry)
-    if (!url || seen.has(url)) continue
-    seen.add(url)
+  const add = (entry: Item) => {
+    if (entry.Type !== "Movie" && entry.Type !== "Series") return
+    if (seen.has(entry.Id) || !wideBackdrop(entry)) return
+    seen.add(entry.Id)
     slides.push(entry)
   }
+  for (const work of known || []) {
+    const owned = knownForCredit(work, credits)
+    if (owned) add(owned)
+  }
+  for (const entry of list) add(entry)
   return slides
 }
 
@@ -553,8 +685,18 @@ async function nextReadySlide(slides: Item[], from: number) {
   return null
 }
 
-function usePersonBackdrop(items: Item[] | null, focused: boolean) {
-  const slides = useMemo(() => filmographySlides(items || []), [items])
+/**
+ * The person page's rotating backdrop. Slides advance on a fifteen-second dwell
+ * (BACKDROP_DWELL_MS) and the stage crossfades them over 900 ms (the filmography
+ * pace). The next few slides are decoded ahead of the beat and the incoming one
+ * is awaited before the index moves, so a transition never paints a blank frame.
+ * Rotation holds still while a card has focus (the remote is driving the stage
+ * itself), in a hidden tab, under `prefers-reduced-motion`, and when the library
+ * can only offer one backdrop; every timer and pending decode is dropped on
+ * unmount, so leaving the page cannot keep working in the background.
+ */
+function usePersonBackdrop(items: Item[] | null, known: KnownWork[] | null, focused: boolean) {
+  const slides = useMemo(() => filmographySlides(items || [], known), [items, known])
   const slideKey = slides.map((entry) => entry.Id).join(",")
   const [index, setIndex] = useState(0)
   const [playing, setPlaying] = useState(pageAllowsBackdropMotion)
@@ -617,6 +759,18 @@ function usePersonBackdrop(items: Item[] | null, focused: boolean) {
   return slides[index] || null
 }
 
+/**
+ * The rotating backdrop is the only thing on a person page that changes on its
+ * own, so it lives in its own component: the fifteen-second beat re-renders one
+ * node that draws nothing, instead of the portrait, biography and filmography
+ * rows underneath it. It draws no markup of its own — the artwork is the stage's.
+ */
+function PersonBackdrop({ items, known, focused }: { items: Item[] | null; known: KnownWork[] | null; focused: boolean }) {
+  const backdrop = usePersonBackdrop(items, known, focused)
+  usePinnedArt(backdrop, false, false)
+  return null
+}
+
 function warmFilmography(items: Item[], focusId?: string) {
   if (!focusId) return
   const art = items.filter((entry) => wideBackdrop(entry))
@@ -630,8 +784,9 @@ function PersonBody({ person }: { person: Item }) {
   const { hovered } = useStage()
   const [items, setItems] = useState<Item[] | null>(null)
   const [known, setKnown] = useState<KnownWork[] | null>(null)
-  const backdrop = usePersonBackdrop(items, Boolean(hovered))
-  usePinnedArt(backdrop, false, false)
+  // One credit index serves the Known-for row and the backdrop matcher alike, so a
+  // known-for title can only ever point at the library title it verifiably is.
+  const credits = useMemo(() => creditIndex(items || []), [items])
   useFilmographyStage(true)
 
   useEffect(() => {
@@ -673,53 +828,40 @@ function PersonBody({ person }: { person: Item }) {
   if (!items && !known) return <Loading label="Loading titles" />
   const movies = (items || []).filter((entry) => entry.Type === "Movie")
   const shows = (items || []).filter((entry) => entry.Type === "Series")
-  const ownedTitle = new Map((items || []).map((entry) => [`${entry.Type}:${titleKey(entry.Name)}`, entry]))
-  // Stable provider ids beat fuzzy title matching: TMDb ids are kind-qualified
-  // (movie and TV ids live in separate namespaces) and IMDb ids are unique.
-  const ownedTmdb = new Map<string, Item>()
-  const ownedImdb = new Map<string, Item>()
-  for (const entry of items || []) {
-    const kind = entry.Type === "Movie" ? "movie" : entry.Type === "Series" ? "series" : ""
-    if (!kind) continue
-    for (const [provider, value] of Object.entries(entry.ProviderIds || {})) {
-      if (!value) continue
-      const key = provider.toLowerCase()
-      if (key === "tmdb") ownedTmdb.set(`${kind}:${value}`, entry)
-      if (key === "imdb") ownedImdb.set(value.toLowerCase(), entry)
-    }
-  }
   const empty = items && known && movies.length === 0 && shows.length === 0 && known.length === 0
 
   return (
-    <div className="detail-body">
-      {known && known.length > 0 && (
-        <Row title="Known for">
-          {known.map((work) => {
-            const match =
-              (work.tmdb ? ownedTmdb.get(`${work.kind === "Series" ? "series" : "movie"}:${work.tmdb}`) : undefined) ||
-              (work.imdb ? ownedImdb.get(work.imdb.toLowerCase()) : undefined) ||
-              ownedTitle.get(`${work.kind}:${titleKey(work.name)}`)
-            if (match) return <PosterCard key={work.id} item={match} layout="poster" href={`/item/${match.Id}`} />
-            return <KnownCard key={work.id} work={work} />
-          })}
-        </Row>
-      )}
-      {movies.length > 0 && (
-        <Row title="Movies in Library">
-          {movies.map((entry) => (
-            <PosterCard key={entry.Id} item={entry} layout="poster" href={`/item/${entry.Id}`} />
-          ))}
-        </Row>
-      )}
-      {shows.length > 0 && (
-        <Row title="TV Shows In Library">
-          {shows.map((entry) => (
-            <PosterCard key={entry.Id} item={entry} layout="poster" href={`/item/${entry.Id}`} />
-          ))}
-        </Row>
-      )}
-      {empty && <p className="hint">No movies or shows for this person.</p>}
-    </div>
+    <>
+      {/* Rotation only: this renders nothing, so the portrait, name, birth details,
+          biography and rows below are never re-rendered by the backdrop beat. */}
+      <PersonBackdrop items={items} known={known} focused={Boolean(hovered)} />
+      <div className="detail-body">
+        {known && known.length > 0 && (
+          <Row title="Known for">
+            {known.map((work) => {
+              const match = knownForCredit(work, credits)
+              if (match) return <PosterCard key={work.id} item={match} layout="poster" href={`/item/${match.Id}`} />
+              return <KnownCard key={work.id} work={work} />
+            })}
+          </Row>
+        )}
+        {movies.length > 0 && (
+          <Row title="Movies in Library">
+            {movies.map((entry) => (
+              <PosterCard key={entry.Id} item={entry} layout="poster" href={`/item/${entry.Id}`} />
+            ))}
+          </Row>
+        )}
+        {shows.length > 0 && (
+          <Row title="TV Shows In Library">
+            {shows.map((entry) => (
+              <PosterCard key={entry.Id} item={entry} layout="poster" href={`/item/${entry.Id}`} />
+            ))}
+          </Row>
+        )}
+        {empty && <p className="hint">No movies or shows for this person.</p>}
+      </div>
+    </>
   )
 }
 

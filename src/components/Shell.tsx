@@ -1,5 +1,6 @@
-import { useEffect, useState, type ReactNode, type SyntheticEvent } from "react"
+import { useEffect, useMemo, useState, type ReactNode, type SyntheticEvent } from "react"
 import { NavLink, Outlet } from "react-router-dom"
+import { sortLibraries } from "../lib/homeLayout"
 import { usePrefs, useSession } from "../session"
 import { HeartIcon, HomeIcon, LibraryIcon, SearchIcon, SettingsIcon } from "./Icons"
 import { Screensaver } from "./Screensaver"
@@ -21,6 +22,9 @@ export function Shell() {
   const { prefs } = usePrefs()
   const [clock, setClock] = useState(() => new Date())
   const icon = 22
+  // Home, Search, Favorites and Settings are always here; the libraries a server
+  // reports fill the middle, in a fixed order rather than the server's own.
+  const ordered = useMemo(() => sortLibraries(libraries), [libraries])
 
   useEffect(() => {
     if (!prefs.showClock) return
@@ -73,13 +77,13 @@ export function Shell() {
           <NavItem to="/" end label="Home">
             <HomeIcon size={icon} />
           </NavItem>
-          <NavItem to="/favorites" label="Favorites">
-            <HeartIcon size={icon} />
-          </NavItem>
           <NavItem to="/search" label="Search">
             <SearchIcon size={icon} />
           </NavItem>
-          {libraries.map((library) => (
+          <NavItem to="/favorites" label="Favorites">
+            <HeartIcon size={icon} />
+          </NavItem>
+          {ordered.map((library) => (
             <NavItem key={library.Id} to={`/library/${library.Id}`} label={library.Name || "Library"}>
               <LibraryIcon type={library.CollectionType} name={library.Name} size={icon} />
             </NavItem>

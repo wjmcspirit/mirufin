@@ -5,7 +5,7 @@ import type { Item } from "../lib/types"
 import { useSession } from "../session"
 
 interface StageLook {
-  pace: "cinematic" | "focus"
+  pace: "cinematic" | "focus" | "hero"
   retain: boolean
   atmosphere: boolean
   wide: boolean
@@ -35,6 +35,18 @@ const EPISODE_LOOK: StageLook = {
   ...DEFAULT_LOOK,
   retain: true,
   stills: true,
+}
+
+/** Home's rotating hero: one controlled crossfade beat for the backdrop. */
+const HERO_LOOK: StageLook = {
+  ...DEFAULT_LOOK,
+  pace: "hero",
+}
+
+const PACE_CLASS: Record<StageLook["pace"], string> = {
+  cinematic: "",
+  focus: "pace-focus",
+  hero: "pace-hero",
 }
 
 interface StageActions {
@@ -280,7 +292,7 @@ function StageArt({
   } as CSSProperties
 
   return (
-    <div className={["stage", pace === "focus" ? "pace-focus" : "", quick ? "pace-quick" : ""].filter(Boolean).join(" ")} aria-hidden="true">
+    <div className={["stage", PACE_CLASS[pace], quick ? "pace-quick" : ""].filter(Boolean).join(" ")} aria-hidden="true">
       {atmosphere && (!current || (!previous && !settled)) && <div className="stage-atmosphere" />}
       {previous && previous !== current && <div key={previous} className="stage-img on" style={{ backgroundImage: `url("${previous}")` }} />}
       {current && <div key={current} className={settled ? "stage-img on" : "stage-img"} style={{ backgroundImage: `url("${current}")` }} />}
@@ -412,4 +424,18 @@ export function useFilmographyStage(enabled = true) {
       hover(null)
     }
   }, [enabled, hover, setLook])
+}
+
+/**
+ * Home's hero: the backdrop crossfades in one controlled beat instead of the
+ * cinematic dissolve, so the outgoing artwork never lingers as a second image.
+ * Hover-driven changes on the same screen still use the quick pace.
+ */
+export function useHeroStage(enabled = true) {
+  const { setLook } = useStageActions()
+  useEffect(() => {
+    if (!enabled) return
+    setLook(HERO_LOOK)
+    return () => setLook(null)
+  }, [enabled, setLook])
 }

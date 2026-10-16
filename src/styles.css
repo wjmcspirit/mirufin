@@ -488,24 +488,44 @@ h1, h2, h3 {
   mask-image: linear-gradient(to bottom, #000 0%, #000 42%, rgba(0, 0, 0, 0.78) 62%, rgba(0, 0, 0, 0.34) 78%, transparent 100%);
 }
 .stage-img.on { opacity: 1; }
+/* Home's rotating hero: one controlled crossfade beat (900 ms) instead of the
+   cinematic dissolve, so the outgoing artwork never lingers as a second image.
+   Hover-driven changes on the same screen still use .pace-quick below. */
+.stage.pace-hero .stage-img {
+  transition: opacity 0.9s ease-in-out !important;
+}
+.stage.pace-hero .stage-scrim {
+  transition:
+    --art-r 0.9s ease-in-out,
+    --art-g 0.9s ease-in-out,
+    --art-b 0.9s ease-in-out,
+    --art-deep-r 0.9s ease-in-out,
+    --art-deep-g 0.9s ease-in-out,
+    --art-deep-b 0.9s ease-in-out;
+}
+/* The person page's filmography backdrop: wide, softly blurred artwork that
+   rotates on a fifteen-second beat. One controlled 900 ms crossfade — the same
+   beat as Home's hero — carries each slide, so the outgoing frame is gone before
+   the next one settles. Hover-driven changes on the same screen still take
+   .pace-quick below. */
 .stage.pace-focus .stage-img {
   background-size: cover;
   background-position: center 18%;
   filter: blur(2px) saturate(0.92) brightness(0.74);
   transform: scale(1.02);
-  transition: opacity 2s ease-in-out !important;
+  transition: opacity 0.9s ease-in-out !important;
 }
 .stage.pace-quick .stage-img {
   transition: opacity 0.2s ease-out !important;
 }
 .stage.pace-focus .stage-scrim {
   transition:
-    --art-r 2s ease-in-out,
-    --art-g 2s ease-in-out,
-    --art-b 2s ease-in-out,
-    --art-deep-r 2s ease-in-out,
-    --art-deep-g 2s ease-in-out,
-    --art-deep-b 2s ease-in-out;
+    --art-r 0.9s ease-in-out,
+    --art-g 0.9s ease-in-out,
+    --art-b 0.9s ease-in-out,
+    --art-deep-r 0.9s ease-in-out,
+    --art-deep-g 0.9s ease-in-out,
+    --art-deep-b 0.9s ease-in-out;
   background:
     radial-gradient(120% 80% at 82% 10%, transparent 22%, rgba(var(--art-deep-r), var(--art-deep-g), var(--art-deep-b), 0.42) 100%),
     linear-gradient(180deg, rgba(9, 9, 11, 0.34) 0%, transparent 18%),
@@ -543,6 +563,8 @@ h1, h2, h3 {
   .stage-scrim,
   .stage.pace-focus .stage-img,
   .stage.pace-focus .stage-scrim,
+  .stage.pace-hero .stage-img,
+  .stage.pace-hero .stage-scrim,
   .stage.pace-quick .stage-img,
   .stage.pace-quick .stage-scrim { transition: none !important; }
 }
@@ -791,16 +813,10 @@ html:not(.remote) .nav:hover .nav-label {
 }
 .hero.stage-copy::before, .detail-hero.stage-copy::before { display: none; }
 .hero-copy, .detail-copy { position: relative; z-index: 1; }
-.hero.stage-copy .hero-copy { animation: hero-in 1.25s ease-in-out; }
-.hero.stage-copy .hero-copy.leaving {
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  pointer-events: none;
-  animation: hero-out 1.25s ease-in-out forwards;
-}
+/* One copy at a time: the incoming title block fades in only after the outgoing
+   one has left the tree, so no second set of text or buttons is ever painted. */
+.hero.stage-copy .hero-copy { animation: hero-in 0.4s ease-out; }
 .hero.stage-copy.hero-quick .hero-copy { animation: hero-in 0.2s ease-out; }
-.hero.stage-copy.hero-quick .hero-copy.leaving { animation: hero-out 0.2s ease-out forwards; }
 .hero-copy h1, .detail-copy h1, .logo-title {
   text-shadow: 0 2px 18px rgba(0, 0, 0, 0.45);
 }
@@ -888,10 +904,6 @@ html:not(.remote) .nav:hover .nav-label {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-@keyframes hero-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
-}
 .logo-title {
   width: min(480px, 86%);
   max-height: 148px;
@@ -901,6 +913,11 @@ html:not(.remote) .nav:hover .nav-label {
 }
 .hero-copy, .detail-copy { padding: 36px; max-width: 760px; display: grid; gap: 12px; }
 .hero-episode { margin: 0; font-size: 20px; }
+/* On the detail page the episode name is the title of the page, so it reads
+   larger than the same line inside Home's hero. */
+.detail-copy .hero-episode { font-size: 24px; font-weight: 500; line-height: 1.25; }
+/* The season and episode number carry the cyan accent the episode rows use. */
+.detail-copy .eyebrow .episode-code { color: #9be6ff; letter-spacing: 0.08em; }
 .overview { max-width: 62ch; }
 .clamp {
   display: -webkit-box;
@@ -1286,7 +1303,7 @@ html:not(.remote) .nav:hover .nav-label {
   color: #fff;
 }
 .card.wide { width: 300px; }
-.card-art, .poster-lg, .episode-art, .photo-frame {
+.card-art, .poster-lg, .episode-art, .photo-frame, .still-lg {
   position: relative;
   display: block;
   overflow: hidden;
@@ -1297,13 +1314,13 @@ html:not(.remote) .nav:hover .nav-label {
 .card .card-art {
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
 }
-.card.wide .card-art, .episode-art { aspect-ratio: 16 / 9; }
-.card-art img, .card-art .ph, .poster-lg img, .poster-lg .ph, .episode-art img, .episode-art .ph, .photo-frame img {
+.card.wide .card-art, .episode-art, .still-lg { aspect-ratio: 16 / 9; }
+.card-art img, .card-art .ph, .poster-lg img, .poster-lg .ph, .episode-art img, .episode-art .ph, .photo-frame img, .still-lg img, .still-lg .ph {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
-.card-art .ph, .poster-lg .ph, .episode-art .ph, .ph {
+.card-art .ph, .poster-lg .ph, .episode-art .ph, .still-lg .ph, .ph {
   display: grid;
   place-items: center;
   align-content: center;
@@ -1545,7 +1562,8 @@ select {
 .more-sentinel { height: 1px; }
 
 .detail-hero { min-height: 0; display: grid; gap: 18px; align-content: start; padding-top: 8px; }
-.detail-actions { flex-wrap: nowrap; width: 100%; }
+/* Wrapping only happens when an episode's full action row cannot fit one line. */
+.detail-actions { flex-wrap: wrap; width: 100%; }
 .detail-layout {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
@@ -1565,7 +1583,20 @@ select {
 }
 .more-link:hover { color: #fff; }
 .poster-lg { width: 320px; box-shadow: var(--shadow); }
+/* An episode's panel is a 16:9 still, so it takes the room a poster would and
+   keeps the copy column wide enough to stay readable on a narrower TV. */
+.detail-layout.episode-layout { grid-template-columns: minmax(0, 1.15fr) minmax(420px, 1fr); }
+.still-lg { box-shadow: var(--shadow); }
 .person-page .poster-lg { position: relative; z-index: 1; }
+/* The person page reads as one column: the Favorite action sits with the
+   biography in the copy column, so the filmography is given its own air before
+   the first heading. Only the space above the rows changes; the shared
+   `.detail-body` gap keeps "Known for", "Movies in Library" and "TV Shows In
+   Library" evenly spaced, and the poster rows keep their own padding. */
+.person-page .detail-body { margin-top: 16px; }
+/* The Favorite button is the person's only action, so it sits at the head of the
+   copy column rather than stretching across it. */
+.person-page .person-actions { justify-content: flex-start; }
 .detail-body { display: grid; gap: 22px; }
 .season-block { display: grid; gap: 0; }
 .season-block .row-head { margin-bottom: 0; }
@@ -2225,7 +2256,7 @@ input[type="range"]::-webkit-slider-thumb {
   .main { height: auto; overflow: visible; padding: 20px 20px 48px; }
   .scroller { padding: 24px 28px 36px; scroll-padding-inline: 28px; }
   .settings-row { grid-template-columns: 1fr; justify-items: start; gap: 10px; }
-  .detail-layout, .episode { grid-template-columns: 1fr; }
+  .detail-layout, .detail-layout.episode-layout, .episode { grid-template-columns: 1fr; }
   .detail-actions { flex-wrap: wrap; }
   .poster-lg { width: min(280px, 72%); }
   .episode-art { width: min(220px, 60%); }
@@ -2314,7 +2345,6 @@ input[type="range"]::-webkit-slider-thumb {
     animation: none !important;
     transition: none !important;
   }
-  .hero-copy.leaving { display: none; }
 }
 
 .server-choice:focus,

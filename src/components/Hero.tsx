@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { episodeCode, metaLine, progressPct } from "../lib/format"
 import type { Item } from "../lib/types"
@@ -12,21 +11,6 @@ interface HeroFace {
   playHref?: string
   playLabel?: string
   detail?: string
-}
-
-const FOCUS_FADE_MS = 240
-const CINEMATIC_FADE_MS = 1400
-
-function useHeroMotion(itemId: string, focused: boolean) {
-  const motion = useRef<"cinematic" | "quick">("cinematic")
-  const prevId = useRef(itemId)
-  const prevFocused = useRef(focused)
-  if (itemId !== prevId.current) {
-    motion.current = focused || prevFocused.current ? "quick" : "cinematic"
-    prevId.current = itemId
-  }
-  prevFocused.current = focused
-  return motion.current
 }
 
 export function Hero({
@@ -49,35 +33,10 @@ export function Hero({
   focused?: boolean
 }) {
   const face: HeroFace = { item, presentation, playHref, playLabel, detail }
-  const liveRef = useRef(face)
-  const [live, setLive] = useState(face)
-  const [outgoing, setOutgoing] = useState<HeroFace | null>(null)
-  const desiredMotion = useHeroMotion(item.Id, focused)
-  const [motion, setMotion] = useState(desiredMotion)
-
-  useEffect(() => {
-    const previous = liveRef.current
-    const next = { item, presentation, playHref, playLabel, detail }
-    liveRef.current = next
-    setLive(next)
-    if (previous.item.Id === item.Id) return
-    setMotion(desiredMotion)
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setOutgoing(null)
-      return
-    }
-    setOutgoing(previous)
-  }, [desiredMotion, detail, item, playHref, playLabel, presentation])
-
-  useEffect(() => {
-    if (!outgoing) return
-    const timer = window.setTimeout(() => setOutgoing(null), motion === "quick" ? FOCUS_FADE_MS : CINEMATIC_FADE_MS)
-    return () => window.clearTimeout(timer)
-  }, [motion, outgoing])
 
   return (
     <section
-      className={motion === "quick" ? "hero stage-copy hero-quick" : "hero stage-copy"}
+      className={focused ? "hero stage-copy hero-quick" : "hero stage-copy"}
       onMouseEnter={() => onHold(true)}
       onMouseLeave={() => onHold(false)}
       onFocus={() => onHold(true)}
@@ -85,31 +44,18 @@ export function Hero({
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onHold(false)
       }}
     >
-      {outgoing && (
-        <HeroCopy
-          key={outgoing.item.Id}
-          face={outgoing}
-          hidden
-          onTrailer={onTrailer}
-          onDone={() => setOutgoing(null)}
-        />
-      )}
-      <HeroCopy key={live.item.Id} face={live} onTrailer={onTrailer} />
+      {/*
+        Exactly one copy is mounted at a time. The keyed swap replaces the whole
+        copy in a single commit, so the outgoing title, metadata, synopsis and
+        buttons have already left the tree when the incoming copy fades in: two
+        hero copies can never overlap and ghost each other.
+      */}
+      <HeroCopy key={item.Id} face={face} onTrailer={onTrailer} />
     </section>
   )
 }
 
-function HeroCopy({
-  face,
-  hidden = false,
-  onTrailer,
-  onDone,
-}: {
-  face: HeroFace
-  hidden?: boolean
-  onTrailer: (open: boolean) => void
-  onDone?: () => void
-}) {
+function HeroCopy({ face, onTrailer }: { face: HeroFace; onTrailer: (open: boolean) => void }) {
   const { item, presentation, playHref, playLabel, detail } = face
   const progress = progressPct(item)
   const series = item.Type === "Series"
@@ -121,14 +67,7 @@ function HeroCopy({
   const episodeLine = [episodeCode(item), item.Name].filter(Boolean).join(" · ")
 
   return (
-    <div
-      className={hidden ? "hero-copy leaving" : "hero-copy"}
-      aria-hidden={hidden || undefined}
-      inert={hidden || undefined}
-      onAnimationEnd={(event) => {
-        if (event.target === event.currentTarget && event.animationName === "hero-out") onDone?.()
-      }}
-    >
+    <div className="hero-copy">
       {episode && !freshEpisode && (
         <p className="eyebrow">
           {item.SeriesName} {episodeCode(item) ? `· ${episodeCode(item)}` : ""}

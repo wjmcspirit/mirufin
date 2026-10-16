@@ -72,10 +72,15 @@ export function seasonArtSrc(season: Item, series?: Item | null, maxWidth: numbe
   return ownPrimarySrc(season, maxWidth) || (series ? primarySrc(series, maxWidth) : null)
 }
 
-function backdropUrl(item: Item, maxWidth: number) {
+function ownBackdropUrl(item: Item, maxWidth: number) {
   if (item.BackdropImageTags?.[0]) {
     return imageUrl(item.Id, "Backdrop", { maxWidth, tag: item.BackdropImageTags[0] })
   }
+  return null
+}
+
+/** The backdrop of the item that holds one for this one, such as a series. */
+function parentBackdropUrl(item: Item, maxWidth: number) {
   if (item.ParentBackdropItemId && item.ParentBackdropImageTags?.[0]) {
     return imageUrl(item.ParentBackdropItemId, "Backdrop", {
       maxWidth,
@@ -85,16 +90,29 @@ function backdropUrl(item: Item, maxWidth: number) {
   return null
 }
 
+function backdropUrl(item: Item, maxWidth: number) {
+  return ownBackdropUrl(item, maxWidth) || parentBackdropUrl(item, maxWidth)
+}
+
 export function backdropSrc(item: Item) {
   return backdropUrl(item, 1920)
 }
 
-function thumbOnly(item: Item, maxWidth: number) {
+function ownThumbUrl(item: Item, maxWidth: number) {
   if (item.ImageTags?.Thumb) return imageUrl(item.Id, "Thumb", { maxWidth, tag: item.ImageTags.Thumb })
+  return null
+}
+
+/** The thumb of the item that holds one for this one, such as a series. */
+function parentThumbUrl(item: Item, maxWidth: number) {
   if (item.ParentThumbItemId && item.ParentThumbImageTag) {
     return imageUrl(item.ParentThumbItemId, "Thumb", { maxWidth, tag: item.ParentThumbImageTag })
   }
   return null
+}
+
+function thumbOnly(item: Item, maxWidth: number) {
+  return ownThumbUrl(item, maxWidth) || parentThumbUrl(item, maxWidth)
 }
 
 /** Wide library art for a title. Portrait posters and person photos are left out. */
@@ -146,11 +164,7 @@ export function thumbSrc(item: Item, maxWidth: number = ART_WIDTH.wide.medium) {
 
 /** Still that belongs to this episode. Parent series art is left out. */
 export function episodeOwnStill(item: Item, maxWidth: number = ART_WIDTH.wide.medium) {
-  const primary = ownPrimarySrc(item, maxWidth)
-  if (primary) return primary
-  if (item.ImageTags?.Thumb) return imageUrl(item.Id, "Thumb", { maxWidth, tag: item.ImageTags.Thumb })
-  if (item.BackdropImageTags?.[0]) return imageUrl(item.Id, "Backdrop", { maxWidth, tag: item.BackdropImageTags[0] })
-  return null
+  return ownPrimarySrc(item, maxWidth) || ownThumbUrl(item, maxWidth) || ownBackdropUrl(item, maxWidth)
 }
 
 /** Episode card art: the episode still, then artwork from the loaded series or season. */
@@ -159,6 +173,26 @@ export function episodeStillSrc(item: Item, maxWidth: number = ART_WIDTH.wide.me
   if (own) return own
   if (!series || series.Id === item.Id) return null
   return primarySrc(series, maxWidth) || thumbSrc(series, maxWidth)
+}
+
+/**
+ * Landscape artwork for an episode's detail panel. The episode's own still comes
+ * first, then the wide art of the series it belongs to, so a 16:9 frame is never
+ * filled with a portrait poster: `PrimaryImageAspectRatio` describes the
+ * episode's own primary image, and a primary that is known to be portrait is
+ * skipped in favour of the episode's thumb or backdrop.
+ */
+export function episodeWideStill(item: Item, maxWidth: number = ART_WIDTH.wide.large) {
+  const ratio = item.PrimaryImageAspectRatio
+  // A primary that is known to be portrait is not a still: leave it out.
+  const still = ratio && ratio < 1.4 ? null : ownPrimarySrc(item, maxWidth)
+  return (
+    still ||
+    ownThumbUrl(item, maxWidth) ||
+    ownBackdropUrl(item, maxWidth) ||
+    parentBackdropUrl(item, maxWidth) ||
+    parentThumbUrl(item, maxWidth)
+  )
 }
 
 export function logoSrc(item: Item) {
