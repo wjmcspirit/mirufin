@@ -1,6 +1,6 @@
 import { Capacitor, registerPlugin } from "@capacitor/core"
 
-export const APP_VERSION = "0.1.23"
+export const APP_VERSION = "0.1.24"
 
 const REPO = "wjmcspirit/mirufin"
 
