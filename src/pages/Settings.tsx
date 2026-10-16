@@ -2,6 +2,7 @@ import { Capacitor } from "@capacitor/core"
 import { useEffect, useState, type ReactNode } from "react"
 import { HomeEditor } from "../components/HomeEditor"
 import * as api from "../lib/api"
+import { clearStartupProblem, startupProblem } from "../lib/startup"
 import type { SegmentType, SkipMode } from "../lib/types"
 import { APP_VERSION, installRelease, isNewerVersion, latestRelease } from "../lib/version"
 import { usePrefs, useSession } from "../session"
@@ -45,6 +46,7 @@ export function SettingsPage() {
   const [message, setMessage] = useState("")
   const [available, setAvailable] = useState("")
   const [updating, setUpdating] = useState("")
+  const [problem, setProblem] = useState("")
 
   useEffect(() => {
     let cancel = false
@@ -53,6 +55,17 @@ export function SettingsPage() {
         if (!cancel && tag && isNewerVersion(tag)) setAvailable(tag.replace(/^v/i, ""))
       })
       .catch(() => {})
+    return () => {
+      cancel = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancel = false
+    // A launch that had to be repaired leaves the reason here, so it can be reported.
+    void startupProblem().then((result) => {
+      if (!cancel) setProblem(result.reason)
+    })
     return () => {
       cancel = true
     }
@@ -211,6 +224,24 @@ export function SettingsPage() {
         <p className="settings-product">Mirufin</p>
         <p>Version {APP_VERSION}</p>
         <p className="eyebrow">Beta</p>
+        {problem && (
+          <div className="settings-block">
+            <h3>Last launch</h3>
+            <p className="hint">{problem}</p>
+            <div className="actions">
+              <button
+                className="btn"
+                type="button"
+                onClick={() => {
+                  void clearStartupProblem()
+                  setProblem("")
+                }}
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        )}
         {available && Capacitor.isNativePlatform() && (
           <div className="actions">
             <button

@@ -8,7 +8,18 @@
     <link rel="icon" href="/mirufin-m.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&display=swap" rel="stylesheet" />
+    <!-- Outfit is loaded without blocking the first paint: a TV that cannot reach Google
+         Fonts used to sit on a blank page until the request timed out. The stylesheet
+         falls back to Segoe UI in the meantime. -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&display=swap"
+      rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&display=swap" rel="stylesheet" />
+    </noscript>
     <style>
       html, body { margin: 0; background: #000; height: 100%; }
       #boot {

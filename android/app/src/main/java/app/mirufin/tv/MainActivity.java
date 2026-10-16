@@ -21,6 +21,9 @@ import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebChromeClient;
 import com.getcapacitor.WebViewListener;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
+
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -28,6 +31,7 @@ public class MainActivity extends BridgeActivity {
         // store was damaged by an abrupt kill, so clear it before any WebView exists here.
         StartupState.healIfPending(this);
         StartupState.markPending(this);
+        installCrashLogger();
         registerPlugin(DiscoveryPlugin.class);
         registerPlugin(UpdatePlugin.class);
         registerPlugin(NativePlayerPlugin.class);
@@ -111,19 +115,53 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
+     * Android kills the process on an uncaught exception, which leaves nothing behind to
+     * explain a launch that never came up. Record the reason before the process goes, so
+     * the next launch can report it and clear a store the crash may have damaged.
+     */
+    private void installCrashLogger() {
+        final Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
+            try {
+                StartupState.noteDeath(getApplicationContext(), summary(error));
+            } catch (Exception ignored) {
+                // Reporting must never mask the crash itself.
+            }
+            if (previous != null) previous.uncaughtException(thread, error);
+        });
+    }
+
+    private static String summary(Throwable error) {
+        StringWriter text = new StringWriter();
+        error.printStackTrace(new PrintWriter(text));
+        return text.toString().trim();
+    }
+
+    /**
      * The WebView renderer runs in its own process: when it dies (a damaged store, or the
      * system reclaiming memory) Android takes Mirufin down with it unless the event is
-     * handled. Restart into a clean task instead, clearing a store that crashed it.
+     * handled. Restart into a clean task instead.
+     *
+     * The store is deliberately not cleared here. A wipe only happens from onCreate()
+     * ahead of a WebView, which the next launch does, because removing the data directory
+     * of a live WebView provider leaves a store that crashes every launch afterwards.
      */
     private class RecoveryListener extends WebViewListener {
         @Override
         public boolean onRenderProcessGone(WebView webView, RenderProcessGoneDetail detail) {
-            if (detail == null || detail.didCrash()) {
-                StartupState.wipeWebViewStore(MainActivity.this);
+            boolean crashed = detail == null || detail.didCrash();
+            StartupState.noteDeath(
+                MainActivity.this,
+                crashed ? "The web view renderer crashed." : "Android reclaimed the web view renderer."
+            );
+            // A renderer that dies again immediately after every restart would restart
+            // Mirufin forever, so past the budget the app is left closed instead and the
+            // next launch heals it.
+            if (StartupState.allowRestart()) {
+                Intent restart = new Intent(getApplicationContext(), MainActivity.class);
+                restart.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                startActivity(restart);
             }
-            Intent restart = new Intent(getApplicationContext(), MainActivity.class);
-            restart.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-            startActivity(restart);
             finish();
             return true;
         }

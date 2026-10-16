@@ -28,8 +28,16 @@ function RequireAuth() {
 export function App() {
   useEffect(() => {
     document.getElementById("boot")?.remove()
-    // Tell the Android shell the app is up, so a launch that dies early can be healed.
-    void markStartupReady()
+    // Report only once a frame is actually on screen: a launch that paints nothing has to
+    // look like a launch that failed, not one that finished.
+    let inner = 0
+    const outer = window.requestAnimationFrame(() => {
+      inner = window.requestAnimationFrame(() => void markStartupReady())
+    })
+    return () => {
+      window.cancelAnimationFrame(outer)
+      window.cancelAnimationFrame(inner)
+    }
   }, [])
 
   return (
