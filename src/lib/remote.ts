@@ -32,6 +32,85 @@ export function isBackKey(event: { key: string; keyCode?: number }) {
   return key === "Escape" || key === "BrowserBack" || key === "GoBack" || key === "Back" || event.keyCode === 4 || event.keyCode === 461 || event.keyCode === 10009
 }
 
+/**
+ * Overlays that own the Back key while they are open.
+ *
+ * Android never hands the remote's Back key to the page as a keydown: Capacitor's App
+ * plugin takes the press in the activity and fires the `backButton` event instead. An
+ * overlay that only listened for Escape could therefore never be closed with the remote,
+ * which is how a View/Sort/Filter menu used to trap the viewer - the television's Home
+ * button was the only way out. Overlays register how they close here, and the Back
+ * handlers offer the press to them before the page acts on it.
+ */
+type BackOwner = () => boolean
+
+const backOwners: BackOwner[] = []
+/** When a Back press was already answered on the keydown path. */
+let backKeydownAt = Number.NEGATIVE_INFINITY
+const BACK_ECHO_MS = 250
+
+/** Register an overlay that answers Back while it is open. Returns the release. */
+export function ownBack(owner: BackOwner) {
+  backOwners.push(owner)
+  return () => {
+    const index = backOwners.indexOf(owner)
+    if (index >= 0) backOwners.splice(index, 1)
+  }
+}
+
+/**
+ * The open overlay on top answers a Back press. `false` means no overlay wanted it, so
+ * the page's own Back behaviour runs.
+ */
+export function takeBack() {
+  // Some remotes also deliver the press to the page as an Escape keydown. Once that has
+  // been answered the native event for the same press must not act again: it would close
+  // the menu and then leave the page on a single press.
+  if (performance.now() - backKeydownAt < BACK_ECHO_MS) return true
+  for (let index = backOwners.length - 1; index >= 0; index -= 1) {
+    if (backOwners[index]()) return true
+  }
+  return false
+}
+
+/** The keydown path answered a Back press: browser Escape, or a keyboard on the TV. */
+export function noteBackKeydown() {
+  backKeydownAt = performance.now()
+}
+
+/**
+ * Controls that answer Left/Right themselves while they hold focus.
+ *
+ * A settings row has nothing beside it to visit: the control sits at the end of a row
+ * whose other side is its own label, so moving focus sideways would walk off the row.
+ * The value is what the press should move instead, which is how a slider behaves. A
+ * control registers here, and `moveFocus` offers it the press before it looks for a
+ * neighbour; `false` means "no step left", so the press is free to move on and the
+ * viewer is never stuck at the end of a control.
+ */
+type ArrowAdjuster = (key: "ArrowLeft" | "ArrowRight") => boolean
+
+const arrowAdjusters = new WeakMap<HTMLElement, ArrowAdjuster>()
+
+/** Register a control that consumes Left/Right while it or anything inside it is focused. */
+export function ownArrows(node: HTMLElement, adjust: ArrowAdjuster) {
+  arrowAdjusters.set(node, adjust)
+  return () => {
+    arrowAdjusters.delete(node)
+  }
+}
+
+/** The nearest registered control around whatever is focused, if it wants the press. */
+function arrowAdjuster() {
+  let node = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  while (node) {
+    const adjust = arrowAdjusters.get(node)
+    if (adjust) return adjust
+    node = node.parentElement
+  }
+  return null
+}
+
 function visible(node: HTMLElement) {
   if (node.closest("[inert]")) return false
   const rect = node.getBoundingClientRect()
@@ -83,6 +162,17 @@ export function placeFocus(node: HTMLElement) {
   focusNode(node)
 }
 
+/**
+ * The options of an open toolbar menu, and where in them the viewer was: a press that
+ * arrives after that option disappears (a filter or the data behind it changed) lands on
+ * the nearest option that is left instead of the page behind the menu.
+ */
+let menuSeat = -1
+
+function menuOptions(pop: HTMLElement) {
+  return [...pop.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(visible)
+}
+
 function focusNode(node: HTMLElement) {
   markFocus(node)
   if (place(node) === "main" && !node.closest(".tool-pop, .trailer-pop")) returnMain = node
@@ -97,6 +187,8 @@ function focusNode(node: HTMLElement) {
   // without letting reveal() scroll the page behind the open menu.
   const pop = node.closest<HTMLElement>(".tool-pop")
   if (pop) {
+    const seat = menuOptions(pop).indexOf(node)
+    if (seat >= 0) menuSeat = seat
     scrollInside(pop, node)
     return
   }
@@ -166,15 +258,19 @@ function park(main: HTMLElement, target: HTMLElement, pad: number) {
 
 function scrollInside(scroller: HTMLElement, node: HTMLElement) {
   const box = scroller.getBoundingClientRect()
+  // A rect is measured in screen pixels while a scroll offset is in layout pixels: on the
+  // television build the app is scaled with a root zoom, and mixing the two overshoots far
+  // enough to push the focused option out of sight of its own menu.
+  const scale = scroller.offsetWidth > 0 ? box.width / scroller.offsetWidth : 1
   const rect = node.getBoundingClientRect()
   if (scroller.scrollWidth > scroller.clientWidth + 8) {
-    if (rect.left >= box.left + 8 && rect.right <= box.right - 8) return
-    const left = scroller.scrollLeft + rect.left - box.left - (box.width - rect.width) / 2
+    if (rect.left >= box.left + 8 * scale && rect.right <= box.right - 8 * scale) return
+    const left = scroller.scrollLeft + (rect.left - box.left - (box.width - rect.width) / 2) / scale
     scroller.scrollTo({ left: Math.max(0, left), behavior: "auto" })
     return
   }
-  if (rect.top >= box.top + 4 && rect.bottom <= box.bottom - 4) return
-  const top = scroller.scrollTop + rect.top - box.top - (box.height - rect.height) / 2
+  if (rect.top >= box.top + 4 * scale && rect.bottom <= box.bottom - 4 * scale) return
+  const top = scroller.scrollTop + (rect.top - box.top - (box.height - rect.height) / 2) / scale
   scroller.scrollTo({ top: Math.max(0, top), behavior: "auto" })
 }
 
@@ -231,14 +327,25 @@ function stepList(current: FocusItem, items: FocusItem[], key: "ArrowUp" | "Arro
   return items[index + (key === "ArrowDown" ? 1 : -1)] || null
 }
 
-const BAND = ".scroller, .grid, .card-board, .episodes, .library-icons, .letter-row, .actions, .meta-links, .settings-row, .choice, .seconds"
+const BAND =
+  ".scroller, .grid, .card-board, .episodes, .library-icons, .letter-row, .actions, .meta-links, .settings-menu, .settings-row, .choice, .seconds, .search-picks, .search-hits"
 
 function containerOf(node: HTMLElement) {
   return node.closest<HTMLElement>(BAND)
 }
 
 function kind(band: HTMLElement): "strip" | "grid" | "list" {
-  if (band.classList.contains("grid") || band.classList.contains("card-board") || band.classList.contains("episodes")) return "grid"
+  if (
+    band.classList.contains("grid") ||
+    band.classList.contains("card-board") ||
+    band.classList.contains("episodes") ||
+    // Search results and the library strip are wrapping rows of cards, so they navigate
+    // as a grid: sideways along a row, and a whole row at a time up and down.
+    band.classList.contains("search-picks") ||
+    band.classList.contains("search-hits")
+  ) {
+    return "grid"
+  }
   if (
     band.classList.contains("scroller") ||
     band.classList.contains("actions") ||
@@ -374,6 +481,12 @@ function contentAnchor(items: FocusItem[]) {
 }
 
 export function moveFocus(key: string) {
+  // A slider or a choice gets the sideways press first: on a settings row the value is
+  // what should move, not the focus.
+  if (key === "ArrowLeft" || key === "ArrowRight") {
+    const adjust = arrowAdjuster()
+    if (adjust && adjust(key)) return
+  }
   const items = focusSnapshot()
   if (items.length === 0) return
   const active = document.activeElement instanceof HTMLElement ? document.activeElement : null
@@ -383,6 +496,17 @@ export function moveFocus(key: string) {
     // frame's snapshot: its focus is valid, so leave it where it is and let the
     // next press measure it again.
     if (active && active !== document.body && active !== document.documentElement && active.isConnected && !active.closest("[inert]")) return
+    // An open toolbar menu owns focus: an option that went away leaves the press on the
+    // nearest option that is left, never on the content behind the menu.
+    const pop = document.querySelector<HTMLElement>(".tool-pop")
+    if (pop) {
+      const options = menuOptions(pop)
+      const next = options[Math.min(Math.max(menuSeat, 0), options.length - 1)]
+      if (next) {
+        focusNode(next)
+        return
+      }
+    }
     const anchor = contentAnchor(items)
     if (anchor) {
       focusNode(anchor)
@@ -464,6 +588,7 @@ export function moveFocus(key: string) {
 /** Clear cross-page focus memory (return targets and strip lane). */
 export function resetFocusState() {
   lane = 0
+  menuSeat = -1
   returnSide = null
   returnMain = null
 }

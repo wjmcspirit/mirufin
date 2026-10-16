@@ -1,15 +1,39 @@
-import { CARD_SIZES, CARD_STYLES, mergeHomeRows, sectionTitle } from "../lib/homeLayout"
-import type { HomeRowSetting } from "../lib/types"
+import { CARD_SIZES, CARD_STYLES, libraryRowId, mergeHomeRows, sectionTitle } from "../lib/homeLayout"
+import type { HomeCardSize, HomeCardStyle, HomeRowSetting } from "../lib/types"
 import { usePrefs, useSession } from "../session"
+import { Choice, MoveControl, type Option } from "./SettingsControls"
 
-export function HomeEditor() {
+/**
+ * The home screen, split by what a change does rather than by where the button sits: how
+ * the rows are arranged, and how large the posters in them are. Both read the same saved
+ * rows, so the two lists never disagree about what is on the home screen.
+ */
+
+const VISIBLE: Option<"show" | "hide">[] = [
+  { value: "show", label: "Show" },
+  { value: "hide", label: "Hide" },
+]
+
+const SHAPES: Option<HomeCardStyle>[] = CARD_STYLES.map((style) => ({ value: style.id, label: style.label }))
+
+const SIZES: Option<HomeCardSize>[] = CARD_SIZES.map((size) => ({ value: size.id, label: size.label }))
+
+function useHomeRows() {
   const { libraries } = useSession()
   const { prefs, setPrefs } = usePrefs()
   const ids = libraries.map((library) => library.Id)
-  const sections = mergeHomeRows(prefs.homeRows, ids)
+  const rows = mergeHomeRows(prefs.homeRows, ids).map((row) => ({ ...row, title: sectionTitle(row.id, libraries) }))
 
   function saveRows(update: (rows: HomeRowSetting[]) => HomeRowSetting[]) {
-    setPrefs((current) => ({ homeRows: update(mergeHomeRows(current.homeRows, ids)) }))
+    setPrefs((current) => {
+      // A row for a library this launch has not reported yet is not on screen, so writing
+      // the visible rows would drop it and silently reset a saved home screen. The list is
+      // left exactly as it is until the libraries are known.
+      const known = new Set(ids.map(libraryRowId))
+      const hidden = current.homeRows.some((row) => row.id.startsWith("lib:") && !known.has(row.id))
+      if (hidden) return current
+      return { homeRows: update(mergeHomeRows(current.homeRows, ids)) }
+    })
   }
 
   function moveRow(id: string, delta: number) {
@@ -28,61 +52,56 @@ export function HomeEditor() {
     saveRows((list) => list.map((row) => (row.id === id ? { ...row, ...patch } : row)))
   }
 
+  return { rows, ready: libraries.length > 0, moveRow, patchRow }
+}
+
+/** How the home rows are arranged: whether one shows, where it sits, and its shape. */
+export function HomeLayoutGroup() {
+  const { rows, ready, moveRow, patchRow } = useHomeRows()
   return (
-    <div className="settings-block" aria-label="Home layout">
-      <h3>Home layout</h3>
-      <p className="hint">These options only change the Home screen.</p>
-      <div className="home-editor">
-        <div className="home-row-edit">
-          <strong>Featured title</strong>
-          <div className="choice">
-            <button className="btn tiny" type="button" aria-pressed={prefs.showHero} onClick={() => setPrefs({ showHero: true })}>
-              Show
-            </button>
-            <button className="btn tiny" type="button" aria-pressed={!prefs.showHero} onClick={() => setPrefs({ showHero: false })}>
-              Hide
-            </button>
-          </div>
+    <div className="settings-block">
+      <h3>Home rows</h3>
+      <p className="hint">
+        {ready ? "Turn a row off, move it up or down, or change its shape." : "Your home rows appear once the server's libraries load."}
+      </p>
+      {rows.map((row, index) => (
+        <div className="settings-row settings-rows" key={row.id}>
+          <span className="settings-copy">
+            <strong>{row.title}</strong>
+          </span>
+          <Choice
+            label={`${row.title} visible`}
+            value={row.visible ? "show" : "hide"}
+            options={VISIBLE}
+            onChange={(next) => patchRow(row.id, { visible: next === "show" })}
+          />
+          <Choice label={`${row.title} shape`} value={row.style} options={SHAPES} onChange={(style) => patchRow(row.id, { style })} />
+          <MoveControl label={row.title} index={index} count={rows.length} onMove={(delta) => moveRow(row.id, delta)} />
         </div>
-        {sections.map((section, index) => {
-          const title = sectionTitle(section.id, libraries)
-          return (
-            <div className="home-row-edit" key={section.id}>
-              <strong>{title}</strong>
-              <div className="choice">
-                <button className="btn tiny" type="button" aria-pressed={section.visible} onClick={() => patchRow(section.id, { visible: true })}>
-                  Show
-                </button>
-                <button className="btn tiny" type="button" aria-pressed={!section.visible} onClick={() => patchRow(section.id, { visible: false })}>
-                  Hide
-                </button>
-              </div>
-              <div className="choice">
-                {CARD_STYLES.map((style) => (
-                  <button key={style.id} className="btn tiny" type="button" aria-pressed={section.style === style.id} onClick={() => patchRow(section.id, { style: style.id })}>
-                    {style.label}
-                  </button>
-                ))}
-              </div>
-              <div className="choice">
-                {CARD_SIZES.map((size) => (
-                  <button key={size.id} className="btn tiny" type="button" aria-pressed={section.size === size.id} onClick={() => patchRow(section.id, { size: size.id })}>
-                    {size.label}
-                  </button>
-                ))}
-              </div>
-              <div className="choice">
-                <button className="btn tiny" type="button" disabled={index === 0} onClick={() => moveRow(section.id, -1)}>
-                  Up
-                </button>
-                <button className="btn tiny" type="button" disabled={index === sections.length - 1} onClick={() => moveRow(section.id, 1)}>
-                  Down
-                </button>
-              </div>
-            </div>
-          )
-        })}
-      </div>
+      ))}
+    </div>
+  )
+}
+
+/** How large the poster in each home row is. */
+export function HomeSizeGroup() {
+  const { rows, ready, patchRow } = useHomeRows()
+  return (
+    <div className="settings-block">
+      <h3>Home row posters</h3>
+      <p className="hint">
+        {ready
+          ? "How large the poster in each row is. Small fits more across the screen; large shows fewer, bigger."
+          : "Your home rows appear once the server's libraries load."}
+      </p>
+      {rows.map((row) => (
+        <div className="settings-row settings-rows" key={row.id}>
+          <span className="settings-copy">
+            <strong>{row.title}</strong>
+          </span>
+          <Choice label={`${row.title} poster size`} value={row.size} options={SIZES} onChange={(size) => patchRow(row.id, { size })} />
+        </div>
+      ))}
     </div>
   )
 }

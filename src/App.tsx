@@ -55,6 +55,7 @@ export function App() {
         <Route path="/search" element={<SearchPage />} />
         <Route path="/favorites" element={<FavoritesPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/settings/:section" element={<SettingsPage />} />
         <Route path="*" element={<p className="empty">That page is not in Mirufin.</p>} />
       </Route>
       <Route path="/play/:id" element={<PlayGate />} />

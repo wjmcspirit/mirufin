@@ -3,7 +3,7 @@ import { Capacitor } from "@capacitor/core"
 import { useEffect } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { useLocalProxy } from "../lib/media"
-import { backHeld, focusables, isBackKey, moveFocus, placeFocus, rememberedHref, remoteKey, resetFocusState } from "../lib/remote"
+import { backHeld, focusables, isBackKey, moveFocus, placeFocus, rememberedHref, remoteKey, resetFocusState, takeBack } from "../lib/remote"
 
 const ARROWS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])
 const TEXT_TYPES = new Set(["text", "password", "search", "url", "email", "tel"])
@@ -88,8 +88,12 @@ export function RemoteNav() {
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return
     const handle = NativeApp.addListener("backButton", () => {
-      // An open overlay (menu, trailer, media info) owns Back: it closes itself
-      // through its own keydown listener instead of leaving the page.
+      // An open overlay owns Back first. Android never hands the remote's Back key to the
+      // page as a keydown, so for a toolbar menu this event is the only place the press
+      // can be seen at all - without this it closed nothing and trapped the viewer.
+      if (takeBack()) return
+      // An overlay that only listens for keydown (the trailer sheet, media info) closes
+      // itself there instead of leaving the page.
       if (backHeld()) return
       const player = document.querySelector(".player")
       if (player) {
@@ -123,14 +127,13 @@ export function RemoteNav() {
       const key = remoteKey(event)
       const target = event.target instanceof HTMLElement ? event.target : null
       const field = target?.closest("input, textarea, select")
-      if (field instanceof HTMLElement) {
+      // Settings holds no text fields, and Back there always means "up one level": even
+      // while a toggle holds focus it belongs to the page, not to the control, and
+      // blurring the control first would cost the viewer a second press.
+      const settingsBack = isBackKey(event) && location.pathname.startsWith("/settings")
+      if (field instanceof HTMLElement && !settingsBack) {
         if (isBackKey(event)) {
           event.preventDefault()
-          if (location.pathname === "/settings") {
-            if (backHeld()) return
-            navigate(-1)
-            return
-          }
           field.blur()
           return
         }
@@ -161,6 +164,12 @@ export function RemoteNav() {
       }
       document.documentElement.classList.add("remote")
       if (isBackKey(event)) {
+        // Escape is the Back key for a keyboard, and an open overlay answers it here too,
+        // whichever path the press arrived on.
+        if (takeBack()) {
+          event.preventDefault()
+          return
+        }
         if (backHeld()) return
         if (location.pathname === "/" || location.pathname === "/connect") return
         event.preventDefault()

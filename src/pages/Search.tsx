@@ -22,7 +22,7 @@ const GROUPS: { title: string; types: string[] }[] = [
 
 const RECENT = "mirufin.searches"
 const KEY_ROWS = ["ABCDEFG", "HIJKLMN", "OPQRSTU", "VWXYZ12", "3456789"]
-const PICK_MIN = 168
+const PICK_MIN = 124
 const PICK_GAP = 12
 const PICK_LIMIT = 10
 
@@ -215,27 +215,6 @@ export function SearchPage() {
               </button>
             </div>
           </div>
-          {!term && recent.length > 0 && (
-            <div className="recent-searches">
-              <p className="search-label">Recent searches</p>
-              <div className="search-browse">
-                {recent.map((entry) => (
-                  <button key={entry} type="button" onClick={() => setText(entry)}>
-                    {entry}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => {
-                    localStorage.removeItem(RECENT)
-                    setRecent([])
-                  }}
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
-          )}
           {!term && (
             <>
               <p className="search-label">Browse your library</p>
@@ -264,6 +243,27 @@ export function SearchPage() {
                 </Link>
               </nav>
             </>
+          )}
+          {!term && recent.length > 0 && (
+            <div className="recent-searches">
+              <p className="search-label">Recent</p>
+              <div className="search-browse">
+                {recent.map((entry) => (
+                  <button key={entry} type="button" onClick={() => setText(entry)}>
+                    {entry}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.removeItem(RECENT)
+                    setRecent([])
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
           )}
         </div>
         {!term && shownPicks.length > 0 && (

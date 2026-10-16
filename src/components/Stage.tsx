@@ -439,3 +439,29 @@ export function useHeroStage(enabled = true) {
     return () => setLook(null)
   }, [enabled, setLook])
 }
+
+/**
+ * Whether this page may move artwork on its own: Mirufin has to be on screen and
+ * `prefers-reduced-motion` has to be off. Both are watched live, so backgrounding
+ * the app or asking for less motion stops a rotating hero or backdrop immediately
+ * and lets it start again when the viewer comes back.
+ */
+export function useArtMotion() {
+  const [allowed, setAllowed] = useState(pageAllowsArtMotion)
+  useEffect(() => {
+    const sync = () => setAllowed(pageAllowsArtMotion())
+    sync()
+    document.addEventListener("visibilitychange", sync)
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)")
+    motion.addEventListener("change", sync)
+    return () => {
+      document.removeEventListener("visibilitychange", sync)
+      motion.removeEventListener("change", sync)
+    }
+  }, [])
+  return allowed
+}
+
+function pageAllowsArtMotion() {
+  return document.visibilityState !== "hidden" && !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+}

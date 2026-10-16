@@ -1,15 +1,17 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { createPortal } from "react-dom"
 import { useParams, useSearchParams } from "react-router-dom"
 import { PosterCard } from "../components/Cards"
 import { Hero } from "../components/Hero"
 import { Row } from "../components/Row"
 import { FilterIcon, SortIcon, ViewIcon } from "../components/Icons"
 import { Loading, Problem } from "../components/Status"
-import { usePinnedArt, useStage } from "../components/Stage"
+import { usePinnedArt, useArtMotion, useHeroStage, useStage } from "../components/Stage"
 import * as api from "../lib/api"
 import { episodeCode, heroPlayTarget, libraryItemTypes, mergeAddedSeries, recentlyAddedSeries, seriesFallback, seriesFromAddedEpisodes, addedSeriesNote, type AddedSeries, type RecentSeries } from "../lib/format"
-import { backdropSrc } from "../lib/images"
-import { holdBack, isBackKey, placeFocus } from "../lib/remote"
+import { backdropSrc, loadImage, logoSrc, primarySrc, warmImage } from "../lib/images"
+import { isBackKey, noteBackKeydown, ownBack, placeFocus } from "../lib/remote"
+import { placeToolMenu } from "../lib/toolMenu"
 import type { HomeCardSize, HomeCardStyle, Item } from "../lib/types"
 import { usePrefs, useSession } from "../session"
 
@@ -17,6 +19,10 @@ const PAGE = 60
 const ADDED_PAGE = 180
 const BACKDROP_DWELL = 15000
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")
+/** The movie hero rotates through MOVIE_HERO_COUNT of these, one every MOVIE_HERO_DWELL. */
+const MOVIE_HERO_COUNT = 10
+const MOVIE_HERO_POOL = 30
+const MOVIE_HERO_DWELL = 15000
 
 function shuffle<T>(list: T[]) {
   const next = [...list]
@@ -27,6 +33,37 @@ function shuffle<T>(list: T[]) {
     next[swap] = item
   }
   return next
+}
+
+/**
+ * The movies the hero rotates through: a random sample of the movie library,
+ * de-duplicated by id and shuffled into a fresh rotation order with the
+ * Fisher-Yates pass above, capped at MOVIE_HERO_COUNT. Movies that own a backdrop
+ * come first because the stage is built for 16:9 artwork; a library where those
+ * are rare still fills the deck from the rest, and those movies borrow the poster
+ * fallback the stage already knows.
+ */
+function movieHeroDeck(list: Item[]) {
+  const seen = new Set<string>()
+  const framed: Item[] = []
+  const rest: Item[] = []
+  for (const entry of list) {
+    if (entry.Type !== "Movie" || seen.has(entry.Id)) continue
+    seen.add(entry.Id)
+    if (backdropSrc(entry)) framed.push(entry)
+    else rest.push(entry)
+  }
+  const deck = shuffle(framed)
+  for (const entry of shuffle(rest)) {
+    if (deck.length >= MOVIE_HERO_COUNT) break
+    deck.push(entry)
+  }
+  return deck.slice(0, MOVIE_HERO_COUNT)
+}
+
+/** The artwork the stage paints for a hero movie: its own backdrop, then its poster. */
+function movieHeroArt(item: Item) {
+  return backdropSrc(item) || primarySrc(item, 1600)
 }
 
 function backdropSlides(list: Item[]) {
@@ -151,6 +188,7 @@ export function LibraryPage() {
   const [saved, setSaved] = useState<Item[]>([])
   const toolsRef = useRef<HTMLDivElement>(null)
   const lettersRef = useRef<HTMLElement>(null)
+  const azRef = useRef<HTMLButtonElement>(null)
   const shownLibrary = useRef("")
   const shownMovie = useRef<Item | null>(null)
   const shownShow = useRef<Item | null>(null)
@@ -186,10 +224,43 @@ export function LibraryPage() {
     lettersRef.current?.querySelector<HTMLButtonElement>('[aria-pressed="true"]')?.focus()
   }, [menu])
 
+  // The A-Z row is a dropdown from the same toolbar, so Back closes it and hands focus
+  // back to its button instead of leaving the library, and the press after that belongs
+  // to the page again.
+  useEffect(() => {
+    if (menu !== "letters") return
+    let answered = false
+    const close = () => {
+      answered = true
+      setMenu(null)
+      if (azRef.current) placeFocus(azRef.current)
+    }
+    const release = ownBack(() => {
+      if (answered) return false
+      close()
+      return true
+    })
+    function onKey(event: KeyboardEvent) {
+      if (!isBackKey(event)) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      noteBackKeydown()
+      close()
+    }
+    window.addEventListener("keydown", onKey, true)
+    return () => {
+      release()
+      window.removeEventListener("keydown", onKey, true)
+    }
+  }, [menu])
+
   useEffect(() => {
     if (!menu) return
     function close(event: PointerEvent) {
       const target = event.target as Node
+      // Menus are portalled to the body, so a press inside one is no longer inside the
+      // toolbar that opened it.
+      if (target instanceof Element && target.closest(".tool-pop")) return
       if (toolsRef.current?.contains(target) || lettersRef.current?.contains(target)) return
       setMenu(null)
     }
@@ -420,6 +491,10 @@ export function LibraryPage() {
     }
   }, [hover])
 
+  // The hero's deck: one random sample of the movie library per visit, taken from
+  // Jellyfin's own random order and shuffled here. It is rebuilt when the page is
+  // entered again or the library's data is refreshed - never on a render, and never
+  // once per rotation, so the hero costs a single request.
   useEffect(() => {
     if (!movies || !id) {
       setMovieDeck(null)
@@ -428,12 +503,14 @@ export function LibraryPage() {
     let cancel = false
     setMovieDeck(null)
     api
-      .randomLibraryMovies(userId, id)
+      .randomLibraryMovies(userId, id, MOVIE_HERO_POOL)
       .then((result) => {
         if (cancel) return
-        setMovieDeck((result.Items || []).filter((entry) => entry.Type === "Movie" && backdropSrc(entry)))
+        setMovieDeck(movieHeroDeck(result.Items || []))
       })
       .catch(() => {
+        // An empty library, or a request that failed, keeps the existing fallback:
+        // the movies the grid is showing become the deck instead.
         if (!cancel) setMovieDeck([])
       })
     return () => {
@@ -444,10 +521,13 @@ export function LibraryPage() {
   const heroPool = useMemo(() => {
     if (!movies) return []
     if (movieDeck?.length) return movieDeck
-    if (movieDeck) return items.filter((entry) => entry.Type === "Movie" && backdropSrc(entry))
+    if (movieDeck) return movieHeroDeck(items)
     return []
   }, [items, movieDeck, movies])
-  const heroItem = heroPool.find((entry) => entry.Id === heroId) || null
+  const heroAt = heroPool.findIndex((entry) => entry.Id === heroId)
+  const heroSpot = heroAt >= 0 ? heroAt : 0
+  const heroItem = heroPool[heroSpot] || null
+  const heroNext = heroPool.length ? heroPool[(heroSpot + 1) % heroPool.length] : null
   const cardMovie = hovered?.Type === "Movie" ? hovered : null
   const featured = cardMovie || heroItem
   const heroPaused = heroHold || trailerHold
@@ -457,24 +537,49 @@ export function LibraryPage() {
   const movieMiss = Boolean(movies && letter && settled && items.length === 0)
   const movieHero = !movies ? null : movieMiss ? null : letter || !settled ? shownMovie.current : featured
 
+  // A rebuilt deck that no longer holds the movie on screen starts from its first
+  // slide instead of keeping a title the library has stopped offering.
   useEffect(() => {
-    if (!movies || letter || !settled) return
+    if (!movies || letter || !settled || heroPool.length === 0) return
     if (heroPool.some((entry) => entry.Id === heroId)) return
-    const next = heroPool[Math.floor(Math.random() * heroPool.length)]
-    setHeroId(next?.Id || "")
+    setHeroId(heroPool[0].Id)
   }, [heroId, heroPool, letter, movies, settled])
 
+  // The hero stands still on the title a viewer is on, while a poster holds focus,
+  // in a hidden app and under `prefers-reduced-motion`.
+  const heroMoves = useArtMotion()
+  const heroCycling = Boolean(movies && !letter && settled && heroPool.length > 1 && !heroPaused && !cardMovie && heroMoves)
+
+  // Keep the next movie's backdrop - or the poster it falls back to - decoded while
+  // this hero is on screen, so a rotation never starts against artwork still loading.
   useEffect(() => {
-    if (!movies || letter || !settled || heroPool.length < 2 || heroPaused || cardMovie) return
-    const timer = window.setInterval(() => {
-      setHeroId((current) => {
-        const others = heroPool.filter((entry) => entry.Id !== current)
-        if (others.length === 0) return current
-        return others[Math.floor(Math.random() * others.length)].Id
+    if (heroPool.length < 2 || !heroNext) return
+    warmImage(movieHeroArt(heroNext))
+    if (prefs.preferLogos) warmImage(logoSrc(heroNext))
+  }, [heroNext, heroPool, prefs.preferLogos])
+
+  // Rotation: hold the movie on screen until the incoming artwork has decoded, then
+  // step to the next slide of the shuffled deck, so the copy, the metadata and the
+  // backdrop always change together. Artwork that never loads is skipped rather
+  // than frozen on. Every timer and pending decode is dropped on unmount.
+  useEffect(() => {
+    if (!heroCycling || !heroNext) return
+    const url = movieHeroArt(heroNext)
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      if (!url) {
+        setHeroId(heroNext.Id)
+        return
+      }
+      void loadImage(url).then(() => {
+        if (!cancelled) setHeroId(heroNext.Id)
       })
-    }, 5000)
-    return () => window.clearInterval(timer)
-  }, [cardMovie, heroPaused, heroPool, letter, movies, settled])
+    }, MOVIE_HERO_DWELL)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [heroCycling, heroNext])
 
   const addedMode = Boolean(shows && sort === "EpisodeAdded")
   const showEntry = shows && !addedMode ? recent.find((entry) => entry.seriesId === heroId) || recent[0] || null : null
@@ -552,7 +657,14 @@ export function LibraryPage() {
           ? shownShow.current || showSeries || spotlight
           : addedHero || showSeries || spotlight
       : collectionArt || spotlight
-  usePinnedArt(pinned, Boolean(letter && (movies || shows)), Boolean(collectionArt))
+  // The Movies hero uses Home's hero look: one controlled 900 ms backdrop-only
+  // crossfade per rotation instead of the cinematic dissolve. The TV library and
+  // every other collection keep the look they had.
+  useHeroStage(movies)
+  // A hero movie without a backdrop of its own borrows the stage's poster fallback,
+  // exactly as an A-Z selection already does.
+  const heroPosterArt = Boolean(movies && !letter && pinned && !backdropSrc(pinned))
+  usePinnedArt(pinned, Boolean(letter && (movies || shows)) || heroPosterArt, Boolean(collectionArt))
 
   const live = library?.CollectionType === "livetv"
   const hasMore = settled && status !== "error" && status !== "loading" && (addedMore || items.length < total) && !live
@@ -636,7 +748,7 @@ export function LibraryPage() {
         </div>
         {!live && (
           <div className="library-icons" ref={toolsRef}>
-            <ToolMenu label="View" icon={<ViewIcon size={22} />} open={menu === "view"} active={viewOn} onToggle={() => setMenu(menu === "view" ? null : "view")}>
+            <ToolMenu label="View" icon={<ViewIcon size={22} />} open={menu === "view"} active={viewOn} onToggle={() => setMenu(menu === "view" ? null : "view")} onClose={() => setMenu(null)}>
               <p className="tool-label">Shape</p>
               {(["poster", "landscape"] as HomeCardStyle[]).map((option) => (
                 <button key={option} type="button" aria-pressed={prefs.libraryStyle === option} onClick={() => setPrefs({ libraryStyle: option })}>
@@ -650,7 +762,7 @@ export function LibraryPage() {
                 </button>
               ))}
             </ToolMenu>
-            <ToolMenu label="Sort" icon={<SortIcon size={22} />} open={menu === "sort"} active={sortOn} onToggle={() => setMenu(menu === "sort" ? null : "sort")}>
+            <ToolMenu label="Sort" icon={<SortIcon size={22} />} open={menu === "sort"} active={sortOn} onToggle={() => setMenu(menu === "sort" ? null : "sort")} onClose={() => setMenu(null)}>
               {sorts.map((option) => (
                 <button
                   key={option.id}
@@ -670,7 +782,7 @@ export function LibraryPage() {
                 {sort === "SortName" ? (order === "Ascending" ? "A–Z" : "Z–A") : order === "Ascending" ? "Oldest" : "Newest"}
               </button>
             </ToolMenu>
-            <ToolMenu label="Filter" icon={<FilterIcon size={22} />} open={menu === "filter"} active={filterOn} onToggle={() => setMenu(menu === "filter" ? null : "filter")}>
+            <ToolMenu label="Filter" icon={<FilterIcon size={22} />} open={menu === "filter"} active={filterOn} onToggle={() => setMenu(menu === "filter" ? null : "filter")} onClose={() => setMenu(null)}>
               {[
                 { id: "", label: "All titles" },
                 { id: "IsUnplayed", label: "Unwatched" },
@@ -707,6 +819,7 @@ export function LibraryPage() {
             </ToolMenu>
             {byTitle && (
               <button
+                ref={azRef}
                 className={letter ? "tool-btn tool-az active" : "tool-btn tool-az"}
                 type="button"
                 aria-label="A to Z"
@@ -775,6 +888,7 @@ function ToolMenu({
   open,
   active,
   onToggle,
+  onClose,
   children,
 }: {
   label: string
@@ -782,12 +896,54 @@ function ToolMenu({
   open: boolean
   active: boolean
   onToggle: () => void
+  onClose: () => void
   children: ReactNode
 }) {
   const toolRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const popRef = useRef<HTMLDivElement>(null)
   const wasOpen = useRef(false)
+  // Read by the Back handlers, which run outside a render pass.
+  const openRef = useRef(open)
+  const closeRef = useRef(onClose)
+
+  // Back has to close the menu even though Android never hands the remote's Back key to
+  // the page as a keydown: Capacitor turns the press into the native `backButton` event,
+  // so an overlay that only listens for Escape can never be closed with the remote. The
+  // open menu registers itself as the owner of Back and answers exactly once, so the
+  // press after that belongs to the page again.
+  const close = useCallback(() => {
+    if (!openRef.current) return false
+    openRef.current = false
+    closeRef.current()
+    return true
+  }, [])
+
+  useEffect(() => ownBack(close), [close])
+
+  useLayoutEffect(() => {
+    openRef.current = open
+    closeRef.current = onClose
+  }, [open, onClose])
+
+  // The toolbar sits wherever the page has scrolled to, so the menu is placed against the
+  // real viewport before it is painted: above its button when the bottom of the screen is
+  // too close to hold it, and capped - scrolling its own options - when neither side has
+  // room for all of them.
+  useLayoutEffect(() => {
+    if (!open) return
+    const pop = popRef.current
+    const button = buttonRef.current
+    if (!pop || !button) return
+    const place = () => placeToolMenu(button, pop)
+    place()
+    window.addEventListener("resize", place)
+    window.addEventListener("scroll", place, true)
+    return () => {
+      window.removeEventListener("resize", place)
+      window.removeEventListener("scroll", place, true)
+    }
+  }, [open])
 
   // The remote drives whatever is focused, so hand it the menu as soon as it
   // mounts, preferring the option that is currently applied.
@@ -815,19 +971,18 @@ function ToolMenu({
   // global remote handler navigate away from the library.
   useEffect(() => {
     if (!open) return
-    const release = holdBack()
     function onKey(event: KeyboardEvent) {
       if (!isBackKey(event)) return
       event.preventDefault()
       event.stopImmediatePropagation()
-      onToggle()
+      // This press is spent, so the native Back event some remotes also send for it cannot
+      // act on the menu a second time and then leave the page.
+      noteBackKeydown()
+      close()
     }
     window.addEventListener("keydown", onKey, true)
-    return () => {
-      release()
-      window.removeEventListener("keydown", onKey, true)
-    }
-  }, [open, onToggle])
+    return () => window.removeEventListener("keydown", onKey, true)
+  }, [open, close])
 
   return (
     <div className="tool" ref={toolRef}>
@@ -841,11 +996,13 @@ function ToolMenu({
       >
         {icon}
       </button>
-      {open && (
-        <div className="tool-pop" role="menu" aria-label={label} ref={popRef}>
-          {children}
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div className="tool-pop" role="menu" aria-label={label} ref={popRef}>
+            {children}
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }
