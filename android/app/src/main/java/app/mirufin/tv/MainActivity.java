@@ -1,5 +1,6 @@
 package app.mirufin.tv;
 
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.os.Build;
@@ -7,6 +8,7 @@ import android.os.Bundle;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 
@@ -14,16 +16,25 @@ import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
+import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebChromeClient;
+import com.getcapacitor.WebViewListener;
 
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // A launch that dies before the web app reports in usually means the WebView's own
+        // store was damaged by an abrupt kill, so clear it before any WebView exists here.
+        StartupState.healIfPending(this);
+        StartupState.markPending(this);
         registerPlugin(DiscoveryPlugin.class);
         registerPlugin(UpdatePlugin.class);
         registerPlugin(NativePlayerPlugin.class);
+        registerPlugin(StartupPlugin.class);
         super.onCreate(savedInstanceState);
+        Bridge bridge = getBridge();
+        if (bridge != null) bridge.addWebViewListener(new RecoveryListener());
         fillScreen();
         prepareWebView();
         suppressVideoPoster();
@@ -97,5 +108,24 @@ public class MainActivity extends BridgeActivity {
                 return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888);
             }
         });
+    }
+
+    /**
+     * The WebView renderer runs in its own process: when it dies (a damaged store, or the
+     * system reclaiming memory) Android takes Mirufin down with it unless the event is
+     * handled. Restart into a clean task instead, clearing a store that crashed it.
+     */
+    private class RecoveryListener extends WebViewListener {
+        @Override
+        public boolean onRenderProcessGone(WebView webView, RenderProcessGoneDetail detail) {
+            if (detail == null || detail.didCrash()) {
+                StartupState.wipeWebViewStore(MainActivity.this);
+            }
+            Intent restart = new Intent(getApplicationContext(), MainActivity.class);
+            restart.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(restart);
+            finish();
+            return true;
+        }
     }
 }

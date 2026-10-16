@@ -5,6 +5,7 @@ import { Shell } from "./components/Shell"
 import { UpdatePrompt } from "./components/UpdatePrompt"
 import * as api from "./lib/api"
 import { discoverServers, type FoundServer } from "./lib/discover"
+import { markStartupReady } from "./lib/startup"
 import { normalizeServer } from "./lib/storage"
 import { ConnectPage } from "./pages/Connect"
 import { FavoritesPage } from "./pages/Favorites"
@@ -27,6 +28,8 @@ function RequireAuth() {
 export function App() {
   useEffect(() => {
     document.getElementById("boot")?.remove()
+    // Tell the Android shell the app is up, so a launch that dies early can be healed.
+    void markStartupReady()
   }, [])
 
   return (
