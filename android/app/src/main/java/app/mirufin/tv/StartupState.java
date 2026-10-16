@@ -1,12 +1,18 @@
 package app.mirufin.tv;
 
+import android.app.ActivityManager;
+import android.app.ApplicationExitInfo;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.Build;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -217,10 +223,81 @@ final class StartupState {
         }
     }
 
-    /** A stack trace is far longer than a report needs, and local storage has limits. */
+    /**
+     * Why Android last ended this app, as Android itself recorded it: a crash, a native
+     * crash, an out-of-memory kill or an ANR. This is the one thing a blank screen cannot
+     * say, and it needs no cable: the answer is on the device.
+     */
+    static String lastExit(Context context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return "";
+        try {
+            ActivityManager manager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+            if (manager == null) return "";
+            List<ApplicationExitInfo> exits = manager.getHistoricalProcessExitReasons(context.getPackageName(), 0, 5);
+            if (exits == null || exits.isEmpty()) return "";
+            ApplicationExitInfo exit = exits.get(0);
+            StringBuilder text = new StringBuilder(exitReason(exit.getReason()));
+            String description = exit.getDescription();
+            if (description != null && !description.isEmpty()) text.append(" — ").append(description);
+            String trace = exitTrace(exit);
+            if (!trace.isEmpty()) text.append('\n').append(trace);
+            return clip(text.toString());
+        } catch (Exception error) {
+            return "";
+        }
+    }
+
+    private static String exitReason(int reason) {
+        switch (reason) {
+            case ApplicationExitInfo.REASON_CRASH:
+                return "Android ended the last run: an uncaught error";
+            case ApplicationExitInfo.REASON_CRASH_NATIVE:
+                return "Android ended the last run: a native crash";
+            case ApplicationExitInfo.REASON_ANR:
+                return "Android ended the last run: it stopped responding";
+            case ApplicationExitInfo.REASON_LOW_MEMORY:
+                return "Android ended the last run: it ran out of memory";
+            case ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE:
+                return "Android ended the last run: it used too much memory";
+            case ApplicationExitInfo.REASON_EXIT_SELF:
+                return "Mirufin closed the last run itself";
+            case ApplicationExitInfo.REASON_USER_REQUESTED:
+                return "The last run was closed by hand";
+            default:
+                return "Android ended the last run (reason " + reason + ")";
+        }
+    }
+
+    /**
+     * The head of the crash trace Android kept: a native tombstone names the process that
+     * died, which is how a WebView renderer crash is told apart from a crash in the app.
+     */
+    private static String exitTrace(ApplicationExitInfo exit) {
+        try (InputStream stream = exit.getTraceInputStream()) {
+            if (stream == null) return "";
+            BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8));
+            StringBuilder kept = new StringBuilder();
+            int lines = 0;
+            String line;
+            while ((line = reader.readLine()) != null && lines < 14) {
+                String trimmed = line.trim();
+                if (trimmed.isEmpty()) continue;
+                kept.append(clip(trimmed, 160)).append('\n');
+                lines += 1;
+            }
+            return kept.toString().trim();
+        } catch (Exception error) {
+            return "";
+        }
+    }
+
     private static String clip(String reason) {
+        return clip(reason, 600);
+    }
+
+    private static String clip(String reason, int limit) {
         String value = reason == null ? "" : reason.trim();
-        return value.length() > 600 ? value.substring(0, 600) : value;
+        return value.length() > limit ? value.substring(0, limit) : value;
     }
 
     /** Keeps a short record of startup failures so a report can include one. */

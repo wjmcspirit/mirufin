@@ -48,6 +48,7 @@ export function SettingsPage() {
   const [updating, setUpdating] = useState("")
   const [problem, setProblem] = useState("")
   const [webView, setWebView] = useState("")
+  const [exit, setExit] = useState("")
 
   useEffect(() => {
     let cancel = false
@@ -69,6 +70,7 @@ export function SettingsPage() {
       if (cancel) return
       setProblem(result.reason)
       setWebView(result.webView)
+      setExit(result.exit)
     })
     return () => {
       cancel = true
@@ -232,6 +234,12 @@ export function SettingsPage() {
           <p className="hint">
             Web view: <span className="mono">{webView}</span>
           </p>
+        )}
+        {exit && (
+          <div className="settings-block">
+            <h3>Last run</h3>
+            <p className="hint mono">{exit}</p>
+          </div>
         )}
         {problem && (
           <div className="settings-block">

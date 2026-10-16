@@ -1,5 +1,6 @@
 package app.mirufin.tv;
 
+import android.app.Activity;
 import android.content.Context;
 
 import com.getcapacitor.JSObject;
@@ -19,6 +20,9 @@ public class StartupPlugin extends Plugin {
         result.put("failures", StartupState.failures(context));
         result.put("reason", StartupState.lastProblem(context));
         call.resolve(result);
+        // The app is up, so take down the problem screen this launch may have started with.
+        Activity activity = getActivity();
+        if (activity instanceof MainActivity) ((MainActivity) activity).dismissStartupProblem();
     }
 
     /** A failure raised by the web layer, kept so the next launch can report it. */
@@ -36,6 +40,7 @@ public class StartupPlugin extends Plugin {
         result.put("reason", StartupState.lastProblem(context));
         result.put("failures", StartupState.failures(context));
         result.put("webView", StartupState.webView(context));
+        result.put("exit", StartupState.lastExit(context));
         call.resolve(result);
     }
 

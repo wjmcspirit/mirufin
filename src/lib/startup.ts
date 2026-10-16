@@ -4,6 +4,7 @@ interface StartupDiagnostics {
   reason: string
   failures: number
   webView: string
+  exit: string
 }
 
 interface StartupReport extends StartupDiagnostics {
@@ -19,7 +20,7 @@ interface StartupPlugin {
 
 const Startup = registerPlugin<StartupPlugin>("Startup")
 
-const NOTHING: StartupDiagnostics = { reason: "", failures: 0, webView: "" }
+const NOTHING: StartupDiagnostics = { reason: "", failures: 0, webView: "", exit: "" }
 
 /**
  * Tells the Android shell that Mirufin painted. The shell uses this to notice a launch
@@ -63,6 +64,7 @@ export async function startupDiagnostics(): Promise<StartupDiagnostics> {
       reason: result?.reason || "",
       failures: result?.failures || 0,
       webView: result?.webView || "",
+      exit: result?.exit || "",
     }
   } catch {
     return NOTHING

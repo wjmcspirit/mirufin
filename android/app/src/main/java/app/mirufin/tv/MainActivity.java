@@ -1,5 +1,6 @@
 package app.mirufin.tv;
 
+import android.app.ActivityManager;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.graphics.Bitmap;
@@ -36,12 +37,13 @@ public class MainActivity extends BridgeActivity {
 
     private final Handler watchdog = new Handler(Looper.getMainLooper());
     private boolean problemShown = false;
+    private boolean problemResolved = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         // A launch that dies before the web app reports in usually means the WebView's own
         // store was damaged by an abrupt kill, so clear it before any WebView exists here.
-        StartupState.healIfPending(this);
+        boolean recovered = StartupState.healIfPending(this);
         StartupState.markPending(this);
         installCrashLogger();
         registerPlugin(DiscoveryPlugin.class);
@@ -55,7 +57,10 @@ public class MainActivity extends BridgeActivity {
         prepareWebView();
         suppressVideoPoster();
         rememberWebView();
-        watchForFailedStartup();
+        // The previous launch failed, so put the reason up before this one gets a chance to
+        // fail the same way: the screen is taken down again if the web app does come up.
+        if (recovered) showStartupProblem();
+        else watchForFailedStartup();
     }
 
     @Override
@@ -161,12 +166,23 @@ public class MainActivity extends BridgeActivity {
      */
     private void watchForFailedStartup() {
         watchdog.postDelayed(() -> {
-            if (problemShown || isFinishing() || isDestroyed()) return;
+            if (problemShown || problemResolved || isFinishing() || isDestroyed()) return;
             // The web app clears this mark once it has painted, so a mark still standing
             // means this launch never got there.
             if (!StartupState.isPending(this)) return;
             showStartupProblem();
         }, STARTUP_WATCHDOG_MS);
+    }
+
+    /** The web app painted: take the problem screen down again. */
+    void dismissStartupProblem() {
+        problemResolved = true;
+        if (!problemShown) return;
+        problemShown = false;
+        ViewGroup root = findViewById(android.R.id.content);
+        if (root == null) return;
+        View problem = root.findViewById(R.id.problem_root);
+        if (problem != null) root.removeView(problem);
     }
 
     private void showStartupProblem() {
@@ -175,21 +191,42 @@ public class MainActivity extends BridgeActivity {
         problemShown = true;
         View problem = getLayoutInflater().inflate(R.layout.startup_problem, root, false);
         ((TextView) problem.findViewById(R.id.problem_detail)).setText(problemDetails());
-        ((TextView) problem.findViewById(R.id.problem_log)).setText(StartupState.logTail(this, 12));
+        ((TextView) problem.findViewById(R.id.problem_device)).setText(deviceDetails());
+        ((TextView) problem.findViewById(R.id.problem_log)).setText(StartupState.logTail(this, 10));
         problem.findViewById(R.id.problem_restart).setOnClickListener(view -> restart(false));
         problem.findViewById(R.id.problem_clear).setOnClickListener(view -> restart(true));
         root.addView(problem);
         problem.findViewById(R.id.problem_restart).requestFocus();
     }
 
+    /** The reason, from Android's own record of the last exit and from the last launch. */
     private String problemDetails() {
+        String exit = StartupState.lastExit(this);
         String reason = StartupState.lastProblem(this);
+        StringBuilder text = new StringBuilder();
+        text.append(exit.isEmpty() ? "Android has no record of why the last run ended." : exit);
+        text.append("\n\n").append(reason.isEmpty() ? "The last launch did not finish." : reason);
+        return text.toString();
+    }
+
+    private String deviceDetails() {
         String webView = StartupState.webView(this);
         StringBuilder text = new StringBuilder();
-        text.append(reason.isEmpty() ? "The last launch did not finish." : reason);
-        text.append("\n\nVersion ").append(versionName());
+        text.append("Mirufin ").append(versionName());
+        text.append("\nAndroid ").append(Build.VERSION.RELEASE).append(" (API ").append(Build.VERSION.SDK_INT).append(")");
+        text.append("\n").append(Build.MANUFACTURER).append(' ').append(Build.MODEL);
         text.append("\nWeb view: ").append(webView.isEmpty() ? "unknown" : webView);
+        text.append("\nLow RAM device: ").append(lowRam() ? "yes" : "no");
         return text.toString();
+    }
+
+    private boolean lowRam() {
+        try {
+            ActivityManager manager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            return manager != null && manager.isLowRamDevice();
+        } catch (Exception error) {
+            return false;
+        }
     }
 
     private String versionName() {
