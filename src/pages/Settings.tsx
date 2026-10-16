@@ -2,7 +2,7 @@ import { Capacitor } from "@capacitor/core"
 import { useEffect, useState, type ReactNode } from "react"
 import { HomeEditor } from "../components/HomeEditor"
 import * as api from "../lib/api"
-import { clearStartupProblem, startupProblem } from "../lib/startup"
+import { clearStartupProblem, startupDiagnostics } from "../lib/startup"
 import type { SegmentType, SkipMode } from "../lib/types"
 import { APP_VERSION, installRelease, isNewerVersion, latestRelease } from "../lib/version"
 import { usePrefs, useSession } from "../session"
@@ -47,6 +47,7 @@ export function SettingsPage() {
   const [available, setAvailable] = useState("")
   const [updating, setUpdating] = useState("")
   const [problem, setProblem] = useState("")
+  const [webView, setWebView] = useState("")
 
   useEffect(() => {
     let cancel = false
@@ -62,9 +63,12 @@ export function SettingsPage() {
 
   useEffect(() => {
     let cancel = false
-    // A launch that had to be repaired leaves the reason here, so it can be reported.
-    void startupProblem().then((result) => {
-      if (!cancel) setProblem(result.reason)
+    // The installed WebView, and why the last launch failed if it did: both are what a
+    // report needs, and neither can be read from the television's own settings.
+    void startupDiagnostics().then((result) => {
+      if (cancel) return
+      setProblem(result.reason)
+      setWebView(result.webView)
     })
     return () => {
       cancel = true
@@ -224,6 +228,11 @@ export function SettingsPage() {
         <p className="settings-product">Mirufin</p>
         <p>Version {APP_VERSION}</p>
         <p className="eyebrow">Beta</p>
+        {webView && (
+          <p className="hint">
+            Web view: <span className="mono">{webView}</span>
+          </p>
+        )}
         {problem && (
           <div className="settings-block">
             <h3>Last launch</h3>

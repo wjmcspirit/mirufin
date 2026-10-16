@@ -28,12 +28,14 @@ public class StartupPlugin extends Plugin {
         call.resolve();
     }
 
+    /** What the device and the last launch look like, for the settings screen. */
     @PluginMethod
-    public void problem(PluginCall call) {
+    public void diagnostics(PluginCall call) {
         Context context = getContext();
         JSObject result = new JSObject();
         result.put("reason", StartupState.lastProblem(context));
         result.put("failures", StartupState.failures(context));
+        result.put("webView", StartupState.webView(context));
         call.resolve(result);
     }
 

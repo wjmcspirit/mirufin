@@ -1,16 +1,22 @@
 package app.mirufin.tv;
 
 import android.content.Intent;
+import android.content.pm.PackageInfo;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
+import android.webkit.ConsoleMessage;
 import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.widget.TextView;
 
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -25,6 +31,12 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 
 public class MainActivity extends BridgeActivity {
+    /** How long a launch may take to reach the web app before it is treated as failed. */
+    private static final long STARTUP_WATCHDOG_MS = 20_000L;
+
+    private final Handler watchdog = new Handler(Looper.getMainLooper());
+    private boolean problemShown = false;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         // A launch that dies before the web app reports in usually means the WebView's own
@@ -42,6 +54,8 @@ public class MainActivity extends BridgeActivity {
         fillScreen();
         prepareWebView();
         suppressVideoPoster();
+        rememberWebView();
+        watchForFailedStartup();
     }
 
     @Override
@@ -111,7 +125,88 @@ public class MainActivity extends BridgeActivity {
             public Bitmap getDefaultVideoPoster() {
                 return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888);
             }
+
+            /**
+             * A page that throws before it renders leaves nothing to read, so the first
+             * error the page logs is kept where the problem screen can show it.
+             */
+            @Override
+            public boolean onConsoleMessage(ConsoleMessage message) {
+                if (message != null && message.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                    StartupState.noteProblem(MainActivity.this, "Page error: " + message.message());
+                }
+                return super.onConsoleMessage(message);
+            }
         });
+    }
+
+    /** Records which WebView is installed: a missing or ancient one explains a blank screen. */
+    private void rememberWebView() {
+        try {
+            PackageInfo packageInfo = WebView.getCurrentWebViewPackage();
+            String webView = packageInfo == null
+                ? "Android System WebView is missing on this device"
+                : packageInfo.packageName + " " + packageInfo.versionName;
+            StartupState.setWebView(this, webView);
+            StartupState.log(this, "web view: " + webView);
+        } catch (Exception ignored) {
+            // Keep whatever the previous launch recorded.
+        }
+    }
+
+    /**
+     * A launch that never reports in shows nothing at all: the WebView stays blank and the
+     * app closes. Put the reason on the television instead, so a failure can be read there
+     * rather than guessed at from a blank screen.
+     */
+    private void watchForFailedStartup() {
+        watchdog.postDelayed(() -> {
+            if (problemShown || isFinishing() || isDestroyed()) return;
+            // The web app clears this mark once it has painted, so a mark still standing
+            // means this launch never got there.
+            if (!StartupState.isPending(this)) return;
+            showStartupProblem();
+        }, STARTUP_WATCHDOG_MS);
+    }
+
+    private void showStartupProblem() {
+        ViewGroup root = findViewById(android.R.id.content);
+        if (root == null) return;
+        problemShown = true;
+        View problem = getLayoutInflater().inflate(R.layout.startup_problem, root, false);
+        ((TextView) problem.findViewById(R.id.problem_detail)).setText(problemDetails());
+        ((TextView) problem.findViewById(R.id.problem_log)).setText(StartupState.logTail(this, 12));
+        problem.findViewById(R.id.problem_restart).setOnClickListener(view -> restart(false));
+        problem.findViewById(R.id.problem_clear).setOnClickListener(view -> restart(true));
+        root.addView(problem);
+        problem.findViewById(R.id.problem_restart).requestFocus();
+    }
+
+    private String problemDetails() {
+        String reason = StartupState.lastProblem(this);
+        String webView = StartupState.webView(this);
+        StringBuilder text = new StringBuilder();
+        text.append(reason.isEmpty() ? "The last launch did not finish." : reason);
+        text.append("\n\nVersion ").append(versionName());
+        text.append("\nWeb view: ").append(webView.isEmpty() ? "unknown" : webView);
+        return text.toString();
+    }
+
+    private String versionName() {
+        try {
+            String name = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            return name == null ? "unknown" : name;
+        } catch (Exception error) {
+            return "unknown";
+        }
+    }
+
+    private void restart(boolean clearEverything) {
+        if (clearEverything) StartupState.requestReset(this);
+        Intent restart = new Intent(getApplicationContext(), MainActivity.class);
+        restart.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        startActivity(restart);
+        finish();
     }
 
     /**

@@ -4,4 +4,7 @@
     <string name="title_activity_main">Mirufin</string>
     <string name="package_name">app.mirufin.tv</string>
     <string name="custom_url_scheme">app.mirufin.tv</string>
+    <string name="problem_title">Mirufin could not start</string>
+    <string name="problem_restart">Restart</string>
+    <string name="problem_clear">Clear all data and restart</string>
 </resources>

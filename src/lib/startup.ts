@@ -1,24 +1,25 @@
 import { Capacitor, registerPlugin } from "@capacitor/core"
 
-interface StartupProblem {
+interface StartupDiagnostics {
   reason: string
   failures: number
+  webView: string
 }
 
-interface StartupReport extends StartupProblem {
+interface StartupReport extends StartupDiagnostics {
   recovered: boolean
 }
 
 interface StartupPlugin {
   ready(): Promise<StartupReport>
   report(options: { reason: string }): Promise<void>
-  problem(): Promise<StartupProblem>
+  diagnostics(): Promise<StartupDiagnostics>
   clear(): Promise<void>
 }
 
 const Startup = registerPlugin<StartupPlugin>("Startup")
 
-const NOTHING: StartupProblem = { reason: "", failures: 0 }
+const NOTHING: StartupDiagnostics = { reason: "", failures: 0, webView: "" }
 
 /**
  * Tells the Android shell that Mirufin painted. The shell uses this to notice a launch
@@ -49,12 +50,20 @@ export async function reportStartupProblem(reason: string) {
   }
 }
 
-/** What the last failed launch left behind, for the settings screen. */
-export async function startupProblem(): Promise<StartupProblem> {
+/**
+ * What the device and the last launch look like: the installed WebView, and why the last
+ * launch failed if it did. Shown in settings so a failure can be reported instead of
+ * described from memory.
+ */
+export async function startupDiagnostics(): Promise<StartupDiagnostics> {
   if (!Capacitor.isNativePlatform()) return NOTHING
   try {
-    const result = await Startup.problem()
-    return { reason: result?.reason || "", failures: result?.failures || 0 }
+    const result = await Startup.diagnostics()
+    return {
+      reason: result?.reason || "",
+      failures: result?.failures || 0,
+      webView: result?.webView || "",
+    }
   } catch {
     return NOTHING
   }

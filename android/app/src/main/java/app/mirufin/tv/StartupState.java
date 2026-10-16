@@ -3,10 +3,14 @@ package app.mirufin.tv;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -30,6 +34,7 @@ final class StartupState {
     private static final String RECOVERED = "recovered";
     private static final String FAILURES = "failures";
     private static final String REASON = "reason";
+    private static final String WEBVIEW = "webview";
     private static final String LOG = "startup.log";
     /** Early deaths in a row that mean clearing the store is not the whole answer. */
     private static final int RESET_EVERYTHING_AFTER = 3;
@@ -62,6 +67,19 @@ final class StartupState {
 
     static void clearProblem(Context context) {
         prefs(context).edit().remove(REASON).commit();
+    }
+
+    /**
+     * Which WebView is actually installed. A TV with a missing, disabled or very old
+     * Android System WebView is the usual reason a launch shows nothing at all, and the
+     * version is the first thing a report needs.
+     */
+    static void setWebView(Context context, String webView) {
+        prefs(context).edit().putString(WEBVIEW, webView).commit();
+    }
+
+    static String webView(Context context) {
+        return prefs(context).getString(WEBVIEW, "");
     }
 
     /**
@@ -143,6 +161,15 @@ final class StartupState {
     }
 
     /**
+     * Asks the next launch to clear everything Mirufin owns. The clear itself runs there,
+     * before any WebView exists: clearing the store from here, with the WebView provider
+     * still running, is what damages it in the first place.
+     */
+    static void requestReset(Context context) {
+        prefs(context).edit().putBoolean(PENDING, true).putInt(FAILURES, RESET_EVERYTHING_AFTER).commit();
+    }
+
+    /**
      * Deletes the WebView's own data: local storage, cookies, IndexedDB and the HTTP
      * cache. Only ever called from onCreate() before a WebView exists in this process,
      * because the WebView provider must not be running while its directory is removed.
@@ -204,6 +231,23 @@ final class StartupState {
         } catch (Exception ignored) {
             // Diagnostics are best effort and must never affect a launch.
         }
+    }
+
+    /** The newest lines of the startup log, for the problem screen and a report. */
+    static String logTail(Context context, int lines) {
+        List<String> kept = new ArrayList<>();
+        try (BufferedReader reader = new BufferedReader(new FileReader(new File(context.getFilesDir(), LOG)))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                kept.add(line);
+                if (kept.size() > lines) kept.remove(0);
+            }
+        } catch (Exception ignored) {
+            return "";
+        }
+        StringBuilder text = new StringBuilder();
+        for (String line : kept) text.append(line).append('\n');
+        return text.toString().trim();
     }
 
     private static SharedPreferences prefs(Context context) {

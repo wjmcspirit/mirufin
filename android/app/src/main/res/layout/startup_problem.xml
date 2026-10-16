@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shown when a launch never reaches the web app. Mirufin used to leave nothing but a
+     blank screen behind in that case, with no way to tell what went wrong. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FF000000"
+    android:orientation="vertical"
+    android:padding="64dp">
+
+    <TextView
+        android:id="@+id/problem_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/problem_title"
+        android:textColor="#FFF4F7FF"
+        android:textSize="34sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/problem_detail"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:lineSpacingMultiplier="1.2"
+        android:textColor="#FF9AA3B5"
+        android:textSize="20sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="32dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/problem_restart"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:focusable="true"
+            android:text="@string/problem_restart"
+            android:textColor="#FF09090B"
+            android:textSize="20sp" />
+
+        <Button
+            android:id="@+id/problem_clear"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="24dp"
+            android:focusable="true"
+            android:text="@string/problem_clear"
+            android:textColor="#FF09090B"
+            android:textSize="20sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/problem_log"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="24dp"
+        android:layout_weight="1"
+        android:fontFamily="monospace"
+        android:textColor="#FF6D7688"
+        android:textSize="14sp" />
+</LinearLayout>
