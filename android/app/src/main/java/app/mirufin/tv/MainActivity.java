@@ -1,6 +1,5 @@
 package app.mirufin.tv;
 
-import android.app.ActivityManager;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.graphics.Bitmap;
@@ -9,7 +8,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
@@ -17,7 +15,6 @@ import android.webkit.ConsoleMessage;
 import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
-import android.widget.TextView;
 
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -36,14 +33,14 @@ public class MainActivity extends BridgeActivity {
     private static final long STARTUP_WATCHDOG_MS = 20_000L;
 
     private final Handler watchdog = new Handler(Looper.getMainLooper());
-    private boolean problemShown = false;
     private boolean problemResolved = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        // A launch that dies before the web app reports in usually means the WebView's own
-        // store was damaged by an abrupt kill, so clear it before any WebView exists here.
-        boolean recovered = StartupState.healIfPending(this);
+        // The launcher heals before it hands over, and reports a launch that died early
+        // without creating a WebView. This is repeated for the launches that start Mirufin
+        // directly, such as the restart after an in-app update.
+        StartupState.healIfPending(this);
         StartupState.markPending(this);
         installCrashLogger();
         registerPlugin(DiscoveryPlugin.class);
@@ -57,10 +54,7 @@ public class MainActivity extends BridgeActivity {
         prepareWebView();
         suppressVideoPoster();
         rememberWebView();
-        // The previous launch failed, so put the reason up before this one gets a chance to
-        // fail the same way: the screen is taken down again if the web app does come up.
-        if (recovered) showStartupProblem();
-        else watchForFailedStartup();
+        watchForFailedStartup();
     }
 
     @Override
@@ -160,90 +154,26 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
-     * A launch that never reports in shows nothing at all: the WebView stays blank and the
-     * app closes. Put the reason on the television instead, so a failure can be read there
-     * rather than guessed at from a blank screen.
+     * A launch that never reports in and never dies either leaves a blank screen behind.
+     * Put the reason on the television instead, so a failure can be read there rather than
+     * guessed at from a blank screen. A launch that dies quickly is caught by the launcher
+     * on the next start, which reports it without creating a WebView at all.
      */
     private void watchForFailedStartup() {
         watchdog.postDelayed(() -> {
-            if (problemShown || problemResolved || isFinishing() || isDestroyed()) return;
+            if (problemResolved || isFinishing() || isDestroyed()) return;
+            if (StartupProblem.shown(this)) return;
             // The web app clears this mark once it has painted, so a mark still standing
             // means this launch never got there.
             if (!StartupState.isPending(this)) return;
-            showStartupProblem();
+            StartupProblem.show(this);
         }, STARTUP_WATCHDOG_MS);
     }
 
     /** The web app painted: take the problem screen down again. */
     void dismissStartupProblem() {
         problemResolved = true;
-        if (!problemShown) return;
-        problemShown = false;
-        ViewGroup root = findViewById(android.R.id.content);
-        if (root == null) return;
-        View problem = root.findViewById(R.id.problem_root);
-        if (problem != null) root.removeView(problem);
-    }
-
-    private void showStartupProblem() {
-        ViewGroup root = findViewById(android.R.id.content);
-        if (root == null) return;
-        problemShown = true;
-        View problem = getLayoutInflater().inflate(R.layout.startup_problem, root, false);
-        ((TextView) problem.findViewById(R.id.problem_detail)).setText(problemDetails());
-        ((TextView) problem.findViewById(R.id.problem_device)).setText(deviceDetails());
-        ((TextView) problem.findViewById(R.id.problem_log)).setText(StartupState.logTail(this, 10));
-        problem.findViewById(R.id.problem_restart).setOnClickListener(view -> restart(false));
-        problem.findViewById(R.id.problem_clear).setOnClickListener(view -> restart(true));
-        root.addView(problem);
-        problem.findViewById(R.id.problem_restart).requestFocus();
-    }
-
-    /** The reason, from Android's own record of the last exit and from the last launch. */
-    private String problemDetails() {
-        String exit = StartupState.lastExit(this);
-        String reason = StartupState.lastProblem(this);
-        StringBuilder text = new StringBuilder();
-        text.append(exit.isEmpty() ? "Android has no record of why the last run ended." : exit);
-        text.append("\n\n").append(reason.isEmpty() ? "The last launch did not finish." : reason);
-        return text.toString();
-    }
-
-    private String deviceDetails() {
-        String webView = StartupState.webView(this);
-        StringBuilder text = new StringBuilder();
-        text.append("Mirufin ").append(versionName());
-        text.append("\nAndroid ").append(Build.VERSION.RELEASE).append(" (API ").append(Build.VERSION.SDK_INT).append(")");
-        text.append("\n").append(Build.MANUFACTURER).append(' ').append(Build.MODEL);
-        text.append("\nWeb view: ").append(webView.isEmpty() ? "unknown" : webView);
-        text.append("\nLow RAM device: ").append(lowRam() ? "yes" : "no");
-        return text.toString();
-    }
-
-    private boolean lowRam() {
-        try {
-            ActivityManager manager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
-            return manager != null && manager.isLowRamDevice();
-        } catch (Exception error) {
-            return false;
-        }
-    }
-
-    private String versionName() {
-        try {
-            String name = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
-            return name == null ? "unknown" : name;
-        } catch (Exception error) {
-            return "unknown";
-        }
-    }
-
-    private void restart(boolean clearEverything) {
-        if (clearEverything) StartupState.requestReset(this);
-        Intent restart = new Intent(getApplicationContext(), MainActivity.class);
-        restart.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        startActivity(restart);
-        finish();
+        StartupProblem.dismiss(this);
     }
 
     /**
@@ -288,7 +218,7 @@ public class MainActivity extends BridgeActivity {
             );
             // A launch that is already showing why it failed keeps that screen: restarting
             // or closing here would take the reason away before it could be read.
-            if (problemShown) {
+            if (StartupProblem.shown(MainActivity.this)) {
                 StartupState.log(MainActivity.this, "the renderer died while the problem screen was up");
                 return true;
             }

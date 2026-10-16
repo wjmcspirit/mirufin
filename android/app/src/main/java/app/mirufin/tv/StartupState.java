@@ -132,6 +132,9 @@ final class StartupState {
             : "Mirufin cleared the WebView store after " + failures + " failed launch" + (failures == 1 ? "" : "es") + ".";
         prefs.edit()
             .putBoolean(RECOVERED, true)
+            // The mark is cleared here: the caller marks the launch it is about to make, and
+            // a launch that never happens must not be mistaken for one that failed.
+            .putBoolean(PENDING, false)
             .putString(REASON, clip(cause.isEmpty() ? healed : cause + " " + healed))
             // A full reset starts the count over, so the next failure is a new problem.
             .putInt(FAILURES, everything ? 0 : failures)

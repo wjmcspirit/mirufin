@@ -22,11 +22,14 @@
         android:theme="@style/AppTheme.NoActionBar"
         android:usesCleartextTraffic="true">
 
+        <!-- The television launches this one. It creates no WebView, so it can still report a
+             launch that died while starting the WebView, which no activity that creates one
+             can do. -->
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
-            android:name=".MainActivity"
+            android:name=".StartupActivity"
             android:label="@string/title_activity_main"
-            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:theme="@style/AppTheme.NoActionBar"
             android:launchMode="singleTask"
             android:exported="true">
 
@@ -40,6 +43,14 @@
             </intent-filter>
 
         </activity>
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
