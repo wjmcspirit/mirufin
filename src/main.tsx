@@ -8,19 +8,22 @@ import { reportStartupProblem } from "./lib/startup"
 import { SessionProvider } from "./session"
 import "./styles.css"
 
-const DESIGN_WIDTH = 1500
-
-function fitTelevision() {
-  if (!Capacitor.isNativePlatform()) return
-  const apply = () => {
-    const width = window.innerWidth
-    const height = window.innerHeight
-    if (width < 200 || height < 200) return
-    const scale = width / DESIGN_WIDTH
-    document.documentElement.style.zoom = String(scale)
-    document.documentElement.style.setProperty("--app-scale", String(scale))
-    document.documentElement.style.setProperty("--app-height", `${Math.round(height / scale)}px`)
+declare global {
+  interface Window {
+    /** Applies Mirufin's television scaling. Defined by index.html so it is in force for the
+        first paint; see the comment there. */
+    mirufinFitTelevision?: () => void
   }
+}
+
+/**
+ * index.html applies the television scaling in the document head, ahead of the first paint,
+ * so the boot splash is never drawn at its un-scaled size and the logo does not jump. The
+ * WebView is resized a moment after the page loads on some televisions, so it is re-run here.
+ */
+function fitTelevision() {
+  const apply = window.mirufinFitTelevision
+  if (!apply) return
   apply()
   window.addEventListener("resize", apply)
   window.setTimeout(apply, 250)

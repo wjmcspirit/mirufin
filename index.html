@@ -30,8 +30,45 @@
         place-items: center;
         background: #000;
       }
-      #boot img { width: min(920px, 68vw); height: auto; }
+      /* The width the native splash draws the logo at, in design units: 840 of the 1500 the
+         television layout is drawn on, which is 56% of the screen. The script below (and
+         src/main.tsx, which re-runs it) sets --boot-logo-width to that once the root zoom is
+         on, so the boot splash and the splash behind it are the same size. Without it - a
+         plain browser, or a shell with no document-start script support - the fallback keeps
+         the old viewport-relative sizing. */
+      #boot img { width: var(--boot-logo-width, min(920px, 68vw)); height: auto; }
     </style>
+    <script>
+      /**
+       * Mirufin draws its television layout on a 1500px-wide canvas that is scaled to fill
+       * the screen with a root `zoom`, the way the Android shell does.
+       *
+       * It is applied here, in the head, so it is already in force for the very first paint.
+       * Applying it later - which is what used to happen, from src/main.tsx once the app
+       * bundle ran - painted the boot splash at its un-scaled size first, so the logo started
+       * large and visibly shrank a moment later. The zoom is also what makes the boot splash
+       * land on exactly the size @drawable/splash draws the same logo at, so the handover from
+       * the native splash has nothing to jump. src/main.tsx re-runs this on resize, so there
+       * is one implementation.
+       */
+      window.mirufinFitTelevision = function () {
+        var capacitor = window.Capacitor
+        if (!capacitor || typeof capacitor.isNativePlatform !== "function") return
+        if (!capacitor.isNativePlatform()) return
+        var width = window.innerWidth
+        var height = window.innerHeight
+        if (width < 200 || height < 200) return
+        var scale = width / 1500
+        var root = document.documentElement
+        root.style.zoom = String(scale)
+        root.style.setProperty("--app-scale", String(scale))
+        root.style.setProperty("--app-height", Math.round(height / scale) + "px")
+        // 840 design units of 1500 is 56% of the screen: the width @drawable/splash draws the
+        // logo at, so the native splash and the boot splash are the same size.
+        root.style.setProperty("--boot-logo-width", "840px")
+      }
+      window.mirufinFitTelevision()
+    </script>
   </head>
   <body>
     <div id="boot" aria-hidden="true">

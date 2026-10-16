@@ -97,7 +97,14 @@ public class MainActivity extends BridgeActivity {
             params.height = ViewGroup.LayoutParams.MATCH_PARENT;
             webView.setLayoutParams(params);
         }
-        webView.setBackgroundColor(Color.BLACK);
+        // Until the web app has painted, the WebView is left transparent so the splash the
+        // window draws behind it (@drawable/splash) stays visible. An opaque WebView covers
+        // that splash the moment it is laid out - which blanks the logo for as long as the
+        // page takes to load, then pops it back at whatever size the page uses. Both splashes
+        // draw the same logo at the same size, so with the WebView transparent the handover
+        // has nothing to jump, flash or blank. settleSplashBackground() restores the opaque
+        // shell once the app is up.
+        webView.setBackgroundColor(StartupState.isPending(this) ? Color.TRANSPARENT : Color.BLACK);
         WebSettings settings = webView.getSettings();
         settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(false);
@@ -108,6 +115,15 @@ public class MainActivity extends BridgeActivity {
         getBridge().getWebView().setFocusable(true);
         getBridge().getWebView().setFocusableInTouchMode(true);
         getBridge().getWebView().requestFocus();
+    }
+
+    /**
+     * The web app has painted, so the splash behind the WebView can go: the shell is opaque
+     * from here on, exactly as it was before the splash was left showing through it.
+     */
+    void settleSplashBackground() {
+        WebView webView = getBridge() == null ? null : getBridge().getWebView();
+        if (webView != null) webView.setBackgroundColor(Color.BLACK);
     }
 
     /**

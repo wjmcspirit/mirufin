@@ -20,9 +20,14 @@ public class StartupPlugin extends Plugin {
         result.put("failures", StartupState.failures(context));
         result.put("reason", StartupState.lastProblem(context));
         call.resolve(result);
-        // The app is up, so take down the problem screen this launch may have started with.
+        // The app is up, so take down the problem screen this launch may have started with,
+        // and put the opaque shell background back over the splash it was showing.
         Activity activity = getActivity();
-        if (activity instanceof MainActivity) ((MainActivity) activity).dismissStartupProblem();
+        if (activity instanceof MainActivity) {
+            MainActivity main = (MainActivity) activity;
+            main.dismissStartupProblem();
+            main.settleSplashBackground();
+        }
     }
 
     /** A failure raised by the web layer, kept so the next launch can report it. */
