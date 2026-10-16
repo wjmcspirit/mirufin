@@ -286,6 +286,12 @@ public class MainActivity extends BridgeActivity {
                 MainActivity.this,
                 crashed ? "The web view renderer crashed." : "Android reclaimed the web view renderer."
             );
+            // A launch that is already showing why it failed keeps that screen: restarting
+            // or closing here would take the reason away before it could be read.
+            if (problemShown) {
+                StartupState.log(MainActivity.this, "the renderer died while the problem screen was up");
+                return true;
+            }
             // A renderer that dies again immediately after every restart would restart
             // Mirufin forever, so past the budget the app is left closed instead and the
             // next launch heals it.
