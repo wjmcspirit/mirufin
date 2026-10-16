@@ -238,7 +238,7 @@ final class StartupState {
             if (manager == null) return "";
             List<ApplicationExitInfo> exits = manager.getHistoricalProcessExitReasons(context.getPackageName(), 0, 5);
             if (exits == null || exits.isEmpty()) return "";
-            ApplicationExitInfo exit = exits.get(0);
+            ApplicationExitInfo exit = ownProcessExit(context, exits);
             StringBuilder text = new StringBuilder(exitReason(exit.getReason()));
             String description = exit.getDescription();
             if (description != null && !description.isEmpty()) text.append(" — ").append(description);
@@ -248,6 +248,22 @@ final class StartupState {
         } catch (Exception error) {
             return "";
         }
+    }
+
+    /**
+     * The record for Mirufin's own process. Android keeps an entry for every process of the
+     * package, and the WebView runs its renderer in a separate one that ends itself whenever
+     * the view goes away. Taking the newest entry regardless would therefore report the
+     * renderer leaving as though it were Mirufin ending, which is how "Mirufin closed the
+     * last run itself" can appear above a crash that really killed it. A device that names
+     * its processes differently falls back to the newest entry, as before.
+     */
+    private static ApplicationExitInfo ownProcessExit(Context context, List<ApplicationExitInfo> exits) {
+        String name = context.getPackageName();
+        for (ApplicationExitInfo exit : exits) {
+            if (name.equals(exit.getProcessName())) return exit;
+        }
+        return exits.get(0);
     }
 
     private static String exitReason(int reason) {

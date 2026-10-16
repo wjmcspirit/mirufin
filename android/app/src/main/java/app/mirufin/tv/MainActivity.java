@@ -34,6 +34,8 @@ public class MainActivity extends BridgeActivity {
 
     private final Handler watchdog = new Handler(Looper.getMainLooper());
     private boolean problemResolved = false;
+    /** True once the poster-suppressing chrome client is on the WebView. */
+    private boolean videoPosterSuppressed = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -114,9 +116,15 @@ public class MainActivity extends BridgeActivity {
      * fills the screen, so that native poster flashes across the whole display
      * while playback spins up. A transparent poster removes it; the native
      * player surface covers the web layer during startup anyway.
+     *
+     * The client is installed once and then left alone. Building one registers
+     * activity-result launchers with the activity, and Android only accepts that
+     * before the activity reaches STARTED: a second install from onResume threw
+     * IllegalStateException and killed the launch on the television. The override
+     * lasts as long as the WebView does, so installing it once is enough.
      */
     private void suppressVideoPoster() {
-        if (getBridge() == null) return;
+        if (videoPosterSuppressed || getBridge() == null) return;
         WebView webView = getBridge().getWebView();
         if (webView == null) return;
         webView.setWebChromeClient(new BridgeWebChromeClient(getBridge()) {
@@ -137,6 +145,7 @@ public class MainActivity extends BridgeActivity {
                 return super.onConsoleMessage(message);
             }
         });
+        videoPosterSuppressed = true;
     }
 
     /** Records which WebView is installed: a missing or ancient one explains a blank screen. */
