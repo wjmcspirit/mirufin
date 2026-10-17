@@ -1870,6 +1870,46 @@ select {
   box-shadow: var(--shadow);
 }
 .server-suggestion h2 { font-size: 26px; }
+/* The artwork behind Settings: a blurred, darkened frame that sits behind the whole
+   page and never joins its layout. It is fixed and out of flow, so it cannot move a
+   row, change a measurement or scroll with the page; the negative z-index keeps it
+   behind the section content while leaving it above the app's own stage layer.
+   `pointer-events: none` and `aria-hidden` keep the remote off it entirely, so a
+   rotation can never take a press or a focus. */
+.settings-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.settings-backdrop-img {
+  position: absolute;
+  inset: -8%;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
+  filter: blur(32px) saturate(1.08) brightness(0.6);
+  transform: scale(1.04);
+  opacity: 0;
+  transition: opacity 1.2s ease-in-out;
+}
+.settings-backdrop-img.on { opacity: 1; }
+/* A dark navy wash over the artwork: headings, hints, values and focus outlines all
+   have to stay readable on top of whatever the server happened to hand back. */
+.settings-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 90% at 20% 0%, rgba(30, 52, 104, 0.5), transparent 62%),
+    radial-gradient(100% 80% at 88% 12%, rgba(22, 34, 74, 0.42), transparent 58%),
+    linear-gradient(180deg, rgba(6, 10, 24, 0.66) 0%, rgba(6, 10, 24, 0.74) 46%, rgba(4, 7, 18, 0.86) 100%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-backdrop-img { transition: none !important; }
+}
+
 .settings {
   width: min(880px, 100%);
   margin: 0 auto;
@@ -1957,28 +1997,41 @@ select {
 .settings-row input[type="checkbox"]:focus,
 .settings-row input[type="checkbox"]:focus-visible,
 .settings-row input[type="checkbox"].dpad-focus {
-  outline: 3px solid #fff;
+  outline: 2px solid #8ee6ff;
   outline-offset: 3px;
 }
+/* One focus state for the whole page: a translucent blue surface, a thin cyan
+   outline, and no glow. The row carries it for as long as anything inside it holds
+   focus, and the control that actually holds focus repeats it a little more firmly -
+   so the viewer can see both where they are and what they are changing without the
+   two treatments competing for the same press. */
 .settings-row:focus-within {
   background: rgba(62, 200, 255, 0.1);
-  box-shadow: inset 3px 0 0 #3ec8ff;
+  outline: 1px solid rgba(62, 200, 255, 0.5);
+  outline-offset: -1px;
+  box-shadow: none;
 }
 .settings .btn:focus,
 .settings .btn:focus-visible,
 .settings .btn.dpad-focus {
   filter: none;
   color: #fff;
-  border-color: #fff;
-  background: rgba(62, 200, 255, 0.4);
-  box-shadow: 0 0 0 3px #3ec8ff;
+  border-color: rgba(62, 200, 255, 0.75);
+  background: rgba(62, 200, 255, 0.2);
+  outline: 2px solid #8ee6ff;
+  outline-offset: 1px;
+  box-shadow: none;
 }
+/* A chosen option is already tinted; focus lifts it a step rather than painting a
+   second, brighter ring over it. */
 .settings .btn.tiny[aria-pressed="true"]:focus,
 .settings .btn.tiny[aria-pressed="true"]:focus-visible,
 .settings .btn.tiny[aria-pressed="true"].dpad-focus {
-  background: rgba(62, 200, 255, 0.55);
-  border-color: #9be7ff;
-  box-shadow: 0 0 0 3px #fff;
+  background: rgba(62, 200, 255, 0.34);
+  border-color: #8ee6ff;
+  outline: 2px solid #8ee6ff;
+  outline-offset: 1px;
+  box-shadow: none;
 }
 .settings .btn-primary:focus,
 .settings .btn-primary:focus-visible,
@@ -1987,13 +2040,18 @@ select {
   color: #fff;
   background: var(--neon);
   border-color: transparent;
-  box-shadow: 0 0 0 3px #fff;
+  outline: 2px solid #8ee6ff;
+  outline-offset: 2px;
+  /* The button's own elevation, kept: the focus state adds no glow of its own. */
+  box-shadow: 0 10px 24px rgba(80, 90, 255, 0.28);
 }
 .settings select:focus,
 .settings select:focus-visible,
 .settings select.dpad-focus {
-  border-color: #fff;
-  box-shadow: 0 0 0 3px #3ec8ff;
+  border-color: #8ee6ff;
+  outline: 2px solid #8ee6ff;
+  outline-offset: 1px;
+  box-shadow: none;
 }
 .check { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 6px 10px; border-radius: 12px; }
 .check input[type="checkbox"] { width: 22px; height: 22px; accent-color: #3ec8ff; flex: none; }
@@ -2052,9 +2110,10 @@ select {
 .settings-back.dpad-focus {
   color: #fff;
   border-color: #8ee6ff;
-  background: rgba(62, 200, 255, 0.18);
-  outline: 3px solid #fff;
+  background: rgba(62, 200, 255, 0.16);
+  outline: 2px solid #8ee6ff;
   outline-offset: 2px;
+  box-shadow: none;
 }
 .settings-menu {
   display: grid;
@@ -2091,11 +2150,11 @@ select {
 .settings-card:focus,
 .settings-card:focus-visible,
 .settings-card.dpad-focus {
-  outline: 3px solid #fff;
-  outline-offset: 2px;
-  border-color: #8ee6ff;
+  outline: 2px solid #8ee6ff;
+  outline-offset: -1px;
+  border-color: rgba(62, 200, 255, 0.6);
   background: rgba(62, 200, 255, 0.14);
-  box-shadow: 0 0 0 7px rgba(62, 200, 255, 0.28);
+  box-shadow: none;
 }
 .settings-card:focus .settings-card-value,
 .settings-card:focus-visible .settings-card-value,
@@ -2108,8 +2167,20 @@ select {
    only thing the remote lands on, and it is sized for a viewer across the room. */
 .settings-row.settings-rows {
   grid-template-columns: minmax(0, 1fr) auto auto auto;
-  gap: 12px;
+  /* The rhythm of a Customize row is in `em` against the page's own font size, so the
+     4K rules below scale the whole group rather than only its text. */
+  gap: 0.7em;
+  padding-block: 0.6em;
 }
+.settings-row.settings-rows > .settings-copy { padding-right: 0.4em; }
+/* Two questions share these rows - whether a row shows, and what shape it is - so a
+   hairline between the two choice groups keeps them readable as separate questions
+   without adding a label, a stop, or a level to walk into. */
+.settings-row.settings-rows > .settings-choice + .settings-choice {
+  padding-left: 0.7em;
+  border-left: 1px solid var(--line);
+}
+.settings-row.settings-rows > .settings-move { margin-left: 0.3em; }
 .switch {
   position: relative;
   display: inline-flex;
@@ -2145,16 +2216,24 @@ select {
 .settings .switch input:focus + .switch-face,
 .settings .switch input:focus-visible + .switch-face,
 .settings .switch input.dpad-focus + .switch-face {
-  outline: 3px solid #8ee6ff;
-  outline-offset: 3px;
-  box-shadow: 0 0 0 6px rgba(62, 200, 255, 0.28);
+  outline: 2px solid #8ee6ff;
+  outline-offset: 2px;
+  box-shadow: none;
 }
+/* Every control in a row sits in one rhythm: the same height, the same radius and the
+   same border weight, so a row reads as a single line of controls rather than a pile of
+   differently sized buttons. The height is declared on the group and stretched onto the
+   buttons, so a group whose glyphs are a little larger does not grow taller than its
+   neighbours. */
 .settings-choice {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 0.35em;
+  min-height: 2.6em;
 }
 .settings-choice .btn.tiny {
-  padding: 0.6em 1.1em;
+  align-self: stretch;
+  padding: 0 1.1em;
   font-size: 1em;
   border-radius: 10px;
 }
@@ -2170,12 +2249,15 @@ select {
 .settings-stepper {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 0.6em;
+  min-height: 2.6em;
 }
 .settings-stepper .btn.tiny {
+  align-self: stretch;
   min-width: 3em;
-  padding: 0.6em 0;
+  padding: 0 0.6em;
   font-size: 1.1em;
+  border-radius: 10px;
 }
 .settings-stepper[data-low="true"] .btn:first-child,
 .settings-stepper[data-high="true"] .btn:last-child { opacity: 0.4; }
@@ -2192,7 +2274,8 @@ select {
   gap: 1em;
   min-width: 13em;
   max-width: 20em;
-  padding: 0.7em 0.85em;
+  min-height: 2.6em;
+  padding: 0.5em 0.85em;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: #0c0d11;
@@ -2205,8 +2288,10 @@ select {
 .settings-value:focus,
 .settings-value:focus-visible,
 .settings-value.dpad-focus {
-  border-color: #fff;
-  box-shadow: 0 0 0 3px #3ec8ff;
+  border-color: #8ee6ff;
+  outline: 2px solid #8ee6ff;
+  outline-offset: 1px;
+  box-shadow: none;
 }
 .settings-value:focus svg,
 .settings-value:focus-visible svg,

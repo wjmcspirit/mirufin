@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom"
 import { HomeLayoutGroup, HomeSizeGroup, NavLayoutGroup } from "../components/HomeEditor"
 import { ChevronIcon } from "../components/Icons"
 import { Choice, Pick, SettingsRow, Stepper, Switch, type Option } from "../components/SettingsControls"
+import { SettingsBackdrop } from "../components/SettingsBackdrop"
 import * as api from "../lib/api"
 import { CARD_SIZES, CARD_STYLES, mergeHomeRows } from "../lib/homeLayout"
 import { placeFocus } from "../lib/remote"
@@ -184,6 +185,7 @@ export function SettingsPage() {
   if (!active) {
     return (
       <div className="settings">
+        <SettingsBackdrop />
         <header className="settings-head">
           <h1>Settings</h1>
           <p className="hint">How Mirufin looks and plays on this TV.</p>
@@ -206,6 +208,7 @@ export function SettingsPage() {
 
   return (
     <div className="settings">
+      <SettingsBackdrop />
       <header className="settings-head">
         <button className="settings-back" type="button" onClick={() => navigate(-1)}>
           <ChevronIcon direction="left" size={18} />

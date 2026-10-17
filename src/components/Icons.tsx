@@ -37,11 +37,22 @@ export function SearchIcon(props: IconProps) {
   )
 }
 
+/**
+ * The Settings destination: a gear, not the brightness dial it used to be drawn as.
+ * The geometry is the conventional gear, drawn a little smaller than its own 24-unit
+ * box so it sits at the same visual size as the other rail icons, and the strokes are
+ * non-scaling so the rail's 1.7 weight is kept exactly.
+ */
 export function SettingsIcon(props: IconProps) {
   return (
     <Base {...props}>
-      <circle cx="12" cy="12" r="3" />
-      <path d="M12 3.5v2.2M12 18.3V20.5M3.5 12h2.2M18.3 12h2.2M5.8 5.8l1.6 1.6M16.6 16.6l1.6 1.6M18.2 5.8l-1.6 1.6M7.4 16.6l-1.6 1.6" />
+      <g transform="translate(12 12) scale(0.85) translate(-12 -12)">
+        <path
+          vectorEffect="non-scaling-stroke"
+          d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"
+        />
+        <circle vectorEffect="non-scaling-stroke" cx="12" cy="12" r="3" />
+      </g>
     </Base>
   )
 }
