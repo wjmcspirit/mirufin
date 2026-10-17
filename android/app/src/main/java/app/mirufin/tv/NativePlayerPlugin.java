@@ -373,14 +373,16 @@ public class NativePlayerPlugin extends Plugin {
     private void publish(String error) {
         try {
             if (player == null && error == null) return;
+            boolean hasPlayer = player != null;
             JSObject data = new JSObject();
-            long position = player == null ? 0 : Math.max(0L, player.getCurrentPosition());
-            long duration = player == null ? 0 : player.getDuration();
+            long position = hasPlayer ? Math.max(0L, player.getCurrentPosition()) : 0;
+            long duration = hasPlayer ? player.getDuration() : 0;
+            int state = hasPlayer ? player.getPlaybackState() : Player.STATE_IDLE;
             data.put("seconds", position / 1000.0);
             data.put("duration", duration > 0 ? duration / 1000.0 : 0);
-            data.put("paused", player == null || !player.isPlaying());
-            data.put("buffering", player != null && player.getPlaybackState() == Player.STATE_BUFFERING);
-            data.put("ended", player != null && player.getPlaybackState() == Player.STATE_ENDED);
+            data.put("paused", PlayerState.paused(hasPlayer, hasPlayer && player.getPlayWhenReady()));
+            data.put("buffering", PlayerState.buffering(hasPlayer, state));
+            data.put("ended", PlayerState.ended(hasPlayer, state));
             if (error != null) data.put("error", error);
             notifyListeners("state", data);
         } catch (RuntimeException failure) {
@@ -430,6 +432,24 @@ public class NativePlayerPlugin extends Plugin {
     @Override
     protected void handleOnDestroy() {
         teardown(getActivity());
+    }
+
+    /**
+     * The activity is no longer on screen: the television's own Home button, the system settings,
+     * anything that takes the picture away.
+     *
+     * Nothing else pauses playback for us - this player is not tied to a media session and takes
+     * no audio focus - so without this the sound carries on over whatever the viewer moved to. The
+     * media item and its position are left exactly as they are, so coming back shows the frame the
+     * viewer left, paused, and one press of OK carries on from there. It is not resumed on the way
+     * back: the viewer chose to leave, and a screen that starts talking by itself is worse than
+     * one that waits to be asked.
+     */
+    @Override
+    protected void handleOnPause() {
+        if (player == null) return;
+        player.pause();
+        publish(null);
     }
 
     private void teardown(Activity activity) {

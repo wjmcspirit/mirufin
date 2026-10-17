@@ -12,6 +12,7 @@ import { backdropSrc, primarySrc, trickplayUrl } from "../lib/images"
 import { nativeEngine, nativePlayer } from "../lib/nativePlayer"
 import { isTrailerItem } from "../lib/trailer"
 import { pickTrickplay, segmentAt, segmentEnd, segmentKey, segmentLabel } from "../lib/segments"
+import { playbackStep, startTicks, type PlaybackMark } from "../lib/playback"
 import type { Chapter, Item, MediaSegment, SegmentType, TrickplayInfo } from "../lib/types"
 import { usePrefs, useSession } from "../session"
 
@@ -28,14 +29,6 @@ interface PlayRequest {
   burnSubtitle: boolean
   forceTranscode: boolean
   nonce: number
-}
-
-function initialTicks(item: Item, resume: boolean, rewind: number) {
-  if (!resume) return 0
-  const start = item.UserData?.PlaybackPositionTicks || 0
-  const runtime = item.RunTimeTicks || 0
-  if (!start || (runtime && runtime - start < 20_000_000)) return 0
-  return Math.max(0, start - secondsToTicks(rewind))
 }
 
 export function PlayerPage() {
@@ -110,7 +103,7 @@ export function PlayerPage() {
       .item(userId, id)
       .then(async (loaded) => {
         if (cancel) return
-        const ticks = initialTicks(loaded, resume, prefsRef.current.resumeRewind)
+        const ticks = startTicks(loaded, resume, prefsRef.current.resumeRewind)
         let intro: Item | null = null
         if (prefsRef.current.cinemaMode && ticks === 0 && loaded.MediaType !== "Audio") {
           const preroll = await api.intros(userId, loaded.Id)
@@ -199,12 +192,12 @@ export function PlayerPage() {
     if (!video) return
     let cancel = false
     let hls: Hls | null = null
-    const startTicks = prelude ? 0 : request.startTicks
+    const fromTicks = prelude ? 0 : request.startTicks
     const playback = {
       playSessionId: undefined as string | undefined,
       mediaSourceId: undefined as string | undefined,
       mode: "direct" as PlaybackPlan["mode"],
-      offsetTicks: startTicks,
+      offsetTicks: fromTicks,
       started: false,
     }
 
@@ -221,6 +214,10 @@ export function PlayerPage() {
     }
     const report = (kind: "start" | "progress" | "stop", isPaused = video.paused) => {
       positionRef.current = currentSeconds()
+      // Reporting the start is what marks this item as playing. The progress timer and the stop
+      // that saves the position on the way out both key off it, so it is set here rather than at
+      // each of the places that can report a start.
+      if (kind === "start") playback.started = true
       void api.reportPlayback(kind, {
         itemId: source.Id,
         playSessionId: playback.playSessionId,
@@ -240,12 +237,8 @@ export function PlayerPage() {
       setPaused(false)
       setBuffering(false)
       setReady(true)
-      if (!playback.started) {
-        playback.started = true
-        report("start", false)
-      } else {
-        report("progress", false)
-      }
+      if (!playback.started) report("start", false)
+      else report("progress", false)
     }
     const onPause = () => {
       setPaused(true)
@@ -274,7 +267,7 @@ export function PlayerPage() {
       setLoading(false)
     }
 
-    let nativePaused = true
+    let mark: PlaybackMark = { started: false, paused: true }
     let nativeListening: { remove: () => Promise<void> } | null = null
     if (!nativeEngine()) {
       video.addEventListener("timeupdate", onTime)
@@ -290,7 +283,7 @@ export function PlayerPage() {
       const nextPlan = await api.openPlayback({
         itemId: source.Id,
         userId,
-        startTicks,
+        startTicks: fromTicks,
         audioStreamIndex: request.audioStreamIndex,
         subtitleStreamIndex: trailerPlayback ? -1 : request.burnSubtitle ? request.subtitleStreamIndex : null,
         burnSubtitle: request.burnSubtitle,
@@ -314,7 +307,7 @@ export function PlayerPage() {
       if (nativeEngine()) {
         document.documentElement.classList.add("native-playing")
         const authorization = api.authHeader()
-        nativeListening = await nativePlayer.addListener("state", (event) => {
+        const listening = await nativePlayer.addListener("state", (event) => {
           if (cancel) return
           if (event.error) {
             onError(event.error)
@@ -326,35 +319,41 @@ export function PlayerPage() {
           setPosition(seconds)
           if (event.duration > 0) setDuration(base + event.duration)
           setBuffering(event.buffering && !event.ended)
-          const wasPaused = nativePaused
-          nativePaused = event.paused
+          const step = playbackStep(mark, event)
+          mark = step.mark
           if (event.ended) {
             onEnded()
             return
           }
-          if (!event.paused) {
-            setPaused(false)
-            setLoading(false)
-            setReady(true)
-            if (!playback.started) {
-              playback.started = true
-              report("start", false)
-            }
-          } else if (playback.started && !wasPaused) {
+          if (event.paused) {
             setPaused(true)
-            report("progress", true)
           } else {
-            setPaused(true)
+            setPaused(false)
+            // The spinner is cleared only once frames are actually rolling. A stream that is
+            // still filling its buffer has not started, and saying it has would take the
+            // spinner away while the screen is still empty.
+            if (!event.buffering) {
+              setLoading(false)
+              setReady(true)
+            }
           }
+          if (step.report) report(step.report.kind, step.report.paused)
         })
+        // A player that is left before its listener arrives must still give the listener back:
+        // the effect's own cleanup has already run by now, so it would never see this handle.
+        if (cancel) {
+          ignoreNativeFailure(listening.remove())
+          return
+        }
+        nativeListening = listening
         await nativePlayer.play({
           url: nextPlan.url,
           startSeconds: nextPlan.mode === "hls" ? 0 : offset,
           headers: { Authorization: authorization, "X-Emby-Authorization": authorization },
         })
         if (trailerPlayback) ignoreNativeFailure(nativePlayer.selectText({ ordinal: -1 }))
-        // The state listener below clears loading once ExoPlayer is actually playing;
-        // clearing it here would flash the play button during the initial buffer.
+        // The state listener above clears loading once frames are actually rolling; clearing it
+        // here would flash the play button during the initial buffer.
         return
       }
 
@@ -401,7 +400,7 @@ export function PlayerPage() {
     })
 
     const progressTimer = window.setInterval(() => {
-      const isPaused = nativeEngine() ? nativePaused : video.paused
+      const isPaused = nativeEngine() ? mark.paused : video.paused
       if (!isPaused && playback.started) report("progress", false)
     }, 10000)
 
@@ -640,7 +639,20 @@ export function PlayerPage() {
     focusControl(menuButton.current)
     if (nativeEngine()) {
       if (index == null) {
-        ignoreNativeFailure(nativePlayer.subtitle({ url: "" }))
+        // Nothing on the picture is a track to switch off. A subtitle burned into the stream has
+        // to be asked for again without it, the way the browser path does; a track that is merely
+        // selected is deselected, which needs no new media item and so no stutter in the picture.
+        if (request?.burnSubtitle) {
+          setRequest({
+            ...request,
+            subtitleStreamIndex: null,
+            burnSubtitle: false,
+            forceTranscode: false,
+            startTicks: secondsToTicks(positionRef.current),
+            nonce: request.nonce + 1,
+          })
+          return
+        }
         ignoreNativeFailure(nativePlayer.selectText({ ordinal: -1 }))
         return
       }
