@@ -451,6 +451,18 @@ h1, h2, h3 {
 }
 
 .text-link:hover { color: var(--text); }
+/* A text link is a control like any other, and the viewer reaches these with the remote: the
+   gate's "Enter a server address instead" and the sign-in page's "use a different server" were
+   focusable with nothing drawn to say so, because the global `:focus` rule takes the browser's
+   own outline away. They carry the app's ring now. */
+.text-link:focus,
+.text-link:focus-visible,
+.text-link.dpad-focus {
+  outline: 3px solid #8ee6ff;
+  outline-offset: 3px;
+  border-radius: 8px;
+  color: var(--text);
+}
 
 .user-row { display: flex; flex-wrap: wrap; gap: 10px; }
 .user-chip {
@@ -1775,6 +1787,17 @@ select {
   font-weight: 600;
 }
 .more-link:hover { color: #fff; }
+/* "Read more" under a long synopsis is the one control in the copy, and it is reached with the
+   remote like any other: it draws the app's ring rather than relying on the outline the
+   stylesheet takes away. */
+.more-link:focus,
+.more-link:focus-visible,
+.more-link.dpad-focus {
+  outline: 3px solid #8ee6ff;
+  outline-offset: 3px;
+  border-radius: 8px;
+  color: #fff;
+}
 .poster-lg { width: 320px; box-shadow: var(--shadow); }
 /* An episode's panel is a 16:9 still, so it takes the room a poster would and
    keeps the copy column wide enough to stay readable on a narrower TV. */
@@ -2562,6 +2585,15 @@ html.native-playing .player video { display: none; }
   box-shadow: 0 12px 32px rgba(80, 90, 255, 0.4);
   display: grid;
   place-items: center;
+}
+/* The play button that sits over a paused picture is reachable with the remote, so it takes the
+   ring too - drawn outside its own glow so the two do not read as one blur. */
+.center-play:focus,
+.center-play:focus-visible,
+.center-play.dpad-focus {
+  outline: 3px solid #8ee6ff;
+  outline-offset: 4px;
+  box-shadow: 0 12px 32px rgba(80, 90, 255, 0.4), 0 0 0 10px rgba(62, 200, 255, 0.22);
 }
 .chrome {
   position: absolute;

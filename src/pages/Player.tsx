@@ -43,6 +43,7 @@ export function PlayerPage() {
   const navigate = useNavigate()
   const videoRef = useRef<HTMLVideoElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+  const chromeRef = useRef<HTMLDivElement>(null)
   const [item, setItem] = useState<Item | null>(null)
   const [request, setRequest] = useState<PlayRequest | null>(null)
   const [plan, setPlan] = useState<PlaybackPlan | null>(null)
@@ -463,7 +464,16 @@ export function PlayerPage() {
       setChrome(true)
       return
     }
-    const timer = window.setTimeout(() => setChrome(false), 4000)
+    const timer = window.setTimeout(() => {
+      // The viewer is on the controls: taking them away would take the focus ring with them,
+      // and the next press would move from somewhere they cannot see.
+      const node = chromeRef.current
+      if (node && node.contains(document.activeElement)) {
+        setChrome(true)
+        return
+      }
+      setChrome(false)
+    }, 4000)
     return () => window.clearTimeout(timer)
   }, [ended, menu, paused, pointer])
 
@@ -1035,7 +1045,15 @@ export function PlayerPage() {
           <span>{seekFlash.seconds} seconds</span>
         </div>
       )}
-      <div className={showChrome ? "chrome" : "chrome hidden"}>
+      <div
+        ref={chromeRef}
+        className={showChrome ? "chrome" : "chrome hidden"}
+        // The chrome fades out rather than unmounting, so without this its transport buttons and
+        // its seek bar stay in the remote's reach while nothing is drawn: a press would move the
+        // focus ring onto a control the viewer cannot see. `inert` is what the navigation engine
+        // already skips, and the browser blurs anything inside it.
+        inert={!showChrome}
+      >
         <div className="chrome-top">
           <div>
             <h1>{prelude ? "Trailer" : item?.Type === "Episode" ? item.SeriesName : item?.Name}</h1>

@@ -11,8 +11,10 @@
  *
  * Run it with `npm run navcheck`.
  */
+import { readFileSync } from "node:fs"
 import {
   clearSeats,
+  focusables,
   moveFocus,
   noteRoute,
   ownBack,
@@ -1284,6 +1286,78 @@ function testStudioDiscovery() {
   cancel()
 }
 
+// ---------------------------------------------------------------------------
+// What the remote can reach has to be drawn when it is reached
+// ---------------------------------------------------------------------------
+
+/**
+ * A panel that has faded out is not a target.
+ *
+ * The player's chrome is the case that matters: it dims rather than unmounting, so its transport
+ * buttons and its seek bar stay in the tree while nothing is painted. Without `inert` they are
+ * ordinary focusable controls with a rect of their own, and a press moves the focus ring onto one
+ * of them - the ring is then nowhere the viewer can see it, and the press after that starts from
+ * a control they never chose. The engine already skips anything inside `[inert]`; this is the
+ * check that the panel is marked, and that the skipping really happens.
+ */
+function testFadedPanel() {
+  clearSeats()
+  resetFocusState()
+  const { main } = shell()
+  const strip = row(main, "Continue watching", ["/item/A", "/item/B"])
+  placeFocus(strip.cards[0])
+
+  // The player's chrome, faded out but still in the tree, directly under the card.
+  const chrome = new El("div", "chrome hidden").attr("inert", "")
+  const transport = new El("button", "transport-btn")
+  transport.place(400, 300, 60, 60)
+  chrome.add(transport)
+  main.add(chrome)
+
+  moveFocus("ArrowDown")
+  check("a faded panel does not collect the focus ring", active !== transport, label(active))
+  check(
+    "and the engine does not offer its controls at all",
+    !focusables().includes(transport as unknown as HTMLElement),
+    label(transport),
+  )
+
+  // The same button is offered again the moment the panel is on screen: without this the two
+  // checks above would pass on a button that was never reachable in the first place.
+  chrome.attr("inert", null)
+  check(
+    "the same control is offered again as soon as the panel is not inert",
+    focusables().includes(transport as unknown as HTMLElement),
+    label(transport),
+  )
+}
+
+/** The declarations the checks above rest on, read as they are written. */
+function testFocusDeclarations() {
+  const css = readFileSync("src/styles.css", "utf8")
+  const player = readFileSync("src/pages/Player.tsx", "utf8")
+
+  check(
+    "the player's chrome leaves the remote's reach while it is faded out",
+    /chrome hidden"[\s\S]{0,600}?inert=\{!showChrome\}/.test(player),
+    "Player.tsx",
+  )
+  check(
+    "and it is never faded out from under the focus the viewer is holding",
+    /chromeRef\.current[\s\S]{0,200}?contains\(document\.activeElement\)/.test(player),
+    "Player.tsx",
+  )
+  // The stylesheet takes the browser's own outline away with a global `:focus` rule, so every
+  // control the remote can land on has to draw a ring of its own. These three did not.
+  for (const control of [".text-link", ".more-link", ".center-play"]) {
+    check(
+      `${control} draws a focus ring`,
+      css.includes(`${control}:focus`) && css.includes(`${control}.dpad-focus`),
+      "styles.css",
+    )
+  }
+}
+
 installDom()
 trackSeats()
 testHomeRow()
@@ -1305,6 +1379,8 @@ testCrewRow()
 testGenreDiscovery()
 testStudioDiscovery()
 testClearingAndOverlays()
+testFadedPanel()
+testFocusDeclarations()
 console.log(failures === 0 ? "\nAll navigation checks passed." : `\n${failures} navigation check(s) failed.`)
 if (failures > 0) throw new Error(`${failures} navigation check(s) failed`)
 
