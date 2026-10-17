@@ -42,7 +42,7 @@ async function readError(response: Response) {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, quiet = false): Promise<T> {
   const headers = new Headers(init?.headers)
   const authorization = authHeader()
   headers.set("Authorization", authorization)
@@ -68,7 +68,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     const message = await readError(response)
     const sentToken = Boolean(getToken())
-    if (response.status === 401 && sentToken && !path.includes("/AuthenticateByName") && !path.includes("/QuickConnect/")) {
+    if (!quiet && response.status === 401 && sentToken && !path.includes("/AuthenticateByName") && !path.includes("/QuickConnect/")) {
       onUnauthorized()
     }
     throw new ApiError(message || `Request failed (${response.status})`, response.status)
@@ -188,6 +188,22 @@ export function publicInfo(signal?: AbortSignal) {
 
 export function publicUsers() {
   return jf<PublicUser[]>("/Users/Public")
+}
+
+/**
+ * Whether the saved token still works, for the one place that signs a viewer out. A single
+ * rejected request is not proof that the sign-in is gone, and an unreachable server proves
+ * nothing at all, so this asks the server directly - quietly, so that asking does not arm the
+ * sign-out handler again.
+ */
+export async function tokenStillWorks() {
+  try {
+    await request<PublicUser>("/Users/Me", undefined, true)
+    return true
+  } catch (error) {
+    // Only a rejected token counts against the sign-in.
+    return !(error instanceof ApiError) || error.status !== 401
+  }
 }
 
 export function authenticate(username: string, password: string) {

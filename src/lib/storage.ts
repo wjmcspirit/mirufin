@@ -96,6 +96,11 @@ export function getDeviceId() {
   return id
 }
 
+/** Keeps the device identity the server already knows, so a restored session keeps it. */
+export function saveDeviceId(id: string) {
+  if (id) localStorage.setItem(DEVICE, id)
+}
+
 export function getServer() {
   return localStorage.getItem(SERVER) || ""
 }
