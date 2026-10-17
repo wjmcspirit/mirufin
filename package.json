@@ -1,12 +1,13 @@
 {
   "name": "mirufin",
   "private": true,
-  "version": "0.1.37",
+  "version": "0.1.38",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "start": "vite",
     "build": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && vite build",
+    "seasoncheck": "esbuild tools/seasonCheck.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.mirufin/seasonCheck.mjs && node node_modules/.mirufin/seasonCheck.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

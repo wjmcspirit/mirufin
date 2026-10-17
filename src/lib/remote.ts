@@ -222,7 +222,11 @@ function placeReveal(node: HTMLElement) {
   if (!(main instanceof HTMLElement)) return
   const view = () => main.getBoundingClientRect()
   const hero = node.closest(".hero, .detail-hero")
-  const row = node.closest<HTMLElement>(".row, .season-block")
+  // A row is brought into view as a whole - its heading, its strip and whatever it carries
+  // with it - rather than just the control that took focus. A season's episodes are the block
+  // they belong to: parking it puts the episode the remote is on, the details that follow it
+  // and the actions under the row on screen together.
+  const row = node.closest<HTMLElement>(".row, .season-block, .episode-block")
   if (hero && !row) {
     const rect = node.getBoundingClientRect()
     const box = view()

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { MediaImage, PosterCard } from "../components/Cards"
 import { CheckIcon, HeartIcon, InfoIcon, PlayIcon, SeasonIcon } from "../components/Icons"
@@ -10,9 +10,9 @@ import { useEpisodeStage, useFilmographyStage, usePinnedArt, useStage, useStageA
 import { useThemeSong } from "../components/Theme"
 import { TitleLogo } from "../components/Title"
 import * as api from "../lib/api"
-import { canPlayDirectly, episodeCode, formatRuntime, isInProgress, metaLine, personFacts, progressPct, techChips } from "../lib/format"
+import { canPlayDirectly, episodeCode, formatRuntime, metaLine, personFacts, progressPct, techChips } from "../lib/format"
 import { hasMediaInfo } from "../lib/mediaInfo"
-import { placeFocus } from "../lib/remote"
+import { resolveSeason, seasonStart } from "../lib/seasons"
 import { knownFor, type KnownWork } from "../lib/knownFor"
 import { artWidth, backdropSrc, episodeStillSrc, episodeWideStill, imageUrl, loadImage, primarySrc, seasonArtSrc, thumbSrc, warmImage, wideBackdrop } from "../lib/images"
 import type { Item } from "../lib/types"
@@ -89,6 +89,10 @@ export function ItemPage() {
   if (status === "error" || !item) return <Problem message={error || "This title is unavailable."} />
 
   const episode = item.Type === "Episode"
+  // A series and a season are the two pages that browse a season, and they carry the actions
+  // under the episode row rather than under the portrait. See `actionBand` below.
+  const browsePage = item.Type === "Series" || item.Type === "Season"
+  const page = ["detail", personPage ? "person-page" : "", browsePage ? "browse-page" : ""].filter(Boolean).join(" ")
   const poster = primarySrc(item, 900)
   // An episode's panel is a 16:9 still, never a portrait poster stretched into it.
   const panelArt = episode ? episodeWideStill(item, 1600) : item.Type === "Person" ? poster : poster || backdropSrc(item)
@@ -111,9 +115,34 @@ export function ItemPage() {
       {item.UserData?.IsFavorite ? "Favorited" : "Favorite"}
     </button>
   )
+  // The actions of the title itself: what plays it, what marks it, what it is. On the pages
+  // that browse a season the band belongs under the episode row, where the reference puts
+  // it, so it is built here and handed to the body to place - one band either way, never two.
+  const actionBand = (
+    <div className="actions detail-actions">
+      <PlayActions item={item} progress={progress} />
+      {/* An episode offers the trailer action only when the server has one that plays. */}
+      {(item.Type === "Movie" || item.Type === "Series" || episode) && (
+        <TrailerButton item={item} onlyWhenAvailable={episode} />
+      )}
+      {!personPage && favoriteAction}
+      {canPlayDirectly(item) && (
+        <button className={`btn icon-btn ${item.UserData?.Played ? "on" : ""}`} type="button" onClick={() => void togglePlayed()} disabled={busy === "played"}>
+          <CheckIcon size={16} />
+          {item.UserData?.Played ? "Watched" : "Mark watched"}
+        </button>
+      )}
+      {hasMediaInfo(item) && (
+        <button className="btn icon-btn" type="button" onClick={() => setInfoOpen(true)}>
+          <InfoIcon size={16} />
+          Media info
+        </button>
+      )}
+    </div>
+  )
 
   return (
-    <article className={item.Type === "Person" ? "detail person-page" : "detail"}>
+    <article className={page}>
       <header className="detail-hero stage-copy">
         <div className={layout}>
           <div className={episode ? "still-lg" : "poster-lg"}>
@@ -150,33 +179,13 @@ export function ItemPage() {
         </div>
         {/* The band under the portrait carries playback and title actions. A person
             page has none of them once Favorite sits with the biography, so the band
-            is left out rather than left behind as an empty stop for the remote. */}
-        {(item.Type !== "Person" || hasMediaInfo(item)) && (
-          <div className="actions detail-actions">
-            <PlayActions item={item} progress={progress} />
-            {/* An episode offers the trailer action only when the server has one that plays. */}
-            {(item.Type === "Movie" || item.Type === "Series" || episode) && (
-              <TrailerButton item={item} onlyWhenAvailable={episode} />
-            )}
-            {!personPage && favoriteAction}
-            {canPlayDirectly(item) && (
-              <button className={`btn icon-btn ${item.UserData?.Played ? "on" : ""}`} type="button" onClick={() => void togglePlayed()} disabled={busy === "played"}>
-                <CheckIcon size={16} />
-                {item.UserData?.Played ? "Watched" : "Mark watched"}
-              </button>
-            )}
-            {hasMediaInfo(item) && (
-              <button className="btn icon-btn" type="button" onClick={() => setInfoOpen(true)}>
-                <InfoIcon size={16} />
-                Media info
-              </button>
-            )}
-          </div>
-        )}
+            is left out rather than left behind as an empty stop for the remote, and a
+            page that browses a season carries the band under its episode row instead. */}
+        {!browsePage && (item.Type !== "Person" || hasMediaInfo(item)) && actionBand}
         {error && <p className="error">{error}</p>}
       </header>
       {infoOpen && <MediaInfo item={item} onClose={() => setInfoOpen(false)} />}
-      <ItemBody item={item} />
+      <ItemBody item={item} actions={browsePage ? actionBand : null} />
     </article>
   )
 }
@@ -284,12 +293,13 @@ function SeriesPlay({ series }: { series: Item }) {
 
 /**
  * Plays one season, in order, and keeps the player inside it (`rest=season`).
- * The action sits beside the season it plays, so a series with several seasons
- * never has to guess which one a series-wide button meant. Render it inside an
- * `.actions` band: the remote walks focus band to band, and a row heading on its
- * own is not one, so a bare button in a `.row-head` could not be reached.
+ *
+ * The action belongs to the season the viewer is browsing, and it sits in the band under the
+ * episode row, beside the title's own actions: a series with several seasons never has to
+ * guess which one a play button meant, and the band it is in is a band the remote walks, so
+ * the button is reachable - a row heading on its own is not one.
  */
-function SeasonPlay({ series, season }: { series: Item; season: Item }) {
+function SeasonPlay({ seriesId, season }: { seriesId: string; season: Item }) {
   const { userId } = useSession()
   const navigate = useNavigate()
   const [pending, setPending] = useState(false)
@@ -297,8 +307,8 @@ function SeasonPlay({ series, season }: { series: Item; season: Item }) {
   async function play() {
     setPending(true)
     try {
-      // The episode rows below already read this list, so it comes from cache.
-      const list = await api.episodes(userId, series.Id, season.Id)
+      // The episode row above already read this list, so it comes from cache.
+      const list = await api.episodes(userId, seriesId, season.Id)
       const start = seasonStart(list.Items || [])
       if (start) navigate(`/play/${start.episode.Id}?resume=${start.resume ? "1" : "0"}&rest=season`)
     } finally {
@@ -315,23 +325,22 @@ function SeasonPlay({ series, season }: { series: Item; season: Item }) {
 }
 
 /**
- * Where a season begins: the episode already in progress, otherwise the first
- * episode the viewer has not watched, otherwise the first episode. That is the
- * rule Next Up applies to a whole series, scoped to one season, so playing a
- * season continues where the viewer stopped instead of restarting it.
+ * What sits under the portrait: the browsing sections a title has. `actions` is the title's
+ * own action band, and the pages that browse a season place it under their episode row
+ * rather than under the portrait, so it is handed down rather than rendered twice.
  */
-function seasonStart(episodes: Item[]) {
-  const inProgress = episodes.find((episode) => isInProgress(episode))
-  if (inProgress) return { episode: inProgress, resume: true }
-  const unwatched = episodes.find((episode) => !episode.UserData?.Played)
-  if (unwatched) return { episode: unwatched, resume: false }
-  const first = episodes[0]
-  return first ? { episode: first, resume: false } : null
-}
-
-function ItemBody({ item }: { item: Item }) {
-  if (item.Type === "Series") return <SeriesBody series={item} />
-  if (item.Type === "Season" && item.SeriesId) return <EpisodeList seriesId={item.SeriesId} seasonId={item.Id} series={item} />
+function ItemBody({ item, actions }: { item: Item; actions?: ReactNode }) {
+  if (item.Type === "Series") return <SeriesBody series={item} actions={actions} />
+  if (item.Type === "Season" && item.SeriesId) {
+    return (
+      <section className="episode-block">
+        <div className="row-head">
+          <h2>Episodes</h2>
+        </div>
+        <EpisodeList seriesId={item.SeriesId} seasonId={item.Id} series={item} season={item} actions={actions} />
+      </section>
+    )
+  }
   if (item.Type === "Person") return <PersonBody person={item} />
   if (item.Type === "MusicAlbum" || item.Type === "Playlist" || item.Type === "BoxSet" || item.Type === "Folder" || item.Type === "PhotoAlbum" || item.Type === "CollectionFolder") {
     return <ChildrenBody item={item} />
@@ -346,13 +355,12 @@ function ItemBody({ item }: { item: Item }) {
   )
 }
 
-function SeriesBody({ series }: { series: Item }) {
+function SeriesBody({ series, actions }: { series: Item; actions?: ReactNode }) {
   const { userId } = useSession()
   const [params] = useSearchParams()
   const seasonId = params.get("season") || ""
   const [seasons, setSeasons] = useState<Item[] | null>(null)
   const [nextEpisode, setNextEpisode] = useState<Item | null>(null)
-  const lastSeason = useRef("")
 
   useEffect(() => {
     let cancel = false
@@ -371,23 +379,14 @@ function SeriesBody({ series }: { series: Item }) {
     }
   }, [series.Id, userId])
 
-  const selected = seasonId && seasons?.some((season) => season.Id === seasonId) ? seasonId : ""
-
-  // Leaving a season (Back clears the query) keeps the viewer on that season card.
-  useEffect(() => {
-    if (!selected && lastSeason.current) {
-      const node = document.querySelector<HTMLElement>(`[data-season="${lastSeason.current}"]`)
-      if (node) placeFocus(node)
-    }
-    lastSeason.current = selected
-  }, [selected])
+  // The season the page browses: the one in the address, and otherwise the first the server
+  // reports, so the episodes and their actions are on the page without the viewer having to
+  // pick a season first - and so a return to this screen renders the same episode row it
+  // rendered before, which is what lets Back put them back on the episode they left.
+  const selected = resolveSeason(seasons, seasonId) || ""
 
   const current = seasons?.find((season) => season.Id === selected) || null
   const currentTitle = current ? current.Name || `Season ${current.IndexNumber ?? ""}` : ""
-  // One season is not a choice, so its action is there without selecting
-  // anything. Several seasons each carry their own action, which appears with the
-  // season the viewer selected, so playback can never pick the wrong one.
-  const singleSeason = seasons?.length === 1 ? seasons[0] : null
 
   return (
     <div className="detail-body">
@@ -395,11 +394,6 @@ function SeriesBody({ series }: { series: Item }) {
         <section className="season-block">
           <div className="row-head">
             <h2>Seasons</h2>
-            {singleSeason && (
-              <div className="actions">
-                <SeasonPlay series={series} season={singleSeason} />
-              </div>
-            )}
           </div>
           <div className="scroller season-scroller">
             {seasons.map((season) => {
@@ -431,13 +425,15 @@ function SeriesBody({ series }: { series: Item }) {
         <section className="episode-block">
           <div className="row-head">
             <h2>{currentTitle || "Episodes"}</h2>
-            {current && !singleSeason && (
-              <div className="actions">
-                <SeasonPlay series={series} season={current} />
-              </div>
-            )}
           </div>
-          <EpisodeList seriesId={series.Id} seasonId={selected} nextId={nextEpisode?.Id || ""} series={series} />
+          <EpisodeList
+            seriesId={series.Id}
+            seasonId={selected}
+            nextId={nextEpisode?.Id || ""}
+            series={series}
+            season={current}
+            actions={actions}
+          />
         </section>
       )}
       {selected && <Extras itemId={selected} />}
@@ -447,14 +443,45 @@ function SeriesBody({ series }: { series: Item }) {
   )
 }
 
-function EpisodeList({ seriesId, seasonId, nextId = "", series = null }: { seriesId: string; seasonId: string; nextId?: string; series?: Item | null }) {
+/**
+ * One season's episodes: the row of landscape stills the viewer browses, the compact details
+ * of the episode the remote is on, and the title's actions under the row.
+ *
+ * The row is a strip rather than the vertical list it used to be, so several episodes are on
+ * screen at once and the remote walks it sideways while Up and Down leave it. The details
+ * above the row follow whichever episode the remote rests on - starting on the one Up next
+ * would play - and they carry the series title, the episode's number and name, its facts and
+ * its synopsis, in the space a couple of lines take.
+ *
+ * Only the episodes the server returned for this season are listed, in the order it returned
+ * them, which is Jellyfin's own episode order.
+ */
+function EpisodeList({
+  seriesId,
+  seasonId,
+  nextId = "",
+  series = null,
+  season = null,
+  actions = null,
+}: {
+  seriesId: string
+  seasonId: string
+  nextId?: string
+  series?: Item | null
+  season?: Item | null
+  actions?: ReactNode
+}) {
   const { userId } = useSession()
   const [episodes, setEpisodes] = useState<Item[] | null>(null)
+  // The episode the details are about: whatever the remote is resting on, and until it rests
+  // anywhere, the one Up next would play.
+  const [spotId, setSpotId] = useState("")
   useEpisodeStage(true)
 
   useEffect(() => {
     let cancel = false
     setEpisodes(null)
+    setSpotId("")
     api
       .episodes(userId, seriesId, seasonId)
       .then((result) => {
@@ -471,16 +498,62 @@ function EpisodeList({ seriesId, seasonId, nextId = "", series = null }: { serie
   if (!episodes) return <Loading label="Loading episodes" />
   if (episodes.length === 0) return <p className="hint">No episodes in this season.</p>
 
+  const spot = episodes.find((episode) => episode.Id === spotId) || episodes.find((episode) => episode.Id === nextId) || episodes[0]
+
   return (
-    <div className="episodes">
-      {episodes.map((episode) => (
-        <EpisodeCard key={episode.Id} episode={episode} series={series} next={episode.Id === nextId} />
-      ))}
+    <>
+      <EpisodeSpot episode={spot} upNext={Boolean(nextId) && spot.Id === nextId} />
+      <div className="scroller episode-scroller">
+        {episodes.map((episode) => (
+          <EpisodeCard key={episode.Id} episode={episode} series={series} next={episode.Id === nextId} onPoint={() => setSpotId(episode.Id)} />
+        ))}
+      </div>
+      {(actions || season) && (
+        <div className="actions episode-actions">
+          {actions}
+          {season && <SeasonPlay seriesId={seriesId} season={season} />}
+        </div>
+      )}
+    </>
+  )
+}
+
+/**
+ * What the episode row is about: the series it belongs to, the episode the remote is on, that
+ * episode's facts and its synopsis. The whole synopsis is on the episode's own page; here a
+ * couple of lines are enough to know which episode the viewer is looking at.
+ */
+function EpisodeSpot({ episode, upNext }: { episode: Item; upNext: boolean }) {
+  const { prefs } = usePrefs()
+  const code = episodeCode(episode)
+  const facts = metaLine(episode, prefs.ratings)
+  return (
+    <div className="episode-spot">
+      {episode.SeriesName && <p className="eyebrow">{episode.SeriesName}</p>}
+      <h2>
+        {code ? <span className="episode-code">{code}</span> : null}
+        {code && episode.Name ? "  ·  " : ""}
+        {episode.Name}
+        {upNext ? <span className="episode-flag">Up next</span> : null}
+      </h2>
+      {facts && <p className="kicker">{facts}</p>}
+      {episode.Overview && <p className="overview clamp">{episode.Overview}</p>}
     </div>
   )
 }
 
-function EpisodeCard({ episode, series, next }: { episode: Item; series: Item | null; next: boolean }) {
+function EpisodeCard({
+  episode,
+  series,
+  next,
+  onPoint,
+}: {
+  episode: Item
+  series: Item | null
+  next: boolean
+  /** Told when this card takes the remote, so the details above the row can follow it. */
+  onPoint?: () => void
+}) {
   const { hover } = useStageActions()
   const release = useRef(0)
   const cancelHover = useRef<(() => void) | null>(null)
@@ -494,6 +567,7 @@ function EpisodeCard({ episode, series, next }: { episode: Item; series: Item | 
 
   function point(item: Item | null) {
     cancelHover.current = hover(item)
+    if (item) onPoint?.()
   }
 
   function stayingOnCard(target: EventTarget | null) {
@@ -551,13 +625,16 @@ function EpisodeCard({ episode, series, next }: { episode: Item; series: Item | 
       <span className="episode-copy">
         <span className="episode-title">
           {code ? <span className="episode-code">{code}</span> : null}
-          {code && episode.Name ? " · " : ""}
+          {code && episode.Name ? "  ·  " : ""}
           {episode.Name}
-          {next ? <span className="episode-flag">Up next</span> : null}
-          {episode.UserData?.Played ? <span className="episode-flag watched">Watched</span> : null}
         </span>
-        {runtime ? <span className="episode-meta">{runtime}</span> : null}
-        {episode.Overview ? <span className="episode-overview">{episode.Overview}</span> : null}
+        {(runtime || next || episode.UserData?.Played) && (
+          <span className="episode-meta">
+            {runtime}
+            {next ? <span className="episode-flag">Up next</span> : null}
+            {episode.UserData?.Played ? <span className="episode-flag watched">Watched</span> : null}
+          </span>
+        )}
       </span>
     </Link>
   )
