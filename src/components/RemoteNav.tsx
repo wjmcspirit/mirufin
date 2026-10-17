@@ -1,9 +1,10 @@
 import { App as NativeApp } from "@capacitor/app"
 import { Capacitor } from "@capacitor/core"
 import { useEffect } from "react"
-import { useLocation, useNavigate } from "react-router-dom"
+import { useLocation, useNavigate, useNavigationType } from "react-router-dom"
 import { useLocalProxy } from "../lib/media"
-import { backHeld, focusables, isBackKey, moveFocus, placeFocus, rememberedHref, remoteKey, resetFocusState, takeBack } from "../lib/remote"
+import { backHeld, clearSeats, focusables, isBackKey, moveFocus, noteRoute, placeFocus, remoteKey, resetFocusState, restoreSeat, takeBack, trackSeats } from "../lib/remote"
+import { useSession } from "../session"
 
 const ARROWS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])
 const TEXT_TYPES = new Set(["text", "password", "search", "url", "email", "tel"])
@@ -36,38 +37,45 @@ function stepNumber(input: HTMLInputElement, delta: number) {
 export function RemoteNav() {
   const navigate = useNavigate()
   const location = useLocation()
+  const navigationType = useNavigationType()
+  const { userId } = useSession()
+  const route = location.pathname + location.search
+
+  // Where the viewer was is remembered per route, so the memory has to be told which route
+  // is on screen before anything can be remembered about it. Told before the placement
+  // below runs, so a restoration is filed against the screen it belongs to.
+  useEffect(() => {
+    noteRoute(route)
+  }, [route])
+
+  // One listener for the life of the app: the remote's Enter reaches the page as a click on
+  // the focused control, which is the last moment the origin still exists.
+  useEffect(() => trackSeats(), [])
+
+  // A different profile has no browsing history in this one's rows.
+  useEffect(() => {
+    clearSeats()
+  }, [userId])
 
   useEffect(() => {
     resetFocusState()
     if (useLocalProxy()) return
     document.documentElement.classList.add("remote")
-    const active = document.activeElement
-    if (active instanceof HTMLElement && active !== document.body) return
-    const remembered = rememberedHref(location.pathname + location.search)
     let cancelled = false
     let attempts = 0
     let timer = 0
-    const place = () => {
+    /**
+     * The landing a page gets when there is nothing to return to, or when the item the
+     * viewer left is genuinely gone: the first control of the page's own content, never the
+     * navigation rail, and never the body. Prefer a non-text control so entering a page
+     * never opens the TV keyboard; the viewer can still move onto a field to type.
+     */
+    const land = () => {
       if (cancelled) return
       const current = document.activeElement
-      // Stop if the user or the page already moved focus somewhere.
+      // Stop if the viewer or the page already moved focus somewhere.
       if (current instanceof HTMLElement && current !== document.body) return
       const items = focusables()
-      if (remembered) {
-        const target = items.find((item) => !item.closest(".side") && item.getAttribute("href") === remembered)
-        if (target) {
-          placeFocus(target)
-          return
-        }
-        // Content may still be loading; retry briefly before falling back.
-        if (attempts < 25) {
-          attempts += 1
-          timer = window.setTimeout(place, 60)
-          return
-        }
-      }
-      // Prefer a non-text control so entering a page never opens the TV keyboard.
-      // The viewer can still move onto a field to type when they choose to.
       const outside = items.filter((item) => !item.closest(".side"))
       const controls = outside.filter((item) => !isTextField(item))
       const content =
@@ -75,14 +83,33 @@ export function RemoteNav() {
         controls[0] ||
         outside.find((item) => item.closest(".hero .btn-primary, .detail-hero .btn-primary, .hero, .detail-hero, .card")) ||
         outside[0]
-      if (content) placeFocus(content)
-      else if (items[0]) placeFocus(items[0])
+      if (content) {
+        placeFocus(content)
+        return
+      }
+      if (items[0]) {
+        placeFocus(items[0])
+        return
+      }
+      // Content may still be loading: keep looking for a moment rather than leave the
+      // screen with nothing focused at all.
+      if (attempts < 25) {
+        attempts += 1
+        timer = window.setTimeout(land, 60)
+      }
     }
-    place()
+    // Back is a real history step and the screen it lands on is the one the viewer left, so
+    // its record is honoured even when the page has put focus somewhere of its own. A plain
+    // visit only borrows the record, and lands the page itself if it has already chosen.
+    // The action is read from the render that changed the path, so this still runs exactly
+    // when it always did - a new screen, never a query typed into the one already open.
+    const cancel = restoreSeat(route, navigationType === "POP", land)
     return () => {
       cancelled = true
       window.clearTimeout(timer)
+      cancel()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname])
 
   useEffect(() => {

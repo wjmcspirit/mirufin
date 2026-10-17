@@ -159,6 +159,9 @@ function markFocus(node: HTMLElement) {
 }
 
 export function placeFocus(node: HTMLElement) {
+  // A page that hands focus to a control of its own is the page deciding where the viewer
+  // is; a restoration still waiting for that route is no longer what they asked for.
+  stopRestore()
   focusNode(node)
 }
 
@@ -176,7 +179,7 @@ function menuOptions(pop: HTMLElement) {
 function focusNode(node: HTMLElement) {
   markFocus(node)
   if (place(node) === "main" && !node.closest(".tool-pop, .trailer-pop")) returnMain = node
-  rememberFocus(node)
+  rememberSeat(node)
   node.focus({ preventScroll: true })
   if (node.closest(".side")) {
     const rail = node.closest(".side-nav")
@@ -430,31 +433,398 @@ function alive(node: HTMLElement | null): node is HTMLElement {
 let returnSide: HTMLElement | null = null
 let returnMain: HTMLElement | null = null
 
-// Last-focused link per route, used to restore focus when returning to a page.
-// The query string is part of the key so a season view keeps its own memory.
-// Main-content links only; sidebar links are transient navigation.
-const focusMemory = new Map<string, string>()
-const FOCUS_MEMORY_MAX = 40
+// ---------------------------------------------------------------------------
+// Returning to where the viewer was
+//
+// Back is a real history step (RemoteNav calls navigate(-1)), so the screen the viewer
+// lands on is the one they left. What a route cannot carry is the control that was focused
+// there and how far the page was scrolled: both live in the DOM, and both are gone by the
+// time the router has swapped the view. This module keeps that context as plain data - a
+// stable key for the control, the identity of the row or grid that held it, and the scroll
+// offsets of the page - so a press of Back puts the viewer back on the exact item, in the
+// exact row, at the exact offset, instead of on Home or on whichever item a page happened
+// to render first.
+// ---------------------------------------------------------------------------
 
-function focusKey() {
-  return window.location.pathname + window.location.search
+/** The lists a control can live in. A control's identity is only unique inside one. */
+const SECTIONS =
+  ".row, .season-block, .episode-block, .search-group, .grid, .card-board, .episodes, .library-icons, .letter-row, .settings-menu"
+
+/** Bands that scroll on their own, so where they were scrolled is part of the seat. */
+const LANES = ".scroller, .grid, .card-board, .episodes, .library-icons, .letter-row, .settings-menu"
+
+/**
+ * Where the viewer was on one route. Plain data only: nothing here points at a DOM node,
+ * so a record can neither go stale nor hold a screen alive.
+ */
+interface NavSeat {
+  /** Stable identity of the control. */
+  key: string
+  /** Identity of the row, grid or strip that held it. */
+  band: string
+  /** Ordinal among controls in that band that share the same key. */
+  seat: number
+  /** Offset of the scrolling column when the viewer left. */
+  top: number
+  /** Offset of every sideways band, by band identity. */
+  lanes: [string, number, number][]
 }
 
-function rememberFocus(node: HTMLElement) {
-  if (!(node instanceof HTMLAnchorElement)) return
-  const href = node.getAttribute("href")
-  if (!href || node.closest(".side")) return
-  const key = focusKey()
-  focusMemory.delete(key)
-  focusMemory.set(key, href)
-  if (focusMemory.size > FOCUS_MEMORY_MAX) {
-    const oldest = focusMemory.keys().next().value
-    if (oldest) focusMemory.delete(oldest)
+const seats = new Map<string, NavSeat>()
+/** Enough for every route a session visits, and then some. */
+const SEAT_MAX = 60
+/** How long a Back keeps looking for its item before it settles for the row. */
+const SEAT_WAIT_MS = 6000
+/** How long a plain visit borrows a remembered item before the page lands itself. */
+const SEAT_SOON_MS = 1500
+/** How long a row is given to produce the item before its first card is used instead. */
+const SEAT_GRACE_MS = 1200
+/** Longer while a page is still paging: a library grid pulls the next page in as it scrolls. */
+const SEAT_GRACE_MORE_MS = 3200
+
+/** The route on screen, so a departure can be filed against it. */
+let seatRoute = ""
+/** The live restoration, while it is waiting for a page to render its item. */
+let cancelRestore: (() => void) | null = null
+
+/**
+ * The route on screen, as the router sees it. Told before anything can be remembered about
+ * it, and any restoration still waiting for the route being left is dropped: its answer can
+ * no longer be about the screen in front of the viewer.
+ */
+export function noteRoute(route: string) {
+  if (route === seatRoute) return
+  seatRoute = route
+  stopRestore()
+}
+
+/** Drop every record: a different profile starts with no browsing history of its own. */
+export function clearSeats() {
+  seats.clear()
+}
+
+function stopRestore() {
+  const cancel = cancelRestore
+  cancelRestore = null
+  if (cancel) cancel()
+}
+
+/**
+ * Start remembering where the viewer was.
+ *
+ * One listener on the capture phase is enough: the remote's Enter reaches the page as a
+ * click on the focused control, so which control is being activated - and where the page
+ * and its rows are scrolled at that moment - is known before the router swaps the screen.
+ */
+export function trackSeats() {
+  function onActivate(event: Event) {
+    const from = event.target instanceof Element ? event.target : null
+    const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    rememberSeat(from?.closest<HTMLElement>(FOCUSABLE) || focused)
+  }
+  window.addEventListener("click", onActivate, true)
+  return () => window.removeEventListener("click", onActivate, true)
+}
+
+function rememberSeat(node: HTMLElement | null) {
+  if (!node || !seatRoute) return
+  // The rail is navigation rather than a place in a page, and an option in an open menu is
+  // not a place in a page either: neither is what Back should return to.
+  if (node.closest(".side, .tool-pop, .trailer-pop")) return
+  const seat = captureSeat(node)
+  if (!seat) return
+  seats.delete(seatRoute)
+  seats.set(seatRoute, seat)
+  while (seats.size > SEAT_MAX) {
+    const oldest = seats.keys().next().value
+    if (!oldest) break
+    seats.delete(oldest)
   }
 }
 
-export function rememberedHref(key: string) {
-  return focusMemory.get(key) || null
+function classesOf(node: HTMLElement) {
+  return node.className.split(/\s+/).filter(Boolean).sort().join(".")
+}
+
+function sectionOf(node: HTMLElement) {
+  return node.closest<HTMLElement>(SECTIONS)
+}
+
+/** The heading a list names itself with, if it has one. */
+function ownHeading(band: HTMLElement) {
+  for (const child of band.children) {
+    if (!(child instanceof HTMLElement)) continue
+    if (child.tagName === "H2") return child.textContent || ""
+    if (!child.classList.contains("row-head")) continue
+    for (const inner of child.children) {
+      if (inner instanceof HTMLElement && inner.tagName === "H2") return inner.textContent || ""
+    }
+  }
+  return ""
+}
+
+/**
+ * The identity of a row, grid or strip.
+ *
+ * A heading is the best name a list can give: "Continue watching" is the same row whether
+ * it is the first row or the fifth, and whether a row above it happens to be shown today. A
+ * band without a heading falls back to its own classes, counted among the same kind of band
+ * beside it, which is stable for the rows that have no title to go by - a cast carousel, the
+ * library grid, the settings list.
+ */
+function bandKey(band: HTMLElement | null): string {
+  if (!band) return ""
+  const named = band.getAttribute("data-nav-row")
+  if (named) return named
+  const title = ownHeading(band).replace(/\s+/g, " ").trim()
+  if (title) return `t:${title}`
+  // A band that wraps rather than heads - one group of search results, one season's episode
+  // list - is named by the group around it, which is the heading the viewer sees above it.
+  const group = band.parentElement
+  const groupTitle = group instanceof HTMLElement ? ownHeading(group).replace(/\s+/g, " ").trim() : ""
+  if (groupTitle) return `t:${groupTitle}`
+  const name = classesOf(band)
+  let seat = 0
+  const parent = band.parentElement
+  if (parent) {
+    for (const child of parent.children) {
+      if (child === band) break
+      if (child instanceof HTMLElement && classesOf(child) === name) seat += 1
+    }
+  }
+  return `s:${name}#${seat}`
+}
+
+/**
+ * The identity of a control: what the app said it is, otherwise where it points, otherwise
+ * its own label. An item's href carries the item's id, so the same title opened from two
+ * rows - or a person who appears twice in one cast list - is still recognised on the way
+ * back, and a card that was focused is told apart from the hero link that goes to the same
+ * title by the row it was in.
+ */
+function controlKey(node: HTMLElement): string {
+  const named = node.getAttribute("data-nav-key")
+  if (named) return `n:${named}`
+  const href = node.closest<HTMLAnchorElement>("a[href]")?.getAttribute("href")
+  if (href) return `h:${href}`
+  const label = (node.getAttribute("aria-label") || node.textContent || "").replace(/\s+/g, " ").trim()
+  return `c:${node.tagName.toLowerCase()}:${label.slice(0, 96)}`
+}
+
+/** Where a control sits among the controls beside it that share its key. */
+function controlSeat(node: HTMLElement, key: string, band: HTMLElement | null) {
+  const scope: ParentNode = band || document.body
+  const peers = [...scope.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((peer) => controlKey(peer) === key)
+  if (peers.length < 2) return 0
+  const index = peers.indexOf(node)
+  return index < 0 ? 0 : index
+}
+
+function mainColumn() {
+  return document.querySelector<HTMLElement>(".main")
+}
+
+/** Every band that is scrolled away from its own beginning, by band identity. */
+function laneOffsets(): [string, number, number][] {
+  const root: ParentNode = mainColumn() || document.body
+  const found: [string, number, number][] = []
+  for (const lane of root.querySelectorAll<HTMLElement>(LANES)) {
+    if (lane.scrollWidth <= lane.clientWidth + 4 && lane.scrollHeight <= lane.clientHeight + 4) continue
+    const key = bandKey(sectionOf(lane) || lane)
+    if (!key || found.some((entry) => entry[0] === key)) continue
+    found.push([key, lane.scrollLeft, lane.scrollTop])
+    if (found.length >= 40) break
+  }
+  return found
+}
+
+/** Everything needed to put the viewer back on one control, as plain data. */
+export function captureSeat(node: HTMLElement): NavSeat | null {
+  if (!node.isConnected) return null
+  const key = controlKey(node)
+  if (!key) return null
+  const band = sectionOf(node)
+  const main = mainColumn()
+  return {
+    key,
+    band: bandKey(band),
+    seat: controlSeat(node, key, band),
+    top: main ? main.scrollTop : window.scrollY || 0,
+    lanes: laneOffsets(),
+  }
+}
+
+function bandFor(key: string): HTMLElement | null {
+  if (!key) return null
+  for (const band of document.querySelectorAll<HTMLElement>(SECTIONS)) {
+    if (bandKey(band) === key) return band
+  }
+  return null
+}
+
+function laneFor(band: string): HTMLElement | null {
+  const root: ParentNode = mainColumn() || document.body
+  for (const lane of root.querySelectorAll<HTMLElement>(LANES)) {
+    if (bandKey(sectionOf(lane) || lane) === band) return lane
+  }
+  return null
+}
+
+function firstControl(band: HTMLElement): HTMLElement | null {
+  return [...band.querySelectorAll<HTMLElement>(FOCUSABLE)].find((node) => visible(node) && !node.closest(".side")) || null
+}
+
+/**
+ * The control a seat names, if it is on screen.
+ *
+ * A control that has moved to another row is still the control the viewer asked for - but
+ * only once the row they left has gone entirely. While that row is still there, the item
+ * has left it, and the row's own first card is the closer answer.
+ */
+function seatTarget(seat: NavSeat): HTMLElement | null {
+  const matching = [...document.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
+    (node) => !node.closest(".side") && visible(node) && controlKey(node) === seat.key,
+  )
+  if (matching.length === 0) return null
+  if (!seat.band) return matching[seat.seat] || matching[0]
+  const inside = matching.filter((node) => bandKey(sectionOf(node)) === seat.band)
+  if (inside.length > 0) return inside[seat.seat] || inside[0]
+  return bandFor(seat.band) ? null : matching[seat.seat] || matching[0]
+}
+
+function applySeat(seat: NavSeat) {
+  const main = mainColumn()
+  if (main) {
+    if (Math.abs(main.scrollTop - seat.top) > 1) main.scrollTop = seat.top
+  } else {
+    window.scrollTo(0, seat.top)
+  }
+  for (const [band, left, top] of seat.lanes) {
+    const lane = laneFor(band)
+    if (!lane) continue
+    if (Math.abs(lane.scrollLeft - left) > 1) lane.scrollLeft = left
+    if (Math.abs(lane.scrollTop - top) > 1) lane.scrollTop = top
+  }
+}
+
+/** Is the control inside the window the viewer is looking through? */
+function onScreen(node: HTMLElement) {
+  const box = (node.closest<HTMLElement>(".main") || document.documentElement).getBoundingClientRect()
+  const rect = node.getBoundingClientRect()
+  return rect.bottom > box.top + 4 && rect.top < box.bottom - 8 && rect.right > box.left + 4 && rect.left < box.right - 4
+}
+
+/**
+ * Put the scroll back where it was, and keep it there while the focus that follows settles.
+ *
+ * Revealing a focused card centres it and pins its row to the top of the column, which is
+ * not where the viewer left the page. The remembered offset wins, unless it would leave the
+ * item off screen - then the item's own reveal is the better answer.
+ */
+function nudge(seat: NavSeat, node: HTMLElement) {
+  const settle = () => {
+    if (!node.isConnected) return
+    applySeat(seat)
+    if (!onScreen(node)) placeReveal(node)
+  }
+  settle()
+  window.requestAnimationFrame(() => {
+    settle()
+    window.requestAnimationFrame(settle)
+  })
+}
+
+/**
+ * Put focus back on the seat recorded for `route`, waiting for the page to render it.
+ *
+ * `insist` is a press of Back: then the item the viewer left is what the press asked for,
+ * and it wins even over a page that has put focus somewhere of its own. A plain visit only
+ * borrows the seat, and leaves the page's own landing alone if the page has already chosen.
+ * `onGiveUp` runs when nothing of the origin can be recovered at all - the caller's own
+ * landing, which is the only generic fallback in this path.
+ */
+export function restoreSeat(route: string, insist: boolean, onGiveUp: () => void): () => void {
+  stopRestore()
+  const seat = seats.get(route)
+  if (!seat) {
+    onGiveUp()
+    return () => {}
+  }
+  let done = false
+  let timer = 0
+  let watcher: MutationObserver | null = null
+  let rowSeen = 0
+  const started = performance.now()
+  const limit = insist ? SEAT_WAIT_MS : SEAT_SOON_MS
+
+  const stop = () => {
+    done = true
+    window.clearTimeout(timer)
+    watcher?.disconnect()
+    watcher = null
+  }
+
+  const settle = (node: HTMLElement) => {
+    stop()
+    cancelRestore = null
+    focusNode(node)
+    nudge(seat, node)
+  }
+
+  const giveUp = () => {
+    stop()
+    cancelRestore = null
+    onGiveUp()
+  }
+
+  const attempt = () => {
+    if (done) return
+    window.clearTimeout(timer)
+    watcher?.disconnect()
+    watcher = null
+    // A page that has put focus somewhere of its own keeps it - unless this is a Back.
+    const active = document.activeElement
+    const claimed = active instanceof HTMLElement && active !== document.body && active !== document.documentElement
+    if (claimed && !insist) {
+      stop()
+      return
+    }
+    // The offsets go back first: a library grid that pages in as it scrolls then loads the
+    // page the item was on while the search below is still running.
+    applySeat(seat)
+    const exact = seatTarget(seat)
+    if (exact) {
+      settle(exact)
+      return
+    }
+    const row = bandFor(seat.band)
+    if (row) {
+      if (!rowSeen) rowSeen = performance.now()
+      const grace = document.querySelector(".more-sentinel") ? SEAT_GRACE_MORE_MS : SEAT_GRACE_MS
+      const first = firstControl(row)
+      if (first && performance.now() - rowSeen >= grace) {
+        settle(first)
+        return
+      }
+    }
+    if (performance.now() - started >= limit) {
+      giveUp()
+      return
+    }
+    timer = window.setTimeout(attempt, 60)
+    if (typeof MutationObserver !== "undefined" && document.body) {
+      watcher = new MutationObserver(() => {
+        watcher?.disconnect()
+        watcher = null
+        attempt()
+      })
+      watcher.observe(document.body, { childList: true, subtree: true })
+    }
+  }
+
+  cancelRestore = stop
+  attempt()
+  return stop
 }
 
 function cross(from: HTMLElement, to: HTMLElement) {
@@ -485,6 +855,9 @@ function contentAnchor(items: FocusItem[]) {
 }
 
 export function moveFocus(key: string) {
+  // A press from the remote is the viewer taking over: a restoration still waiting for a
+  // slow page is over, and this press moves from wherever focus is.
+  stopRestore()
   // A slider or a choice gets the sideways press first: on a settings row the value is
   // what should move, not the focus.
   if (key === "ArrowLeft" || key === "ArrowRight") {
