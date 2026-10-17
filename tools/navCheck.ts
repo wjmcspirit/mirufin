@@ -934,6 +934,75 @@ function testSeasonBack() {
   cancel()
 }
 
+/**
+ * A collection's page: the grid of titles it holds, opened from a title and returned to by Back
+ * - on the same poster, in the same grid, at the same offset.
+ */
+function testCollectionGrid() {
+  clearSeats()
+  resetFocusState()
+  const ids = Array.from({ length: 9 }, (_, index) => `/item/M${String(index).padStart(2, "0")}`)
+  const collection = () => {
+    const { main } = shell()
+    return { main, board: grid(main, ids) }
+  }
+  const first = collection()
+  noteRoute("/item/BOXSET")
+  placeFocus(first.board.cards[5])
+  first.main.scrollTop = 620
+  activate(first.board.cards[5])
+
+  shell()
+  noteRoute("/item/M05")
+  restoreSeat("/item/M05", true, () => {})
+
+  const back = collection()
+  noteRoute("/item/BOXSET")
+  let fellBack = false
+  const cancel = restoreSeat("/item/BOXSET", true, () => {
+    fellBack = true
+  })
+  run(200)
+  check("Back returns to the same title in the collection", active === back.board.cards[5], label(active))
+  check("Back restores the collection's column offset", back.main.scrollTop === 620, String(back.main.scrollTop))
+  check("Back is not answered by the generic landing", !fellBack)
+  cancel()
+}
+
+/**
+ * A title's page: the row of collections it is part of, opened from there and returned to by
+ * Back, with the row's sideways offset where the viewer left it.
+ */
+function testCollectionsRow() {
+  clearSeats()
+  resetFocusState()
+  const title = () => {
+    const { main } = shell()
+    return { main, row: row(main, "Part of", ["/item/BOX1", "/item/BOX2"]) }
+  }
+  const first = title()
+  noteRoute("/item/MOVIE")
+  placeFocus(first.row.cards[1])
+  first.row.scroller.scrollLeft = 260
+  activate(first.row.cards[1])
+
+  shell()
+  noteRoute("/item/BOX2")
+  restoreSeat("/item/BOX2", true, () => {})
+
+  const back = title()
+  noteRoute("/item/MOVIE")
+  let fellBack = false
+  const cancel = restoreSeat("/item/MOVIE", true, () => {
+    fellBack = true
+  })
+  run(200)
+  check("Back returns to the collection the viewer opened", active === back.row.cards[1], label(active))
+  check("Back restores the row's sideways offset", back.row.scroller.scrollLeft === 260, String(back.row.scroller.scrollLeft))
+  check("Back is not answered by the generic landing", !fellBack)
+  cancel()
+}
+
 installDom()
 trackSeats()
 testHomeRow()
@@ -946,6 +1015,8 @@ testMissingTarget()
 testRailIsNotASeat()
 testSeasonWalk()
 testSeasonBack()
+testCollectionGrid()
+testCollectionsRow()
 testClearingAndOverlays()
 console.log(failures === 0 ? "\nAll navigation checks passed." : `\n${failures} navigation check(s) failed.`)
 if (failures > 0) throw new Error(`${failures} navigation check(s) failed`)

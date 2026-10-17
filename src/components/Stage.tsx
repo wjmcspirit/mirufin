@@ -43,6 +43,21 @@ const HERO_LOOK: StageLook = {
   pace: "hero",
 }
 
+/**
+ * A collection's page: a page of many titles, like a person's filmography.
+ *
+ * The collection's own art where it has some, and the widest among its members where it does not,
+ * with the atmosphere showing while neither has loaded. The reel is off: a page that lists a
+ * collection's films must not start playing one of their trailers behind them.
+ */
+const COLLECTION_LOOK: StageLook = {
+  ...DEFAULT_LOOK,
+  retain: true,
+  atmosphere: true,
+  wide: true,
+  reel: false,
+}
+
 const PACE_CLASS: Record<StageLook["pace"], string> = {
   cinematic: "",
   focus: "pace-focus",
@@ -424,6 +439,16 @@ export function useFilmographyStage(enabled = true) {
       hover(null)
     }
   }, [enabled, hover, setLook])
+}
+
+/** A collection's page: the collection's art, or the widest among its members. See above. */
+export function useCollectionStage(enabled = true) {
+  const { setLook } = useStageActions()
+  useEffect(() => {
+    if (!enabled) return
+    setLook(COLLECTION_LOOK)
+    return () => setLook(null)
+  }, [enabled, setLook])
 }
 
 /**

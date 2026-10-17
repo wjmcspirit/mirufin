@@ -548,6 +548,53 @@ export function children(userId: string, parentId: string, playlist = false) {
   )
 }
 
+/**
+ * The collections an item is included in.
+ *
+ * Jellyfin 12 answers this itself (jellyfin/jellyfin#15516). Every server before it has no route
+ * that walks collection membership backwards, and answers 404 here - which `lib/collections`
+ * reads as "this server cannot be asked" rather than as a failure, and falls back from.
+ */
+export function itemCollections(userId: string, itemId: string) {
+  const params = new URLSearchParams({
+    userId,
+    Fields: `${CARD_FIELDS},ItemCounts,BackdropImageTags`,
+    EnableImageTypes: CARD_IMAGES,
+    ImageTypeLimit: "1",
+  })
+  return jf<ItemList>(`/Items/${itemId}/Collections?${params}`)
+}
+
+/**
+ * What one collection holds, in the few fields the reverse index needs.
+ *
+ * The index reads every collection once to find which of them hold a title, so each answer is
+ * kept as small as the server will make it: images are left out, because nothing from this
+ * response is ever drawn.
+ */
+export function collectionMembers(userId: string, collectionId: string) {
+  const params = new URLSearchParams({ EnableImages: "false" })
+  return jf<ItemList>(`/Users/${userId}/Items?ParentId=${collectionId}&${params}`)
+}
+
+/**
+ * What one collection holds, with the artwork its own page draws.
+ *
+ * A collection usually has no backdrop of its own, so its members are asked for the wide art the
+ * stage falls back to when the collection has none.
+ */
+export function collectionItems(userId: string, collectionId: string) {
+  const params = new URLSearchParams({
+    ParentId: collectionId,
+    SortBy: "IndexNumber,SortName",
+    SortOrder: "Ascending",
+    Fields: `${CARD_FIELDS},BackdropImageTags`,
+    EnableImageTypes: CARD_IMAGES,
+    ImageTypeLimit: "1",
+  })
+  return jf<ItemList>(`/Users/${userId}/Items?${params}`)
+}
+
 export function filmography(userId: string, personId: string) {
   const params = new URLSearchParams({
     PersonIds: personId,

@@ -6,10 +6,11 @@ import { TrailerButton } from "../components/TrailerButton"
 import { MediaInfo } from "../components/MediaInfo"
 import { Row } from "../components/Row"
 import { Loading, Problem } from "../components/Status"
-import { useEpisodeStage, useFilmographyStage, usePinnedArt, useStage, useStageActions } from "../components/Stage"
+import { useCollectionStage, useEpisodeStage, useFilmographyStage, usePinnedArt, useStage, useStageActions } from "../components/Stage"
 import { useThemeSong } from "../components/Theme"
 import { TitleLogo } from "../components/Title"
 import * as api from "../lib/api"
+import { collectionSizeLabel, collectionStageItem, collectionsLibrary, loadCollections } from "../lib/collections"
 import { canPlayDirectly, episodeCode, formatRuntime, isInProgress, metaLine, personFacts, progressPct, techChips } from "../lib/format"
 import { hasMediaInfo } from "../lib/mediaInfo"
 import { lastSeason, rememberSeason, resolveSeason, seasonLineText, seasonProgress, seasonProgressBySeason, seasonStart, type SeasonProgress } from "../lib/seasons"
@@ -30,11 +31,15 @@ export function ItemPage() {
   // What the season page's header says about the season: read from the episodes the row below
   // loaded, so the count above and the stills under it can never disagree.
   const [seasonWatch, setSeasonWatch] = useState<SeasonProgress | null>(null)
+  // What a collection page holds: the same reading of the same request, used for its count and
+  // for the artwork its page rests on.
+  const [bodyItems, setBodyItems] = useState<Item[] | null>(null)
 
   useEffect(() => {
     let cancel = false
     setStatus("loading")
     setSeasonWatch(null)
+    setBodyItems(null)
     api
       .item(userId, id)
       .then((next) => {
@@ -55,7 +60,11 @@ export function ItemPage() {
   }, [id, userId])
 
   const personPage = item?.Type === "Person"
-  usePinnedArt(personPage || status !== "ready" ? null : item, false, false, !personPage)
+  // A collection rests on its own backdrop, and otherwise on the widest art among the titles it
+  // holds: servers often have none for a collection, and a page of films should still open on a
+  // picture of one of them.
+  const stageItem = item && item.Type === "BoxSet" ? collectionStageItem(item, bodyItems) : item
+  usePinnedArt(personPage || status !== "ready" ? null : stageItem, false, false, !personPage)
   useThemeSong(item?.Id)
 
   async function toggleFavorite() {
@@ -100,6 +109,10 @@ export function ItemPage() {
   // composition, with a tighter head over the same artwork.
   const seasonPage = item.Type === "Season" && Boolean(item.SeriesId)
   const page = ["detail", personPage ? "person-page" : "", browsePage ? "browse-page" : "", seasonPage ? "season-page" : ""].filter(Boolean).join(" ")
+  // A collection says how many titles it holds: the count its own grid was drawn from, and the
+  // figure the server reports until that arrives. A collection holding nothing says nothing.
+  const collectionLine =
+    item.Type === "BoxSet" ? collectionSizeLabel(bodyItems ? bodyItems.length : item.ChildCount ?? item.RecursiveItemCount) : ""
   const poster = primarySrc(item, 900)
   // An episode's panel is a 16:9 still, never a portrait poster stretched into it.
   const panelArt = episode ? episodeWideStill(item, 1600) : item.Type === "Person" ? poster : poster || backdropSrc(item)
@@ -170,6 +183,7 @@ export function ItemPage() {
             {!episode && <p className="eyebrow">{kindLabel(item)}</p>}
             <TitleLogo item={item} />
             {seasonPage && <SeasonLine season={item} progress={seasonWatch} />}
+            {collectionLine ? <p className="count-line">{collectionLine}</p> : null}
             {episode && <p className="hero-episode">{item.Name}</p>}
             {facts && <p className="kicker">{facts}</p>}
             {chips.length > 0 && (
@@ -196,7 +210,7 @@ export function ItemPage() {
         {error && <p className="error">{error}</p>}
       </header>
       {infoOpen && <MediaInfo item={item} onClose={() => setInfoOpen(false)} />}
-      <ItemBody item={item} actions={browsePage ? actionBand : null} onSeasonProgress={setSeasonWatch} />
+      <ItemBody item={item} actions={browsePage ? actionBand : null} onSeasonProgress={setSeasonWatch} onChildren={setBodyItems} />
     </article>
   )
 }
@@ -344,25 +358,145 @@ function ItemBody({
   item,
   actions,
   onSeasonProgress,
+  onChildren,
 }: {
   item: Item
   actions?: ReactNode
   /** Told the season's own watched count, for the line under its title. */
   onSeasonProgress?: (progress: SeasonProgress | null) => void
+  /** Told what a collection holds, for its count and for the art its page rests on. */
+  onChildren?: (items: Item[]) => void
 }) {
   if (item.Type === "Series") return <SeriesBody series={item} actions={actions} />
   if (item.Type === "Season" && item.SeriesId) return <SeasonBody season={item} actions={actions} onProgress={onSeasonProgress} />
   if (item.Type === "Person") return <PersonBody person={item} />
-  if (item.Type === "MusicAlbum" || item.Type === "Playlist" || item.Type === "BoxSet" || item.Type === "Folder" || item.Type === "PhotoAlbum" || item.Type === "CollectionFolder") {
+  if (item.Type === "BoxSet") return <CollectionBody item={item} onLoaded={onChildren} />
+  if (item.Type === "MusicAlbum" || item.Type === "Playlist" || item.Type === "Folder" || item.Type === "PhotoAlbum" || item.Type === "CollectionFolder") {
     return <ChildrenBody item={item} />
   }
   if (item.Type === "Photo") return <PhotoBody item={item} />
   return (
     <>
+      {/* What this title is part of, before what is in it or who is in it: a collection is the
+          strongest connection a film has to the rest of a library. */}
+      <Collections item={item} />
       <Extras itemId={item.Id} />
       <PeopleRows people={item.People} />
       <Similar item={item} />
     </>
+  )
+}
+
+/**
+ * A collection's own page: the titles it holds, in the order the server lists them.
+ *
+ * A collection is a browse surface rather than a title, so it has no hero of its own: what the
+ * page rests on is the collection's backdrop, or failing that the widest art among its members,
+ * which is chosen one level up (`collectionStageItem`) so the stage is pinned once. Nothing here
+ * is re-sorted, filtered or de-duplicated - what the server says a collection holds is what is
+ * drawn, and a title it genuinely lists twice is drawn twice rather than one of them going
+ * missing from the page.
+ */
+function CollectionBody({ item, onLoaded }: { item: Item; onLoaded?: (items: Item[]) => void }) {
+  const { userId } = useSession()
+  const [items, setItems] = useState<Item[] | null>(null)
+  // Read by the fetch rather than depended on by it: what the list is handed to is not part of
+  // what the list is, so a page that re-renders for its own reasons never reads it again.
+  const loaded = useRef(onLoaded)
+  loaded.current = onLoaded
+  useCollectionStage(true)
+
+  useEffect(() => {
+    let cancel = false
+    setItems(null)
+    api
+      .collectionItems(userId, item.Id)
+      .then((result) => {
+        if (cancel) return
+        const list = result.Items || []
+        setItems(list)
+        loaded.current?.(list)
+      })
+      .catch(() => {
+        if (cancel) return
+        setItems([])
+        loaded.current?.([])
+      })
+    return () => {
+      cancel = true
+    }
+  }, [item.Id, userId])
+
+  if (!items) return <Loading label="Loading collection" />
+  if (items.length === 0) return <p className="hint">This collection is empty.</p>
+  return (
+    <div className="grid">
+      {items.map((entry, index) => (
+        // The ordinal is part of the key so a title the server lists twice is drawn twice: with
+        // the id alone React would see one key for two children and drop one of them.
+        <PosterCard
+          key={`${entry.Id}#${index}`}
+          item={entry}
+          layout={entry.Type === "Episode" || entry.Type === "Audio" ? "wide" : "poster"}
+          href={`/item/${entry.Id}`}
+        />
+      ))}
+    </div>
+  )
+}
+
+/**
+ * The collections a title belongs to, drawn as a row of the collections themselves.
+ *
+ * This is the connection a collection page makes, read the other way: the title states what it is
+ * part of, with each collection's own name and artwork, and every card opens that collection's
+ * page. Every collection the server reports is shown, so a film in two of them shows both rather
+ * than one of them being picked for it. A title in no collection - or a server that cannot answer
+ * the question - renders nothing at all: no heading, no empty row, no placeholder.
+ *
+ * The answer is read once per title page and never from a focus, hover or scroll handler;
+ * `lib/collections` keeps it for the rest of the run, so browsing a library does not ask again.
+ */
+function Collections({ item }: { item: Item }) {
+  const { userId, libraries } = useSession()
+  const [collections, setCollections] = useState<Item[] | null>(null)
+  const libraryId = collectionsLibrary(libraries)
+  // Only a title a collection can hold is worth asking about: an episode or a photo is never a
+  // member, and asking on their pages would build the index for nothing.
+  const wanted = item.Type === "Movie" || item.Type === "Series"
+
+  useEffect(() => {
+    let cancel = false
+    setCollections(null)
+    if (!wanted) {
+      setCollections([])
+      return
+    }
+    loadCollections(userId, libraryId, item.Id)
+      .then((list) => {
+        if (!cancel) setCollections(list)
+      })
+      .catch(() => {
+        if (!cancel) setCollections([])
+      })
+    return () => {
+      cancel = true
+    }
+  }, [item.Id, libraryId, userId, wanted])
+
+  if (!collections || collections.length === 0) return null
+  return (
+    <Row title="Part of">
+      {collections.map((collection) => (
+        <PosterCard
+          key={collection.Id}
+          item={collection}
+          layout="poster"
+          href={`/item/${collection.Id}`}
+          detail={collectionSizeLabel(collection.ChildCount)}
+        />
+      ))}
+    </Row>
   )
 }
 
@@ -574,6 +708,9 @@ function SeriesBody({ series, actions }: { series: Item; actions?: ReactNode }) 
         </section>
       )}
       {selected && <Extras itemId={selected} />}
+      {/* The seasons and the episode row are this page's spine, so what the series is part of
+          sits under them, with the rest of its relationships. */}
+      <Collections item={series} />
       <PeopleRows people={series.People} />
       <Similar item={series} />
     </div>
