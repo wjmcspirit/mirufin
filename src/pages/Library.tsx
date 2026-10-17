@@ -10,9 +10,10 @@ import { usePinnedArt, useArtMotion, useHeroStage, useStage } from "../component
 import * as api from "../lib/api"
 import { episodeCode, heroPlayTarget, libraryItemTypes, mergeAddedSeries, recentlyAddedSeries, seriesFallback, seriesFromAddedEpisodes, addedSeriesNote, type AddedSeries, type RecentSeries } from "../lib/format"
 import { backdropSrc, loadImage, logoSrc, primarySrc, warmImage } from "../lib/images"
-import { isBackKey, noteBackKeydown, ownBack, placeFocus } from "../lib/remote"
-import { placeToolMenu } from "../lib/toolMenu"
-import type { HomeCardSize, HomeCardStyle, Item } from "../lib/types"
+import { DEFAULT_LIBRARY_VIEW, EPISODE_SORT, LIBRARY_FILTERS, librarySorts, savedLibraryView } from "../lib/libraryView"
+import { isBackKey, noteBackKeydown, ownArrows, ownBack, placeFocus } from "../lib/remote"
+import { libraryToolNeighbor, placeToolMenu, type LibraryTool } from "../lib/toolMenu"
+import type { HomeCardSize, HomeCardStyle, Item, LibraryView } from "../lib/types"
 import { usePrefs, useSession } from "../session"
 
 const PAGE = 60
@@ -145,33 +146,29 @@ function useCollectionBackdrop(userId: string, enabled: boolean, boxsets: Item[]
   return deck[index % deck.length]
 }
 
-const SORTS = [
-  { id: "SortName", label: "Title" },
-  { id: "DateCreated", label: "Date added" },
-  { id: "PremiereDate", label: "Release date" },
-  { id: "CommunityRating", label: "Rating" },
-  { id: "ProductionYear", label: "Year" },
-]
-
 export function LibraryPage() {
   const { id = "" } = useParams()
   const [params, setParams] = useSearchParams()
   const { userId, libraries } = useSession()
   const { prefs, setPrefs } = usePrefs()
   const known = libraries.find((library) => library.Id === id)
+  // The toolbar state this library was left in, read before the first paint so the library
+  // opens on the viewer's own sort, filter and letter rather than on the defaults. The
+  // effect below loads the same view again when the viewer switches to another library.
+  const opening = savedLibraryView(prefs.libraryViews[id], known?.CollectionType)
   const [library, setLibrary] = useState<Item | null>(known || null)
   const [items, setItems] = useState<Item[]>([])
   const [genres, setGenres] = useState<Item[]>([])
   const [total, setTotal] = useState(0)
-  const [sort, setSort] = useState("SortName")
-  const [order, setOrder] = useState("Ascending")
-  const [filter, setFilter] = useState("")
+  const [sort, setSort] = useState(opening.sort)
+  const [order, setOrder] = useState(opening.order)
+  const [filter, setFilter] = useState(opening.filter)
   const [genreId, setGenreId] = useState(() => params.get("genre") || "")
   const [studioId, setStudioId] = useState(() => params.get("studio") || "")
   const [studioName, setStudioName] = useState(() => params.get("studioName") || "")
-  const [letter, setLetter] = useState("")
+  const [letter, setLetter] = useState(opening.letter)
   const [appliedKey, setAppliedKey] = useState("")
-  const [menu, setMenu] = useState<"view" | "sort" | "filter" | "letters" | null>(null)
+  const [menu, setMenu] = useState<LibraryTool | null>(null)
   const [status, setStatus] = useState<"loading" | "ready" | "error" | "more">("loading")
   const [morePass, setMorePass] = useState(0)
   const [error, setError] = useState("")
@@ -195,12 +192,63 @@ export function LibraryPage() {
   const addedScan = useRef(0)
   const addedGroups = useRef<AddedSeries[]>([])
 
+  // The A-Z row only exists for a title sort: a letter is a place in the alphabet, and no
+  // other sort is in that order.
+  const byTitle = sort === DEFAULT_LIBRARY_VIEW.sort
+
+  /**
+   * Saves this library's toolbar state, and nothing else: the entry for the library being
+   * looked at is the only one written, so a choice made here cannot reset another library or
+   * another preference. It is called where the viewer changes something rather than from an
+   * effect, so what is saved is always what they chose and never a value the page started on.
+   */
+  const saveView = useCallback(
+    (patch: Partial<LibraryView>) => {
+      if (!id) return
+      setPrefs((current) => ({
+        libraryViews: { ...current.libraryViews, [id]: { ...DEFAULT_LIBRARY_VIEW, ...current.libraryViews[id], ...patch } },
+      }))
+    },
+    [id, setPrefs],
+  )
+
+  /**
+   * A sideways press inside an open toolbar menu moves to the menu beside it: the one the
+   * viewer is in closes, its neighbour opens, and focus lands on the option that neighbour
+   * has applied - all within the same frame, so nothing is left unfocused and two popups are
+   * never on screen at once. At either end of the toolbar there is nothing beside it, so the
+   * press is spent where the viewer is: focus stays in the menu they are using and no setting
+   * moves under them.
+   */
+  const stepMenu = useCallback(
+    (from: LibraryTool, dir: -1 | 1) => {
+      const target = libraryToolNeighbor(from, dir, byTitle)
+      if (target) setMenu(target)
+      return true
+    },
+    [byTitle],
+  )
+
+  // The library the server reports arrives after the page does, and its object is replaced
+  // every time the list of libraries is fetched again. Only the library on screen is taken
+  // from it: the viewer's own choices are not touched when that list loads or refreshes.
   useEffect(() => {
     setLibrary(known || null)
-    setSort("SortName")
-    setOrder("Ascending")
-    setFilter("")
-    setLetter("")
+  }, [known])
+
+  // A library's toolbar state belongs to that library, so switching libraries loads the sort,
+  // filter and A-Z letter saved for the one being opened - and only when nothing has been
+  // saved for it do the defaults apply. Everything else here belongs to a single visit and
+  // starts over with the library: the open menu, the hero, the letters that hold nothing.
+  //
+  // The saved view is read once, when the library changes. Saving it is not a reason to run
+  // this again: that would pull the toolbar back to a value the viewer has moved on from.
+  useEffect(() => {
+    const view = savedLibraryView(prefs.libraryViews[id], libraries.find((entry) => entry.Id === id)?.CollectionType)
+    setSort(view.sort)
+    setOrder(view.order)
+    setFilter(view.filter)
+    setLetter(view.letter)
     setAppliedKey("")
     setMenu(null)
     setHeroId("")
@@ -209,7 +257,7 @@ export function LibraryPage() {
     setUpcoming([])
     setOnNow({})
     setSaved([])
-  }, [known, id])
+  }, [id])
 
   const search = params.toString()
   useEffect(() => {
@@ -219,10 +267,34 @@ export function LibraryPage() {
     setStudioName(current.get("studioName") || "")
   }, [search])
 
-  useEffect(() => {
+  // The A-Z row opens on the letter the library is already showing, so the remote arrives
+  // where the viewer left off instead of at the start of the alphabet.
+  useLayoutEffect(() => {
     if (menu !== "letters") return
-    lettersRef.current?.querySelector<HTMLButtonElement>('[aria-pressed="true"]')?.focus()
+    const row = lettersRef.current
+    const current = row?.querySelector<HTMLElement>('[aria-pressed="true"]') || row?.querySelector<HTMLElement>("button")
+    if (current) placeFocus(current)
   }, [menu])
+
+  // The A-Z row is the last panel of the toolbar and a row of its own: sideways presses walk
+  // its letters, and the press past the first letter leaves it for the menu beside it. Past
+  // the last letter the toolbar has nothing left to offer, so that press is spent where the
+  // viewer is rather than moving focus out of the row.
+  useLayoutEffect(() => {
+    if (menu !== "letters") return
+    const row = lettersRef.current
+    if (!row) return
+    return ownArrows(row, (key) => {
+      const current = document.activeElement
+      if (!(current instanceof HTMLElement) || !row.contains(current)) return false
+      const letters = [...row.querySelectorAll<HTMLElement>("button")]
+      const index = letters.indexOf(current)
+      if (index < 0) return false
+      if (key === "ArrowLeft" && index === 0) return stepMenu("letters", -1)
+      if (key === "ArrowRight" && index === letters.length - 1) return true
+      return false
+    })
+  }, [menu, stepMenu])
 
   // The A-Z row is a dropdown from the same toolbar, so Back closes it and hands focus
   // back to its button instead of leaving the library, and the press after that belongs
@@ -307,7 +379,7 @@ export function LibraryPage() {
     }
   }, [id, shows, userId])
 
-  const episodes = sort === "EpisodeAdded"
+  const episodes = sort === EPISODE_SORT
   const query = {
     types: episodes ? "Episode" : libraryItemTypes(library?.CollectionType),
     sort: episodes ? "DateCreated" : sort,
@@ -424,7 +496,7 @@ export function LibraryPage() {
   async function loadMore() {
     setStatus("more")
     try {
-      if (sort === "EpisodeAdded") {
+      if (sort === EPISODE_SORT) {
         const result = await api.recentEpisodes(userId, id, addedScan.current, ADDED_PAGE, { filters: filter, genreId, studioId })
         const batch = result.Items || []
         addedScan.current += batch.length
@@ -695,7 +767,7 @@ export function LibraryPage() {
   if (status === "error" && items.length === 0) return <Problem message={error} />
   const wide = live || library?.CollectionType === "homevideos" || prefs.libraryStyle === "landscape"
   const name = library?.Name || "Library"
-  const sorts = library?.CollectionType === "tvshows" ? [...SORTS, { id: "EpisodeAdded", label: "Recently added episodes" }] : SORTS
+  const sorts = librarySorts(library?.CollectionType)
   const layout = wide ? "wide" : "poster"
   const size: HomeCardSize = prefs.librarySize
   const style: HomeCardStyle = wide ? "landscape" : "poster"
@@ -705,7 +777,6 @@ export function LibraryPage() {
   const viewOn = prefs.libraryStyle !== "poster" || prefs.librarySize !== "medium"
   const sortOn = sort !== "SortName" || order !== "Ascending"
   const filterOn = Boolean(filter || genreId || studioId)
-  const byTitle = sort === "SortName"
 
   return (
     <div className="library-page">
@@ -748,7 +819,7 @@ export function LibraryPage() {
         </div>
         {!live && (
           <div className="library-icons" ref={toolsRef}>
-            <ToolMenu label="View" icon={<ViewIcon size={22} />} open={menu === "view"} active={viewOn} onToggle={() => setMenu(menu === "view" ? null : "view")} onClose={() => setMenu(null)}>
+            <ToolMenu label="View" icon={<ViewIcon size={22} />} open={menu === "view"} active={viewOn} onToggle={() => setMenu(menu === "view" ? null : "view")} onClose={() => setMenu(null)} onStep={(dir) => stepMenu("view", dir)}>
               <p className="tool-label">Shape</p>
               {(["poster", "landscape"] as HomeCardStyle[]).map((option) => (
                 <button key={option} type="button" aria-pressed={prefs.libraryStyle === option} onClick={() => setPrefs({ libraryStyle: option })}>
@@ -762,38 +833,47 @@ export function LibraryPage() {
                 </button>
               ))}
             </ToolMenu>
-            <ToolMenu label="Sort" icon={<SortIcon size={22} />} open={menu === "sort"} active={sortOn} onToggle={() => setMenu(menu === "sort" ? null : "sort")} onClose={() => setMenu(null)}>
+            <ToolMenu label="Sort" icon={<SortIcon size={22} />} open={menu === "sort"} active={sortOn} onToggle={() => setMenu(menu === "sort" ? null : "sort")} onClose={() => setMenu(null)} onStep={(dir) => stepMenu("sort", dir)}>
               {sorts.map((option) => (
                 <button
                   key={option.id}
                   type="button"
                   aria-pressed={sort === option.id}
                   onClick={() => {
+                    // A sort carries its own direction, and a letter only means something to
+                    // the title sort: the whole choice is saved in one write.
+                    const nextOrder = option.id === DEFAULT_LIBRARY_VIEW.sort ? "Ascending" : "Descending"
+                    const nextLetter = option.id === DEFAULT_LIBRARY_VIEW.sort ? letter : ""
                     setSort(option.id)
-                    setOrder(option.id === "SortName" ? "Ascending" : "Descending")
-                    if (option.id !== "SortName") setLetter("")
+                    setOrder(nextOrder)
+                    setLetter(nextLetter)
+                    saveView({ sort: option.id, order: nextOrder, letter: nextLetter })
                     setMenu(null)
                   }}
                 >
                   {option.label}
                 </button>
               ))}
-              <button type="button" onClick={() => setOrder((current) => (current === "Ascending" ? "Descending" : "Ascending"))}>
+              <button
+                type="button"
+                onClick={() => {
+                  const nextOrder = order === "Ascending" ? "Descending" : "Ascending"
+                  setOrder(nextOrder)
+                  saveView({ order: nextOrder })
+                }}
+              >
                 {sort === "SortName" ? (order === "Ascending" ? "A–Z" : "Z–A") : order === "Ascending" ? "Oldest" : "Newest"}
               </button>
             </ToolMenu>
-            <ToolMenu label="Filter" icon={<FilterIcon size={22} />} open={menu === "filter"} active={filterOn} onToggle={() => setMenu(menu === "filter" ? null : "filter")} onClose={() => setMenu(null)}>
-              {[
-                { id: "", label: "All titles" },
-                { id: "IsUnplayed", label: "Unwatched" },
-                { id: "IsFavorite", label: "Favorites" },
-              ].map((option) => (
+            <ToolMenu label="Filter" icon={<FilterIcon size={22} />} open={menu === "filter"} active={filterOn} onToggle={() => setMenu(menu === "filter" ? null : "filter")} onClose={() => setMenu(null)} onStep={(dir) => stepMenu("filter", dir)}>
+              {LIBRARY_FILTERS.map((option) => (
                 <button
                   key={option.label}
                   type="button"
                   aria-pressed={filter === option.id}
                   onClick={() => {
                     setFilter(option.id)
+                    saveView({ filter: option.id })
                     setMenu(null)
                   }}
                 >
@@ -834,7 +914,15 @@ export function LibraryPage() {
       </header>
       {!live && byTitle && menu === "letters" && (
         <nav className="letter-row" ref={lettersRef} aria-label="Jump to letter">
-          <button type="button" className="letter-all" aria-pressed={letter === ""} onClick={() => setLetter("")}>
+          <button
+            type="button"
+            className="letter-all"
+            aria-pressed={letter === ""}
+            onClick={() => {
+              setLetter("")
+              saveView({ letter: "" })
+            }}
+          >
             All
           </button>
           {LETTERS.map((entry) => (
@@ -843,7 +931,11 @@ export function LibraryPage() {
               type="button"
               className={quiet[entry] ? "is-empty" : undefined}
               aria-pressed={letter === entry}
-              onClick={() => setLetter(letter === entry ? "" : entry)}
+              onClick={() => {
+                const nextLetter = letter === entry ? "" : entry
+                setLetter(nextLetter)
+                saveView({ letter: nextLetter })
+              }}
             >
               {entry}
             </button>
@@ -889,6 +981,7 @@ function ToolMenu({
   active,
   onToggle,
   onClose,
+  onStep,
   children,
 }: {
   label: string
@@ -897,6 +990,8 @@ function ToolMenu({
   active: boolean
   onToggle: () => void
   onClose: () => void
+  /** Where a sideways press goes while this menu is open; see the registration below. */
+  onStep?: (dir: -1 | 1) => boolean
   children: ReactNode
 }) {
   const toolRef = useRef<HTMLDivElement>(null)
@@ -945,9 +1040,22 @@ function ToolMenu({
     }
   }, [open])
 
+  // A sideways press inside the menu belongs to the toolbar, not to the option under the
+  // cursor: the options are stacked, so there is nothing beside them to move to. The menu
+  // registers itself for that press and hands it to the page, which closes this menu and
+  // opens the one beside it. Up and Down are left alone: they walk the options.
+  useLayoutEffect(() => {
+    const pop = popRef.current
+    if (!open || !pop || !onStep) return
+    return ownArrows(pop, (key) => onStep(key === "ArrowRight" ? 1 : -1))
+  }, [open, onStep])
+
   // The remote drives whatever is focused, so hand it the menu as soon as it
-  // mounts, preferring the option that is currently applied.
-  useEffect(() => {
+  // mounts, preferring the option that is currently applied. This runs before the frame is
+  // painted, so stepping from one toolbar menu to the next never shows a frame with nothing
+  // focused: the menu that closes restores its icon, and the menu that opens - later in the
+  // same commit - puts focus on the option it has applied.
+  useLayoutEffect(() => {
     if (!open) {
       // Closing (Back, a selection, or a toggle) should put the viewer back on
       // the icon that opened the menu. Skip this when focus already moved

@@ -1,3 +1,4 @@
+import { normalizeLibraryViews } from "./libraryView"
 import type { HomeCardSize, HomeCardStyle, HomeRowSetting, NavItemSetting, Preferences, RatingsDisplay, SegmentType, SkipMode } from "./types"
 import { generateUuid } from "./uuid"
 
@@ -48,6 +49,7 @@ export const DEFAULT_PREFS: Preferences = {
   navItems: [],
   libraryStyle: "poster",
   librarySize: "medium",
+  libraryViews: {},
   skip: {
     Intro: "auto",
     Outro: "auto",
@@ -164,7 +166,10 @@ export function loadPrefs(): Preferences {
     const raw = localStorage.getItem(PREFS)
     if (!raw) {
       localStorage.setItem(SKIP_SCHEMA, SKIP_SCHEMA_VERSION)
-      return { ...DEFAULT_PREFS, skip: { ...DEFAULT_PREFS.skip } }
+      // A fresh store starts on the defaults. Each collection is a copy of its own: nothing
+      // this returns may share an object with DEFAULT_PREFS, or a later edit would change
+      // what the next launch starts on.
+      return { ...DEFAULT_PREFS, skip: { ...DEFAULT_PREFS.skip }, libraryViews: {} }
     }
     const parsed = JSON.parse(raw) as Partial<Preferences>
     const skip = { ...DEFAULT_PREFS.skip }
@@ -206,6 +211,7 @@ export function loadPrefs(): Preferences {
       navItems: normalizeNavItems(parsed.navItems),
       libraryStyle: HOME_STYLES.includes(parsed.libraryStyle as HomeCardStyle) ? (parsed.libraryStyle as HomeCardStyle) : "poster",
       librarySize: HOME_SIZES.includes(parsed.librarySize as HomeCardSize) ? (parsed.librarySize as HomeCardSize) : "medium",
+      libraryViews: normalizeLibraryViews(parsed.libraryViews),
       skip,
     }
     if (upgradeSkip) {
@@ -214,7 +220,10 @@ export function loadPrefs(): Preferences {
     }
     return prefs
   } catch {
-    return { ...DEFAULT_PREFS, skip: { ...DEFAULT_PREFS.skip } }
+    // A store that cannot be read is not a reason to lose what it holds: the file is left
+    // exactly as it is, so a value that only this launch could not parse is still there for
+    // the next one, and nothing is written over it from here.
+    return { ...DEFAULT_PREFS, skip: { ...DEFAULT_PREFS.skip }, libraryViews: {} }
   }
 }
 

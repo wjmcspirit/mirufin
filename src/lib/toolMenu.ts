@@ -40,3 +40,29 @@ export function placeToolMenu(button: HTMLElement, pop: HTMLElement) {
   pop.style.top = `${Math.round(clamp(y, EDGE, viewHeight - EDGE - height))}px`
   pop.style.left = `${Math.round(clamp(right - width, EDGE, viewWidth - EDGE - width))}px`
 }
+
+/**
+ * The library toolbar's controls, left to right. The A-Z control is only there while the
+ * library is sorted by title, because a letter only means something to that sort.
+ */
+export type LibraryTool = "view" | "sort" | "filter" | "letters"
+
+export function libraryTools(byTitle: boolean): LibraryTool[] {
+  return byTitle ? ["view", "sort", "filter", "letters"] : ["view", "sort", "filter"]
+}
+
+/**
+ * The toolbar control beside the one a menu belongs to.
+ *
+ * `null` at either end of the toolbar: there is nothing beside the first and the last
+ * control, so a sideways press there is spent where the viewer is instead of moving focus
+ * out of the open menu or changing a setting they did not choose. This is what lets a
+ * viewer walk the whole toolbar - View, Sort, Filter, A-Z - with Left and Right, and go
+ * back the way they came.
+ */
+export function libraryToolNeighbor(from: LibraryTool, dir: -1 | 1, byTitle: boolean): LibraryTool | null {
+  const tools = libraryTools(byTitle)
+  const index = tools.indexOf(from)
+  if (index < 0) return null
+  return tools[index + dir] || null
+}

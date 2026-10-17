@@ -203,6 +203,19 @@ export interface HomeRowSetting {
   size: HomeCardSize
 }
 
+/**
+ * What one library's toolbar remembers between visits: the sort the Sort menu applied, the
+ * direction it toggles, the Filter menu's choice, and the A-Z letter a title-sorted library
+ * is showing. One of these is kept per library, so a choice made in Movies is never forced
+ * on the TV library, and the entry for a library is written only when the viewer changes it.
+ */
+export interface LibraryView {
+  sort: string
+  order: "Ascending" | "Descending"
+  filter: string
+  letter: string
+}
+
 export interface Preferences {
   showTitles: boolean
   preferLogos: boolean
@@ -229,4 +242,5 @@ export interface Preferences {
   navItems: NavItemSetting[]
   libraryStyle: HomeCardStyle
   librarySize: HomeCardSize
+  libraryViews: Record<string, LibraryView>
 }
