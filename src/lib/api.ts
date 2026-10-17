@@ -176,6 +176,17 @@ const ITEM_FIELDS = [
   "ImageTags",
   "ParentId",
   "Trickplay",
+  // The artwork a season or an episode borrows from the title above it. A season has no
+  // backdrop of its own on most servers, and its own page paints the series' one: without
+  // these the stage would have nothing to show behind a season.
+  "ParentBackdropItemId",
+  "ParentBackdropImageTags",
+  "ParentThumbItemId",
+  "ParentThumbImageTag",
+  "SeriesPrimaryImageTag",
+  // A season names itself and says which series it belongs to; both are read on its page.
+  "SeriesName",
+  "IndexNumber",
 ].join(",")
 
 const CARD_FIELDS = "PrimaryImageAspectRatio,ProductionYear,Overview,ParentId,UserData,ImageTags,RunTimeTicks,RemoteTrailers,CriticRating"
@@ -495,6 +506,25 @@ export function episodes(userId: string, seriesId: string, seasonId?: string) {
     Fields: "Overview,UserData,ImageTags,RunTimeTicks,ParentIndexNumber,SeriesName,PremiereDate,SeasonId,ParentId",
   })
   if (seasonId) params.set("seasonId", seasonId)
+  return jf<ItemList>(`/Shows/${seriesId}/Episodes?${params}`)
+}
+
+/**
+ * The watched state of every episode of a series, in one request.
+ *
+ * A series page draws a card per season and each card carries that season's watched count, so
+ * the series is read once and grouped in the page (`seasonProgressBySeason`) rather than asking
+ * the server again for every season - and never while the remote moves. Only the fields the
+ * count needs are asked for, and images are left out: nothing from this response is drawn, so
+ * nothing in it has to be fetched. A failure is the caller's to absorb: a series page without
+ * this simply shows no progress rather than a number it cannot stand behind.
+ */
+export function episodeProgress(userId: string, seriesId: string) {
+  const params = new URLSearchParams({
+    userId,
+    Fields: "UserData,SeasonId,ParentIndexNumber",
+    EnableImages: "false",
+  })
   return jf<ItemList>(`/Shows/${seriesId}/Episodes?${params}`)
 }
 

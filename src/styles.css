@@ -1731,6 +1731,33 @@ select {
 .browse-page .logo-title { max-height: 120px; }
 .browse-page .detail-copy { gap: 10px; }
 .browse-page .detail-copy .overview { -webkit-line-clamp: 2; }
+/* A season page gives its head less room than a series page does, because the episodes below it
+   are the page: the portrait steps down once more, the copy tightens, and the head's own padding
+   is given back. The artwork stays large enough to read from across the room, and the backdrop
+   behind it is the series' own, full bleed. */
+.season-page .detail-hero { gap: 12px; padding-top: 0; }
+.season-page .poster-lg { width: 220px; }
+.season-page .logo-title { max-height: 96px; }
+.season-page .detail-copy { gap: 8px; }
+.season-page .detail-body { gap: 18px; }
+/* The season page's own line: which season this is, and how much of it the viewer has watched.
+   The bar is the same cyan-to-violet ramp the rest of the app draws progress with, and it is
+   the only ornament on the line - the numbers beside it do the talking. */
+.season-line { display: grid; gap: 6px; max-width: 360px; }
+.season-line-text {
+  margin: 0;
+  color: #c9d2e0;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+}
+.season-bar {
+  display: block;
+  height: 4px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+}
+.season-bar > span { display: block; height: 100%; background: var(--neon); }
 .season-block { display: grid; gap: 0; }
 .season-block .row-head { margin-bottom: 0; }
 /* The season row is the first thing under the portrait, so it takes the strip's own padding
@@ -1745,6 +1772,9 @@ select {
   text-align: left;
 }
 .season-card .card-title { color: #8b93a3; }
+/* How much of a season is watched, under its name - the same bar the season's own page draws,
+   at the size a card's copy column can carry. */
+.season-card .season-bar { height: 3px; margin-top: 3px; background: rgba(255, 255, 255, 0.14); }
 .season-card.on .card-art {
   box-shadow: inset 0 0 0 2px #3ec8ff, 0 12px 28px rgba(0, 0, 0, 0.32);
 }
@@ -1768,14 +1798,17 @@ select {
    takes the same cyan ring every other card in the app takes rather than a second, louder
    one on top of it: the viewer can see where the remote is and which season is showing. */
 .episode-block { display: grid; }
-/* The episode row: a strip of landscape stills, sized so five or six are on screen at 1080p
-   with the rest a sideways press away. Each card is the still with the episode's number and
-   name beneath it, and the marks the row has always carried - watched, and how far in. */
+/* The episode row: a strip of landscape stills, sized so five are on screen with a sixth at the
+   edge, and the rest a sideways press away. The design canvas is 1500 wide; the page's own
+   padding and the strip's leave about 1330 for the row at 1080p and about 1276 at 4K, and five
+   stills with their gaps come to 1256 - so the row reads the same at both. Each card is the
+   still with the episode's number and name beneath it, and the marks the row has always carried
+   - watched, and how far in. */
 .episode-scroller { align-items: start; }
 .episode {
   display: grid;
   flex: 0 0 auto;
-  width: 280px;
+  width: 240px;
   gap: 8px;
   padding: 0;
   border-radius: 14px;
@@ -1838,6 +1871,12 @@ select {
 .episode-flag.watched {
   background: rgba(255, 255, 255, 0.14);
   color: #e3e9f5;
+}
+/* An episode the viewer is part way through: the violet of the app's own second accent, so it
+   reads as a different kind of state from the cyan "up next" beside it. */
+.episode-flag.watching {
+  background: rgba(217, 70, 239, 0.2);
+  color: #f2ccff;
 }
 /* One focus state for an episode, the same as every other card in the app: the still lifts a
    little and takes a thin cyan ring, so the focused episode is obvious from the couch without

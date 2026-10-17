@@ -15,7 +15,7 @@
  * Run it with `npm run seasoncheck`. Like the other harnesses here it is a check rather than
  * a suite: delete it when the project grows a real test runner.
  */
-import { resolveSeason, seasonStart } from "../src/lib/seasons"
+import { lastSeason, rememberSeason, resolveSeason, seasonLineText, seasonProgress, seasonProgressBySeason, seasonStart } from "../src/lib/seasons"
 import type { Item } from "../src/lib/types"
 
 let failures = 0
@@ -105,6 +105,156 @@ same("a season with everything watched starts at its first episode", seasonStart
 })
 
 same("a season with no episodes has nowhere to start", seasonStart([]), null)
+
+// --------------------------------------------------------------------------- how much is watched
+
+/**
+ * An episode of a named season, finished or not. The season id is what a season's own count is
+ * filed under, and the season number is what the server falls back to when it leaves the id out.
+ */
+function episodeOf(id: string, seasonId: string, index: number, played: boolean, seasonNumber = 1): Item {
+  return {
+    Id: id,
+    Name: `Episode ${index}`,
+    Type: "Episode",
+    SeasonId: seasonId,
+    ParentIndexNumber: seasonNumber,
+    IndexNumber: index,
+    RunTimeTicks: 45 * MINUTE,
+    UserData: { Played: played },
+  }
+}
+
+function finished(id: string, seasonId: string, index: number, seasonNumber = 1) {
+  return episodeOf(id, seasonId, index, true, seasonNumber)
+}
+
+function pending(id: string, seasonId: string, index: number, seasonNumber = 1) {
+  return episodeOf(id, seasonId, index, false, seasonNumber)
+}
+
+// An empty season: nothing watched, nothing to watch, and a percentage that is a number.
+same("a season with no episodes has no progress at all", seasonProgress([]), { watched: 0, total: 0, percent: 0 })
+same("and its percentage is a number rather than an empty one", Number.isFinite(seasonProgress([]).percent), true)
+
+// Nothing watched.
+same(
+  "a season nothing has been watched in is at zero",
+  seasonProgress([pending("a", "s1", 1), pending("b", "s1", 2), pending("c", "s1", 3)]),
+  { watched: 0, total: 3, percent: 0 },
+)
+
+// Everything watched.
+same(
+  "a season everything has been watched in is full",
+  seasonProgress([finished("a", "s1", 1), finished("b", "s1", 2)]),
+  { watched: 2, total: 2, percent: 100 },
+)
+
+// Part way through.
+same(
+  "a season part way through counts only what has been finished",
+  seasonProgress([finished("a", "s1", 1), pending("b", "s1", 2), pending("c", "s1", 3), finished("d", "s1", 4)]),
+  { watched: 2, total: 4, percent: 50 },
+)
+same(
+  "a third of a season is a whole percent",
+  seasonProgress([finished("a", "s1", 1), pending("b", "s1", 2), pending("c", "s1", 3)]).percent,
+  33,
+)
+
+// The order the server listed them in is not the count.
+const listed = [finished("e1", "s1", 1), pending("e2", "s1", 2), finished("e3", "s1", 3), pending("e4", "s1", 4)]
+same(
+  "the order the episodes arrived in does not change the count",
+  seasonProgress([listed[2], listed[0], listed[3], listed[1]]),
+  seasonProgress(listed),
+)
+
+// Missing playback state.
+same(
+  "an episode with no playback state at all is not watched",
+  seasonProgress([{ Id: "a", Type: "Episode" }, finished("b", "s1", 2)]),
+  { watched: 1, total: 2, percent: 50 },
+)
+same(
+  "an episode left part way through is not watched either",
+  seasonProgress([
+    { Id: "a", Type: "Episode", RunTimeTicks: 45 * MINUTE, UserData: { Played: false, PlaybackPositionTicks: 5 * MINUTE } },
+  ]),
+  { watched: 0, total: 1, percent: 0 },
+)
+
+// --------------------------------------------------------------------------- one season's own count
+
+const everySeason = [season(1), season(2), season(3)]
+
+same(
+  "episodes are counted under the season they belong to",
+  [
+    ...seasonProgressBySeason(
+      [finished("a", "s1", 1), pending("b", "s1", 2), finished("c", "s2", 1), finished("d", "s2", 2), pending("e", "s2", 3)],
+      everySeason,
+    ).entries(),
+  ],
+  [
+    ["s1", { watched: 1, total: 2, percent: 50 }],
+    ["s2", { watched: 2, total: 3, percent: 67 }],
+  ],
+)
+
+same(
+  "an episode is filed by its season number when the server leaves the season id out",
+  [...seasonProgressBySeason([{ ...pending("a", "", 1, 2), SeasonId: undefined }], everySeason).entries()],
+  [["s2", { watched: 0, total: 1, percent: 0 }]],
+)
+
+same(
+  "a season with no episodes has no entry, so its card shows no bar",
+  seasonProgressBySeason([finished("a", "s1", 1)], everySeason).has("s3"),
+  false,
+)
+
+same("a series with no episodes makes no entries", [...seasonProgressBySeason([], everySeason).entries()], [])
+
+same(
+  "something that is not an episode is left out of a season's count",
+  [...seasonProgressBySeason([{ Id: "m", Type: "Movie", SeasonId: "s1" }, finished("a", "s1", 1)], everySeason).entries()],
+  [["s1", { watched: 1, total: 1, percent: 100 }]],
+)
+
+same(
+  "an episode that names no season at all is left out rather than guessed at",
+  [...seasonProgressBySeason([{ Id: "a", Type: "Episode", ParentIndexNumber: 9 }], everySeason).entries()],
+  [],
+)
+
+// --------------------------------------------------------------------------- the line a season states
+
+same(
+  "a season states its number and how much of it is watched",
+  seasonLineText(season(2), { watched: 3, total: 10, percent: 30 }),
+  "Season 2  ·  3 of 10 watched",
+)
+same(
+  "a fully watched season says so",
+  seasonLineText(season(2), { watched: 10, total: 10, percent: 100 }),
+  "Season 2  ·  10 of 10 watched",
+)
+same("before its episodes are read it states how long it is", seasonLineText({ ...season(2), ChildCount: 8 }, null), "Season 2  ·  8 episodes")
+same("one episode is not one episodes", seasonLineText({ ...season(1), ChildCount: 1 }, null), "Season 1  ·  1 episode")
+same("a season the server counts nothing in states only its number", seasonLineText(season(3), null), "Season 3")
+same("a season with no episodes at all counts zero", seasonLineText(season(3), { watched: 0, total: 0, percent: 0 }), "Season 3  ·  0 episodes")
+
+// --------------------------------------------------------------------------- the season last opened
+
+rememberSeason("series-a", "s2")
+same("a series page remembers the season the viewer opened", lastSeason("series-a"), "s2")
+same("a series nothing has been opened from remembers nothing", lastSeason("series-b"), "")
+rememberSeason("series-a", "")
+same("an empty season does not replace a real one", lastSeason("series-a"), "s2")
+rememberSeason("", "s9")
+same("a season without a series is not remembered", lastSeason(""), "")
 
 console.log(failures === 0 ? "\nAll season checks passed." : `\n${failures} check(s) failed.`)
 if (failures > 0) throw new Error(`${failures} check(s) failed`)

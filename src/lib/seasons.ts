@@ -34,3 +34,98 @@ export function seasonStart(episodes: Item[]) {
   const first = episodes[0]
   return first ? { episode: first, resume: false } : null
 }
+
+/** How much of one season the viewer has watched. */
+export interface SeasonProgress {
+  /** Episodes of this season the viewer has finished. */
+  watched: number
+  /** Episodes the season holds, as the server listed them. */
+  total: number
+  /** Watched share, 0-100. An empty season is 0 rather than an empty number. */
+  percent: number
+}
+
+/**
+ * How much of one season the viewer has watched.
+ *
+ * Watched means the same thing here as it does everywhere else in Mirufin - Jellyfin's own
+ * `UserData.Played` - so a season never reports progress its episode row disagrees with. The
+ * list handed in is the season's own, which is what keeps a count from ever including an
+ * episode of another season; an episode with no `UserData` at all is simply not watched yet.
+ */
+export function seasonProgress(episodes: Item[]): SeasonProgress {
+  const total = episodes.length
+  let watched = 0
+  for (const episode of episodes) {
+    if (episode.UserData?.Played === true) watched += 1
+  }
+  return { watched, total, percent: total === 0 ? 0 : Math.round((watched / total) * 100) }
+}
+
+/**
+ * The progress of every season a series' episode list covers, keyed by season id.
+ *
+ * A series page draws a card per season, and Jellyfin can answer the watched state of all of
+ * them in one request: the episodes say which season they belong to, so grouping them here
+ * costs no further requests and no call per card - and nothing at all is read while the remote
+ * moves. An episode is filed under its own `SeasonId`, and under its season number when the
+ * server leaves that out, so a season the server reports without a usable id gets no entry
+ * rather than a wrong count. A season with no episodes is absent, and its card simply shows no
+ * progress bar.
+ */
+export function seasonProgressBySeason(episodes: Item[], seasons: Item[] = []): Map<string, SeasonProgress> {
+  const byNumber = new Map<number, string>()
+  for (const season of seasons) {
+    if (season.Id && season.IndexNumber != null) byNumber.set(season.IndexNumber, season.Id)
+  }
+  const groups = new Map<string, Item[]>()
+  for (const episode of episodes) {
+    if (episode.Type && episode.Type !== "Episode") continue
+    const id =
+      episode.SeasonId ||
+      (episode.ParentIndexNumber != null ? byNumber.get(episode.ParentIndexNumber) || "" : "")
+    if (!id) continue
+    const list = groups.get(id)
+    if (list) list.push(episode)
+    else groups.set(id, [episode])
+  }
+  const progress = new Map<string, SeasonProgress>()
+  for (const [id, list] of groups) progress.set(id, seasonProgress(list))
+  return progress
+}
+
+/**
+ * How a season states itself in one line: which season it is, and how much of it is watched -
+ * or, until its episodes have been read, how long it is. `Season 2  ·  3 of 10 watched`.
+ *
+ * The watched count is left out when there is no progress to report, and the episode count is
+ * left out when the server reports none, so the line never states a number this app has not
+ * been told.
+ */
+export function seasonLineText(season: Item, progress: SeasonProgress | null) {
+  const number = season.IndexNumber != null ? `Season ${season.IndexNumber}` : ""
+  const total = progress?.total ?? season.ChildCount ?? season.RecursiveItemCount
+  const counted = total != null ? (total === 1 ? "1 episode" : `${total} episodes`) : ""
+  const watched = progress && progress.total > 0 ? `${progress.watched} of ${progress.total} watched` : ""
+  return [number, watched || counted].filter(Boolean).join("  ·  ")
+}
+
+/**
+ * The season a series page was last browsing, for this run of the app.
+ *
+ * A season card opens that season's own page. Back has to land on the series page it was
+ * opened from - the same seasons row, the same card, the same scroll - and the strip under
+ * that row should be the season the viewer just came out of rather than jumping back to the
+ * first one. The address is deliberately left alone, because a rewritten query is a route the
+ * seat of the page being left was not filed under; the choice is kept here instead. It lives
+ * in memory for the run only, so nothing about it reaches the viewer's saved preferences.
+ */
+const browsing = new Map<string, string>()
+
+export function rememberSeason(seriesId: string, seasonId: string) {
+  if (seriesId && seasonId) browsing.set(seriesId, seasonId)
+}
+
+export function lastSeason(seriesId: string) {
+  return seriesId ? browsing.get(seriesId) || "" : ""
+}
