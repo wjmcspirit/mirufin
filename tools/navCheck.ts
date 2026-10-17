@@ -1142,6 +1142,125 @@ function testCrewRow() {
   cancel()
 }
 
+/** A title's genre and studio labels, as its page draws them: a row of doors. */
+function pills(main: El, hrefs: string[], top = 300) {
+  const row = new El("p", "meta-links genre-pills")
+  const links = hrefs.map((href, index) => {
+    const link = new El("a", "").attr("href", href)
+    link.place(top, 40 + index * 150, 140, 44)
+    row.add(link)
+    return link
+  })
+  main.add(row)
+  return { row, links }
+}
+
+/**
+ * A genre is a door, and Back comes out of it the way it went in: the label opens the library it
+ * lives in narrowed to that genre, a result opens the title it names, and Back unwinds through the
+ * results to the label that was pressed - one level at a time, on the seat each page was left on.
+ */
+function testGenreDiscovery() {
+  clearSeats()
+  resetFocusState()
+  const genreRoute = "/library/LIB?genre=G1&genreName=Science%20Fiction"
+  const ids = Array.from({ length: 8 }, (_, index) => `/item/R${index}`)
+  const titlePage = () => {
+    const { main } = shell()
+    detailHero(main)
+    const labels = pills(main, ["/library/LIB?genre=G2&genreName=Drama", genreRoute])
+    return { main, labels }
+  }
+  const results = () => {
+    const { main } = shell()
+    return { main, board: grid(main, ids) }
+  }
+
+  const first = titlePage()
+  noteRoute("/item/MOVIE")
+  placeFocus(first.labels.links[1])
+  first.main.scrollTop = 260
+  activate(first.labels.links[1])
+
+  const opened = results()
+  noteRoute(genreRoute)
+  let landed = false
+  restoreSeat(genreRoute, true, () => {
+    landed = true
+  })
+  check("the genre's results open with their own landing", landed)
+  placeFocus(opened.board.cards[4])
+  opened.main.scrollTop = 700
+  activate(opened.board.cards[4])
+
+  shell()
+  noteRoute("/item/R4")
+  restoreSeat("/item/R4", true, () => {})
+
+  const backToResults = results()
+  noteRoute(genreRoute)
+  let fellBack = false
+  const cancelResults = restoreSeat(genreRoute, true, () => {
+    fellBack = true
+  })
+  run(200)
+  check("Back returns to the same title in the genre's results", active === backToResults.board.cards[4], label(active))
+  check("Back restores the results' column offset", backToResults.main.scrollTop === 700, String(backToResults.main.scrollTop))
+  check("Back is not answered by the generic landing", !fellBack)
+  cancelResults()
+
+  const backToTitle = titlePage()
+  noteRoute("/item/MOVIE")
+  let fellBackTitle = false
+  const cancelTitle = restoreSeat("/item/MOVIE", true, () => {
+    fellBackTitle = true
+  })
+  run(200)
+  check("and then to the genre label it was pressed from", active === backToTitle.labels.links[1], label(active))
+  check("Back does not land on the other genre beside it", active !== backToTitle.labels.links[0], label(active))
+  check("the second Back is not answered by the generic landing", !fellBackTitle)
+  cancelTitle()
+}
+
+/** A studio is the same door, on the same page, with the studio's own id. */
+function testStudioDiscovery() {
+  clearSeats()
+  resetFocusState()
+  const studioRoute = "/library/LIB?studio=S1&studioName=A24"
+  const titlePage = () => {
+    const { main } = shell()
+    detailHero(main)
+    const labels = pills(main, ["/library/LIB?genre=G1&genreName=Drama", studioRoute])
+    return { main, labels }
+  }
+  const first = titlePage()
+  noteRoute("/item/MOVIE")
+  placeFocus(first.labels.links[1])
+  activate(first.labels.links[1])
+
+  const opened = shell()
+  const board = grid(opened.main, ["/item/R1", "/item/R2"])
+  noteRoute(studioRoute)
+  restoreSeat(studioRoute, true, () => {})
+  placeFocus(board.cards[0])
+  activate(board.cards[0])
+
+  shell()
+  noteRoute("/item/R1")
+  restoreSeat("/item/R1", true, () => {})
+
+  const back = titlePage()
+  noteRoute("/item/MOVIE")
+  let fellBack = false
+  const cancel = restoreSeat("/item/MOVIE", true, () => {
+    fellBack = true
+  })
+  run(200)
+  check("Back returns to the studio label the viewer pressed", active === back.labels.links[1], label(active))
+  check("Back is not answered by the generic landing", !fellBack)
+  cancel()
+}
+
 installDom()
 trackSeats()
 testHomeRow()
@@ -1159,6 +1278,8 @@ testCollectionsRow()
 testPersonFilmography()
 testPersonChain()
 testCrewRow()
+testGenreDiscovery()
+testStudioDiscovery()
 testClearingAndOverlays()
 console.log(failures === 0 ? "\nAll navigation checks passed." : `\n${failures} navigation check(s) failed.`)
 if (failures > 0) throw new Error(`${failures} navigation check(s) failed`)

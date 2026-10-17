@@ -13,6 +13,7 @@ import { backdropSrc, loadImage, logoSrc, primarySrc, warmImage } from "../lib/i
 import { DEFAULT_LIBRARY_VIEW, EPISODE_SORT, LIBRARY_FILTERS, librarySorts, savedLibraryView } from "../lib/libraryView"
 import { isBackKey, noteBackKeydown, ownArrows, ownBack, placeFocus } from "../lib/remote"
 import { libraryToolNeighbor, placeToolMenu, type LibraryTool } from "../lib/toolMenu"
+import { emptyResultsLine, resultsLine } from "../lib/discovery"
 import type { HomeCardSize, HomeCardStyle, Item, LibraryView } from "../lib/types"
 import { usePrefs, useSession } from "../session"
 
@@ -164,6 +165,7 @@ export function LibraryPage() {
   const [order, setOrder] = useState(opening.order)
   const [filter, setFilter] = useState(opening.filter)
   const [genreId, setGenreId] = useState(() => params.get("genre") || "")
+  const [genreName, setGenreName] = useState(() => params.get("genreName") || "")
   const [studioId, setStudioId] = useState(() => params.get("studio") || "")
   const [studioName, setStudioName] = useState(() => params.get("studioName") || "")
   const [letter, setLetter] = useState(opening.letter)
@@ -263,6 +265,7 @@ export function LibraryPage() {
   useEffect(() => {
     const current = new URLSearchParams(search)
     setGenreId(current.get("genre") || "")
+    setGenreName(current.get("genreName") || "")
     setStudioId(current.get("studio") || "")
     setStudioName(current.get("studioName") || "")
   }, [search])
@@ -347,7 +350,8 @@ export function LibraryPage() {
     let cancel = false
     const run = async () => {
       const [added, next] = await Promise.all([
-        api.seriesByRecentEpisodes(userId, id).catch(() => ({ Items: [] as Item[] })),
+        // Narrowed like the grid: a show library opened on a genre leads with a series of it.
+        api.seriesByRecentEpisodes(userId, id, { genreId, studioId }).catch(() => ({ Items: [] as Item[] })),
         api.nextUp(userId, undefined, 40).catch(() => ({ Items: [] as Item[] })),
       ])
       if (cancel) return
@@ -377,7 +381,7 @@ export function LibraryPage() {
     return () => {
       cancel = true
     }
-  }, [id, shows, userId])
+  }, [genreId, id, shows, studioId, userId])
 
   const episodes = sort === EPISODE_SORT
   const query = {
@@ -537,10 +541,18 @@ export function LibraryPage() {
 
   loadMoreRef.current = loadMore
 
+  /**
+   * Narrowing to a genre keeps the name of it in the address, the way a studio's already is: the
+   * results page can then say what it is showing without looking the genre up, and a genre chosen
+   * from the toolbar's own menu is named from the list the toolbar drew it from.
+   */
   function chooseGenre(next: string) {
     const nextParams = new URLSearchParams(params)
     if (next) nextParams.set("genre", next)
     else nextParams.delete("genre")
+    const named = genres.find((genre) => genre.Id === next)?.Name || ""
+    if (named) nextParams.set("genreName", named)
+    else nextParams.delete("genreName")
     setParams(nextParams, { replace: true })
     setMenu(null)
   }
@@ -565,8 +577,10 @@ export function LibraryPage() {
 
   // The hero's deck: one random sample of the movie library per visit, taken from
   // Jellyfin's own random order and shuffled here. It is rebuilt when the page is
-  // entered again or the library's data is refreshed - never on a render, and never
-  // once per rotation, so the hero costs a single request.
+  // entered again, when the library's data is refreshed or when the viewer narrows the
+  // page to a genre or a studio - never on a render, and never once per rotation, so
+  // the hero costs a single request. A narrowed page draws its hero from what it is
+  // showing, not from the library at large.
   useEffect(() => {
     if (!movies || !id) {
       setMovieDeck(null)
@@ -575,7 +589,7 @@ export function LibraryPage() {
     let cancel = false
     setMovieDeck(null)
     api
-      .randomLibraryMovies(userId, id, MOVIE_HERO_POOL)
+      .randomLibraryMovies(userId, id, MOVIE_HERO_POOL, { genreId, studioId })
       .then((result) => {
         if (cancel) return
         setMovieDeck(movieHeroDeck(result.Items || []))
@@ -588,7 +602,7 @@ export function LibraryPage() {
     return () => {
       cancel = true
     }
-  }, [id, movies, userId])
+  }, [genreId, id, movies, studioId, userId])
 
   const heroPool = useMemo(() => {
     if (!movies) return []
@@ -773,7 +787,13 @@ export function LibraryPage() {
   const style: HomeCardStyle = wide ? "landscape" : "poster"
 
   const count = total ? `${total.toLocaleString()} titles` : "No titles"
-  const countLine = letter ? (settled && total ? `Starts with ${letter} · ${count}` : `Starts with ${letter}`) : count
+  // What the library was narrowed to, as the page that opened it named it. A genre that arrived
+  // without a name is named from the list the toolbar already drew, and one that is in neither is
+  // left unnamed rather than guessed at.
+  const narrowedTo = [genreName || genres.find((genre) => genre.Id === genreId)?.Name || "", studioName].filter(Boolean)
+  // A letter is only worth stating once the list it narrowed has been read: until then the count
+  // beside it would be the count from before the letter was applied.
+  const countLine = resultsLine({ letter, filters: narrowedTo, count: letter && !(settled && total) ? "" : count })
   const viewOn = prefs.libraryStyle !== "poster" || prefs.librarySize !== "medium"
   const sortOn = sort !== "SortName" || order !== "Ascending"
   const filterOn = Boolean(filter || genreId || studioId)
@@ -951,7 +971,7 @@ export function LibraryPage() {
       )}
       {items.length === 0 ? (
         <div className="problem">
-          <p>{filter || genreId || studioId || letter ? "Nothing in this library matches." : "This library is empty."}</p>
+          <p>{emptyResultsLine({ library: library?.Name || "", filters: narrowedTo, narrowed: Boolean(filter || genreId || studioId || letter) })}</p>
         </div>
       ) : (
         <div className={`grid ${style} size-${size}`}>

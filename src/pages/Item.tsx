@@ -12,6 +12,7 @@ import { TitleLogo } from "../components/Title"
 import * as api from "../lib/api"
 import { collectionSizeLabel, collectionStageItem, collectionsLibrary, loadCollections } from "../lib/collections"
 import { creditsOf, filmographyRows, type Credit } from "../lib/people"
+import { genreLinks, studioLinks } from "../lib/discovery"
 import { canPlayDirectly, episodeCode, formatRuntime, isInProgress, metaLine, personFacts, progressPct, techChips } from "../lib/format"
 import { hasMediaInfo } from "../lib/mediaInfo"
 import { lastSeason, rememberSeason, resolveSeason, seasonLineText, seasonProgress, seasonProgressBySeason, seasonStart, type SeasonProgress } from "../lib/seasons"
@@ -1308,23 +1309,36 @@ function PhotoBody({ item }: { item: Item }) {
   )
 }
 
+/**
+ * What a title is, as doors: its genres and the studio behind it.
+ *
+ * Each one opens the library this title lives in, narrowed to that genre or studio, which is the
+ * only destination that can answer the question the label asks - and the library page already
+ * sorts, filters and remembers where the viewer was, so nothing about it is duplicated here. The
+ * name travels with the id so the results page can say what it is showing without asking the
+ * server a second time, and a label the server sent without an id is drawn as a label: nothing
+ * here invents an id to make a door out of it.
+ */
 function FactLinks({ item }: { item: Item }) {
   const { libraries } = useSession()
   const libraryId = libraryTarget(item, libraries)
-  const genres: { Id?: string; Name?: string }[] = item.GenreItems?.filter((genre) => genre.Name) || (item.Genres || []).map((name) => ({ Name: name }))
-  const studios = (item.Studios || []).filter((studio) => studio.Name)
+  const genres = genreLinks(item)
+  const studios = studioLinks(item)
   if (genres.length === 0 && studios.length === 0) return null
   return (
     <>
       {genres.length > 0 && (
         <p className="meta-links genre-pills">
           {genres.map((genre) =>
-            libraryId && genre.Id ? (
-              <Link key={genre.Id} to={`/library/${libraryId}?genre=${encodeURIComponent(genre.Id)}`}>
-                {genre.Name}
+            libraryId && genre.id ? (
+              <Link
+                key={genre.id}
+                to={`/library/${libraryId}?genre=${encodeURIComponent(genre.id)}&genreName=${encodeURIComponent(genre.name)}`}
+              >
+                {genre.name}
               </Link>
             ) : (
-              <span key={genre.Name}>{genre.Name}</span>
+              <span key={genre.name}>{genre.name}</span>
             ),
           )}
         </p>
@@ -1332,12 +1346,15 @@ function FactLinks({ item }: { item: Item }) {
       {studios.length > 0 && (
         <p className="meta-links">
           {studios.map((studio) =>
-            libraryId && studio.Id ? (
-              <Link key={studio.Id} to={`/library/${libraryId}?studio=${encodeURIComponent(studio.Id)}&studioName=${encodeURIComponent(studio.Name || "")}`}>
-                {studio.Name}
+            libraryId && studio.id ? (
+              <Link
+                key={studio.id}
+                to={`/library/${libraryId}?studio=${encodeURIComponent(studio.id)}&studioName=${encodeURIComponent(studio.name)}`}
+              >
+                {studio.name}
               </Link>
             ) : (
-              <span key={studio.Name}>{studio.Name}</span>
+              <span key={studio.name}>{studio.name}</span>
             ),
           )}
         </p>

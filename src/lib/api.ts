@@ -157,6 +157,9 @@ const ITEM_FIELDS = [
   "Overview",
   "People",
   "Genres",
+  // A genre is only explorable if it carries the id the library filters by, and Jellyfin sends
+  // those separately from the names. Without this a title's genres are labels and nothing more.
+  "GenreItems",
   "Studios",
   "MediaStreams",
   "MediaSources",
@@ -191,6 +194,24 @@ const ITEM_FIELDS = [
 
 const CARD_FIELDS = "PrimaryImageAspectRatio,ProductionYear,Overview,ParentId,UserData,ImageTags,RunTimeTicks,RemoteTrailers,CriticRating"
 const CARD_IMAGES = "Primary,Backdrop,Thumb,Logo"
+
+/**
+ * The genre or studio a library has been narrowed to, as Jellyfin's own query parameters.
+ *
+ * One place for both, because every query a discovery page makes has to be narrowed the same way
+ * the grid is: the ids are the server's own - taken from the title the viewer pressed - and an id
+ * that is not there is simply not asked for, rather than guessed at.
+ */
+export interface LibraryFilter {
+  genreId?: string
+  studioId?: string
+}
+
+function narrowedBy(params: URLSearchParams, filter?: LibraryFilter) {
+  if (filter?.genreId) params.set("GenreIds", filter.genreId)
+  if (filter?.studioId) params.set("StudioIds", filter.studioId)
+  return params
+}
 
 /** Public server info. Pass a signal to bound the check (used for reachability probes). */
 export function publicInfo(signal?: AbortSignal) {
@@ -316,18 +337,26 @@ function dayStamp(date: Date) {
   return `${date.getFullYear()}-${month}-${day}`
 }
 
-export function seriesByRecentEpisodes(userId: string, parentId: string) {
-  const params = new URLSearchParams({
-    ParentId: parentId,
-    Recursive: "true",
-    IncludeItemTypes: "Series",
-    SortBy: "DateLastContentAdded",
-    SortOrder: "Descending",
-    Limit: "24",
-    Fields: `${CARD_FIELDS},DateLastMediaAdded`,
-    EnableImageTypes: CARD_IMAGES,
-    ImageTypeLimit: "1",
-  })
+/**
+ * The series a library has added episodes to lately, for a show library's own hero.
+ *
+ * Narrowed like the grid, so a library opened on a genre shows a series of that genre.
+ */
+export function seriesByRecentEpisodes(userId: string, parentId: string, filter?: LibraryFilter) {
+  const params = narrowedBy(
+    new URLSearchParams({
+      ParentId: parentId,
+      Recursive: "true",
+      IncludeItemTypes: "Series",
+      SortBy: "DateLastContentAdded",
+      SortOrder: "Descending",
+      Limit: "24",
+      Fields: `${CARD_FIELDS},DateLastMediaAdded`,
+      EnableImageTypes: CARD_IMAGES,
+      ImageTypeLimit: "1",
+    }),
+    filter,
+  )
   return jf<ItemList>(`/Users/${userId}/Items?${params}`)
 }
 
@@ -430,25 +459,33 @@ export function libraryItems(
     params.set("ImageTypeLimit", "8")
   }
   if (options.filters) params.set("Filters", options.filters)
-  if (options.genreId) params.set("GenreIds", options.genreId)
-  if (options.studioId) params.set("StudioIds", options.studioId)
+  narrowedBy(params, options)
   if (options.nameStartsWith) params.set("NameStartsWith", options.nameStartsWith)
   return jf<ItemList>(`/Users/${userId}/Items?${params}`)
 }
 
-export function randomLibraryMovies(userId: string, parentId: string, limit = 40) {
-  const params = new URLSearchParams({
-    ParentId: parentId,
-    Recursive: "true",
-    IncludeItemTypes: "Movie",
-    ExcludeItemTypes: "BoxSet",
-    CollapseBoxSetItems: "false",
-    SortBy: "Random",
-    Limit: String(limit),
-    Fields: `${CARD_FIELDS},Genres,OfficialRating,CommunityRating,BackdropImageTags`,
-    EnableImageTypes: CARD_IMAGES,
-    ImageTypeLimit: "1",
-  })
+/**
+ * A random handful of the films in a library, for a library page's own hero.
+ *
+ * The same narrowing as the grid: a page opened on a genre shows a film of that genre at the top
+ * of it, not one from somewhere else in the library.
+ */
+export function randomLibraryMovies(userId: string, parentId: string, limit = 40, filter?: LibraryFilter) {
+  const params = narrowedBy(
+    new URLSearchParams({
+      ParentId: parentId,
+      Recursive: "true",
+      IncludeItemTypes: "Movie",
+      ExcludeItemTypes: "BoxSet",
+      CollapseBoxSetItems: "false",
+      SortBy: "Random",
+      Limit: String(limit),
+      Fields: `${CARD_FIELDS},Genres,OfficialRating,CommunityRating,BackdropImageTags`,
+      EnableImageTypes: CARD_IMAGES,
+      ImageTypeLimit: "1",
+    }),
+    filter,
+  )
   return jf<ItemList>(`/Users/${userId}/Items?${params}`)
 }
 
