@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode, type SyntheticEvent } from "react"
 import { NavLink, Outlet } from "react-router-dom"
-import { sortLibraries } from "../lib/homeLayout"
+import { railLibraries } from "../lib/homeLayout"
 import { usePrefs, useSession } from "../session"
 import { HeartIcon, HomeIcon, LibraryIcon, SearchIcon, SettingsIcon } from "./Icons"
 import { Screensaver } from "./Screensaver"
@@ -22,9 +22,10 @@ export function Shell() {
   const { prefs } = usePrefs()
   const [clock, setClock] = useState(() => new Date())
   const icon = 22
-  // Home, Search, Favorites and Settings are always here; the libraries a server
-  // reports fill the middle, in a fixed order rather than the server's own.
-  const ordered = useMemo(() => sortLibraries(libraries), [libraries])
+  // Home, Search, Favorites and Settings are always here; the libraries a server reports fill
+  // the middle, in the viewer's own order once they have arranged the rail, and in Mirufin's
+  // fixed order until then.
+  const ordered = useMemo(() => railLibraries(libraries, prefs.navItems), [libraries, prefs.navItems])
 
   useEffect(() => {
     if (!prefs.showClock) return

@@ -16,11 +16,12 @@ import { placeFocus } from "../lib/remote"
 import { knownFor, type KnownWork } from "../lib/knownFor"
 import { artWidth, backdropSrc, episodeStillSrc, episodeWideStill, imageUrl, loadImage, primarySrc, seasonArtSrc, thumbSrc, warmImage, wideBackdrop } from "../lib/images"
 import type { Item } from "../lib/types"
-import { useSession } from "../session"
+import { usePrefs, useSession } from "../session"
 
 export function ItemPage() {
   const { id = "" } = useParams()
   const { userId } = useSession()
+  const { prefs } = usePrefs()
   const [item, setItem] = useState<Item | null>(null)
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
   const [error, setError] = useState("")
@@ -93,7 +94,7 @@ export function ItemPage() {
   const panelArt = episode ? episodeWideStill(item, 1600) : item.Type === "Person" ? poster : poster || backdropSrc(item)
   const progress = progressPct(item)
   const chips = techChips(item)
-  const facts = item.Type === "Person" ? personFacts(item) : metaLine(item)
+  const facts = item.Type === "Person" ? personFacts(item) : metaLine(item, prefs.ratings)
   const layout = ["detail-layout", episode ? "episode-layout" : "", item.Type === "Person" ? "align-start" : ""].filter(Boolean).join(" ")
   // A person has one action, and it belongs with the person: the button is drawn
   // in the copy column under the biography rather than in the action band under

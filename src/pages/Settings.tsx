@@ -1,7 +1,7 @@
 import { Capacitor } from "@capacitor/core"
 import { useEffect, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
-import { HomeLayoutGroup, HomeSizeGroup } from "../components/HomeEditor"
+import { HomeLayoutGroup, HomeSizeGroup, NavLayoutGroup } from "../components/HomeEditor"
 import { ChevronIcon } from "../components/Icons"
 import { Choice, Pick, SettingsRow, Stepper, Switch, type Option } from "../components/SettingsControls"
 import * as api from "../lib/api"
@@ -55,6 +55,21 @@ const SCREENSAVERS: Option<number>[] = [
   { value: 20, label: "After 20 minutes" },
 ]
 
+const RATINGS: Option<Preferences["ratings"]>[] = [
+  { value: "both", label: "Community and critics" },
+  { value: "community", label: "Community score" },
+  { value: "critic", label: "Critic score" },
+  { value: "none", label: "No scores" },
+]
+
+const SCREENSAVER_SPEEDS: Option<number>[] = [
+  { value: 5, label: "Every 5 seconds" },
+  { value: 8, label: "Every 8 seconds" },
+  { value: 15, label: "Every 15 seconds" },
+  { value: 30, label: "Every 30 seconds" },
+  { value: 60, label: "Every minute" },
+]
+
 const SUBTITLE_SIZES: Option<Preferences["subtitleSize"]>[] = [
   { value: "small", label: "Small" },
   { value: "medium", label: "Medium" },
@@ -86,7 +101,7 @@ export function SettingsPage() {
   const { section } = useParams<{ section?: string }>()
   const navigate = useNavigate()
   const { serverUrl, serverName, serverVersion, userName, libraries, logout, disconnect } = useSession()
-  const { prefs } = usePrefs()
+  const { prefs, setPrefs } = usePrefs()
   const [message, setMessage] = useState("")
   const [available, setAvailable] = useState("")
   const [updating, setUpdating] = useState("")
@@ -161,7 +176,7 @@ export function SettingsPage() {
       return `${prefs.autoplayNext ? "Autoplay on" : "Autoplay off"} · ${prefs.maxBitrate / 1_000_000} Mbps`
     }
     if (id === "server") {
-      return userName ? `Signed in as ${userName}` : serverName || "Jellyfin"
+      return `${userName ? `Signed in as ${userName}` : serverName || "Jellyfin"}${prefs.signInAutomatically ? "" : " · Asks at launch"}`
     }
     return `Version ${APP_VERSION}${available ? ` · ${available} ready` : ""}`
   }
@@ -224,6 +239,22 @@ export function SettingsPage() {
             </button>
           </div>
           {message && <p className="hint">{message}</p>}
+          <div className="settings-block">
+            <h3>Profiles</h3>
+            <p className="hint">Who is signed in on this TV, and whether Mirufin asks at launch.</p>
+            <SettingsRow title="Sign in automatically" hint="Open the last profile without asking. Turn it off to be shown the profile picker at launch.">
+              <Switch
+                label="Sign in automatically"
+                checked={prefs.signInAutomatically}
+                onChange={(signInAutomatically) => setPrefs({ signInAutomatically })}
+              />
+            </SettingsRow>
+            <SettingsRow title="Switch profile" hint="Choose another profile on this server.">
+              <button className="btn" type="button" onClick={() => navigate("/profiles")}>
+                Switch profile
+              </button>
+            </SettingsRow>
+          </div>
         </section>
       )}
       {active.id === "about" && (
@@ -323,6 +354,14 @@ function CustomizeSection() {
         <HomeSizeGroup />
       </section>
 
+      <section className="settings-section" aria-labelledby="rail-heading">
+        <header className="settings-section-head">
+          <h2 id="rail-heading">Navigation</h2>
+          <p className="hint">Which libraries the rail holds, and in what order.</p>
+        </header>
+        <NavLayoutGroup />
+      </section>
+
       <section className="settings-section" aria-labelledby="artwork-heading">
         <header className="settings-section-head">
           <h2 id="artwork-heading">Artwork</h2>
@@ -333,6 +372,9 @@ function CustomizeSection() {
         </SettingsRow>
         <SettingsRow title="Logo art" hint="Prefer logo art for titles.">
           <Switch label="Logo art" checked={prefs.preferLogos} onChange={(preferLogos) => setPrefs({ preferLogos })} />
+        </SettingsRow>
+        <SettingsRow title="Ratings" hint="Which scores are shown with a title.">
+          <Pick label="Ratings" value={prefs.ratings} options={RATINGS} onChange={(ratings) => setPrefs({ ratings })} />
         </SettingsRow>
       </section>
     </>
@@ -358,6 +400,14 @@ function AppearanceSection() {
             value={prefs.screensaverMinutes}
             options={SCREENSAVERS}
             onChange={(screensaverMinutes) => setPrefs({ screensaverMinutes })}
+          />
+        </SettingsRow>
+        <SettingsRow title="Screensaver speed" hint="How quickly the pictures change.">
+          <Pick
+            label="Screensaver speed"
+            value={prefs.screensaverSeconds}
+            options={SCREENSAVER_SPEEDS}
+            onChange={(screensaverSeconds) => setPrefs({ screensaverSeconds })}
           />
         </SettingsRow>
         <SettingsRow title="Preview screensaver" hint="Start it now, to see how it looks.">
@@ -398,6 +448,16 @@ function PlaybackSection() {
         </SettingsRow>
         <SettingsRow title="Show next up" hint="When the next episode is offered.">
           <Pick label="Show next up" value={prefs.nextUp} options={NEXT_UP} onChange={(nextUp) => setPrefs({ nextUp })} />
+        </SettingsRow>
+      </section>
+
+      <section className="settings-section" aria-labelledby="controls-heading">
+        <header className="settings-section-head">
+          <h2 id="controls-heading">Controls</h2>
+          <p className="hint">How the remote behaves while something is playing.</p>
+        </header>
+        <SettingsRow title="Pause with one click" hint="One press of OK pauses straight away, instead of opening the controls first.">
+          <Switch label="Pause with one click" checked={prefs.pauseWithOneClick} onChange={(pauseWithOneClick) => setPrefs({ pauseWithOneClick })} />
         </SettingsRow>
       </section>
 

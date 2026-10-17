@@ -130,7 +130,7 @@ export const PosterCard = memo(function PosterCard({
             : ""
           : item.Artists?.[0] || (item.ProductionYear ? String(item.ProductionYear) : ""),
     remaining ? remainingLabel(item) : "",
-    criticLabel(item),
+    criticLabel(item, false, prefs.ratings),
   ]
     .filter(Boolean)
     .join("  ·  ")

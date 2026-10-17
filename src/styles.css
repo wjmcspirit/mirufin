@@ -2558,6 +2558,60 @@ input[type="range"]::-webkit-slider-thumb {
   .login-panel .text-link.text-link-small, .login-panel .hint.gate-server { font-size: 15px; }
 }
 
+/* Who's watching: the profile picker Wholphin opens on when automatic sign-in is off.
+   It is a gate, so it fills the screen like the sign-in page and its cards are the only
+   focusable things on it. */
+.gate.gate-profiles { min-height: var(--app-height, 100vh); padding: 28px 20px; }
+.profiles-panel {
+  width: min(760px, 100%);
+  gap: 18px;
+  padding: 28px;
+  border-radius: 24px;
+}
+.profiles-panel .gate-brand { gap: 2px; }
+.profiles-panel .gate-logo { height: 44px; margin: 0; }
+.profiles-panel .gate-brand h1 { font-size: 30px; }
+.profile-grid { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
+.profile-card {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: 148px;
+  padding: 16px 12px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--raise);
+  color: var(--muted);
+}
+.profile-card .profile-avatar,
+.profile-card .ph.profile-avatar {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--raise-2);
+}
+.profile-card .profile-name { color: var(--text); font-size: 15px; font-weight: 600; text-align: center; }
+.profile-card .profile-note { color: var(--accent); font-size: 12px; }
+.profile-card.current { border-color: rgba(62, 200, 255, 0.45); }
+.profile-card:focus,
+.profile-card:focus-visible,
+.profile-card.dpad-focus {
+  outline: 3px solid #8ee6ff;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px rgba(62, 200, 255, 0.28);
+}
+.profile-lock {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.profile-lock .field { gap: 6px; }
+.profile-lock .field input { min-height: 44px; padding: 11px 14px; }
+
 @media (min-width: 3200px) {
   .main { padding: 48px 72px 112px; }
   .scroller { padding: 48px 64px 68px; scroll-padding-inline: 64px; }

@@ -238,7 +238,7 @@ export function HomePage() {
                   seriesArt={item.Type === "Episode"}
                   href={`/item/${item.Id}`}
                   heading={resumeCardTitle(item)}
-                  detail={resumeCardDetail(item)}
+                  detail={resumeCardDetail(item, prefs.ratings)}
                 />
               ))}
             </Row>

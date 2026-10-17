@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom"
 import { episodeCode, metaLine, progressPct } from "../lib/format"
+import { usePrefs } from "../session"
 import type { Item } from "../lib/types"
 import { InfoIcon, PlayIcon } from "./Icons"
 import { TitleLogo } from "./Title"
@@ -56,6 +57,7 @@ export function Hero({
 }
 
 function HeroCopy({ face, onTrailer }: { face: HeroFace; onTrailer: (open: boolean) => void }) {
+  const { prefs } = usePrefs()
   const { item, presentation, playHref, playLabel, detail } = face
   const progress = progressPct(item)
   const series = item.Type === "Series"
@@ -77,7 +79,7 @@ function HeroCopy({ face, onTrailer }: { face: HeroFace; onTrailer: (open: boole
       <TitleLogo item={item} />
       {detail && <p className="hero-episode">{detail}</p>}
       {!detail && episode && <p className="hero-episode">{freshEpisode ? episodeLine : item.Name}</p>}
-      <p className="kicker">{[metaLine(item), item.Genres?.slice(0, 3).join(", ")].filter(Boolean).join("   ·   ")}</p>
+      <p className="kicker">{[metaLine(item, prefs.ratings), item.Genres?.slice(0, 3).join(", ")].filter(Boolean).join("   ·   ")}</p>
       {item.Overview && <p className="overview clamp">{item.Overview}</p>}
       <div className="actions">
         <Link className="btn btn-primary" to={href}>

@@ -1,4 +1,4 @@
-import type { Item, MediaStream } from "./types"
+import type { Item, MediaStream, RatingsDisplay } from "./types"
 
 export function ticksToSeconds(ticks = 0) {
   return ticks / 10_000_000
@@ -187,7 +187,8 @@ export function personFacts(item: Item) {
   return age >= 0 ? `${born} · Age ${age}` : born
 }
 
-export function criticLabel(item: Item, verbose = false) {
+export function criticLabel(item: Item, verbose = false, ratings: RatingsDisplay = "both") {
+  if (ratings === "community" || ratings === "none") return ""
   if (item.Type !== "Movie" && item.Type !== "Series") return ""
   if (typeof item.CriticRating !== "number" || !Number.isFinite(item.CriticRating)) return ""
   const score = Math.round(item.CriticRating)
@@ -217,7 +218,7 @@ export function endsAtLabel(item: Item) {
   return `Ends ${end.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
 }
 
-export function metaLine(item: Item) {
+export function metaLine(item: Item, ratings: RatingsDisplay = "both") {
   const bits: string[] = []
   if (item.Type === "Series") {
     const span = seriesSpan(item)
@@ -237,8 +238,8 @@ export function metaLine(item: Item) {
     if (ends) bits.push(ends)
   }
   if (item.OfficialRating) bits.push(item.OfficialRating)
-  if (item.CommunityRating) bits.push(`${item.CommunityRating.toFixed(1)} ★`)
-  const critic = criticLabel(item, true)
+  if (item.CommunityRating && ratings !== "critic" && ratings !== "none") bits.push(`${item.CommunityRating.toFixed(1)} ★`)
+  const critic = criticLabel(item, true, ratings)
   if (critic) bits.push(critic)
   return bits.join("  ·  ")
 }
@@ -279,14 +280,14 @@ export function resumeCardTitle(item: Item) {
   return item.Name || "Untitled"
 }
 
-export function resumeCardDetail(item: Item) {
+export function resumeCardDetail(item: Item, ratings: RatingsDisplay = "both") {
   const left = remainingLabel(item)
   if (item.Type === "Episode") {
     const name = item.SeriesName ? item.Name || "" : ""
     return [seasonEpisode(item), name, left].filter(Boolean).join("  ·  ")
   }
   const year = item.ProductionYear ? String(item.ProductionYear) : ""
-  return [year, criticLabel(item), left].filter(Boolean).join("  ·  ")
+  return [year, criticLabel(item, false, ratings), left].filter(Boolean).join("  ·  ")
 }
 
 /** One Next Up episode per series, in the order Jellyfin returned them. */

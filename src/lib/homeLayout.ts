@@ -1,4 +1,4 @@
-import type { HomeCardSize, HomeCardStyle, HomeRowSetting, Item } from "./types"
+import type { HomeCardSize, HomeCardStyle, HomeRowSetting, Item, NavItemSetting } from "./types"
 
 export function libraryRowId(viewId: string) {
   return `lib:${viewId}`
@@ -56,6 +56,43 @@ export function sortLibraries(libraries: Item[]) {
       return byName || a.index - b.index
     })
     .map((entry) => entry.library)
+}
+
+/**
+ * The rail, saved. A library the viewer has moved or hidden keeps that place and state; a
+ * library that has never been touched is added, visible, after the ones that have, in the
+ * same order the rail used before it was ever customised. A library the server no longer
+ * reports is dropped, and one it reports twice is one entry.
+ */
+export function mergeNavItems(saved: NavItemSetting[], libraries: Item[]) {
+  const known = new Map<string, Item>()
+  for (const library of libraries) {
+    if (library.Id && !known.has(library.Id)) known.set(library.Id, library)
+  }
+  const items: NavItemSetting[] = []
+  const seen = new Set<string>()
+  for (const entry of saved) {
+    if (!known.has(entry.id) || seen.has(entry.id)) continue
+    seen.add(entry.id)
+    items.push({ id: entry.id, visible: entry.visible !== false })
+  }
+  for (const library of sortLibraries(libraries)) {
+    if (seen.has(library.Id)) continue
+    seen.add(library.Id)
+    items.push({ id: library.Id, visible: true })
+  }
+  return items
+}
+
+/** The libraries the rail draws, in the viewer's order. A hidden library is left out here. */
+export function railLibraries(libraries: Item[], saved: NavItemSetting[]) {
+  const byId = new Map(libraries.map((library) => [library.Id, library]))
+  const list: Item[] = []
+  for (const entry of mergeNavItems(saved, libraries)) {
+    const library = byId.get(entry.id)
+    if (library && entry.visible) list.push(library)
+  }
+  return list
 }
 
 function freshRow(id: string): HomeRowSetting {

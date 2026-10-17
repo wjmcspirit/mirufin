@@ -187,6 +187,15 @@ export interface PlaybackInfo {
 export type HomeCardStyle = "poster" | "landscape"
 export type HomeCardSize = "small" | "medium" | "large"
 
+/** Which scores are drawn with a title. "both" is what Mirufin has always shown. */
+export type RatingsDisplay = "both" | "community" | "critic" | "none"
+
+/** One entry in the navigation rail: a library, and whether the rail shows it. */
+export interface NavItemSetting {
+  id: string
+  visible: boolean
+}
+
 export interface HomeRowSetting {
   id: string
   visible: boolean
@@ -197,22 +206,27 @@ export interface HomeRowSetting {
 export interface Preferences {
   showTitles: boolean
   preferLogos: boolean
+  ratings: RatingsDisplay
   showClock: boolean
+  signInAutomatically: boolean
   themeMusic: boolean
   autoplayNext: boolean
   nextUp: "end" | "credits" | "never"
   nextUpDelay: number
+  pauseWithOneClick: boolean
   resumeRewind: number
   skipBack: number
   skipForward: number
   cinemaMode: boolean
   screensaverMinutes: number
+  screensaverSeconds: number
   maxBitrate: number
   skip: Record<SegmentType, SkipMode>
   subtitleSize: "small" | "medium" | "large"
   subtitleRaise: number
   showHero: boolean
   homeRows: HomeRowSetting[]
+  navItems: NavItemSetting[]
   libraryStyle: HomeCardStyle
   librarySize: HomeCardSize
 }

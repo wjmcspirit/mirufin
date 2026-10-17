@@ -6,6 +6,7 @@ import { UpdatePrompt } from "./components/UpdatePrompt"
 import * as api from "./lib/api"
 import { discoverServers, type FoundServer } from "./lib/discover"
 import { markStartupReady } from "./lib/startup"
+import { profileChosen } from "./lib/profiles"
 import { normalizeServer } from "./lib/storage"
 import { ConnectPage } from "./pages/Connect"
 import { FavoritesPage } from "./pages/Favorites"
@@ -14,14 +15,21 @@ import { ItemPage } from "./pages/Item"
 import { LibraryPage } from "./pages/Library"
 import { LoginPage } from "./pages/Login"
 import { PlayerPage } from "./pages/Player"
+import { ProfilesPage } from "./pages/Profiles"
 import { SearchPage } from "./pages/Search"
 import { SettingsPage } from "./pages/Settings"
-import { useSession } from "./session"
+import { usePrefs, useSession } from "./session"
 
 function RequireAuth() {
   const { serverUrl, accessToken } = useSession()
+  const { prefs } = usePrefs()
+  // Wholphin's "Sign in automatically": with it off, a launch opens on the profile picker
+  // rather than straight into the last profile. The answer is kept for the launch, so this
+  // asks once and never turns into a loop.
+  const ask = !prefs.signInAutomatically && !profileChosen()
   if (!serverUrl) return <Navigate to="/connect" replace />
-  if (!accessToken) return <Navigate to="/login" replace />
+  if (!accessToken) return <Navigate to={ask ? "/profiles" : "/login"} replace />
+  if (ask) return <Navigate to="/profiles" replace />
   return <Shell />
 }
 
@@ -48,6 +56,7 @@ export function App() {
       <Routes>
       <Route path="/connect" element={<ConnectPage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/profiles" element={<ProfilesPage />} />
       <Route element={<RequireAuth />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/library/:id" element={<LibraryPage />} />

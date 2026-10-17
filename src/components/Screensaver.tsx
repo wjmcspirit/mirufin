@@ -55,9 +55,9 @@ export function Screensaver() {
 
   useEffect(() => {
     if (!active || images.length < 2) return
-    const timer = window.setInterval(() => setIndex((current) => (current + 1) % images.length), 8000)
+    const timer = window.setInterval(() => setIndex((current) => (current + 1) % images.length), prefs.screensaverSeconds * 1000)
     return () => window.clearInterval(timer)
-  }, [active, images.length])
+  }, [active, images.length, prefs.screensaverSeconds])
 
   useEffect(() => {
     if (!active || !prefs.showClock) return

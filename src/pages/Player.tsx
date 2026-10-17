@@ -815,7 +815,11 @@ export function PlayerPage() {
       }
       if (key === "Enter") {
         event.preventDefault()
-        wake()
+        // Wholphin's "Pause with one click": one press stops the picture instead of only
+        // opening the bar. The bar is drawn either way, because a paused player always shows
+        // its controls, and the play button takes focus so the next press starts again.
+        if (prefs.pauseWithOneClick) toggle()
+        else wake()
         focusControl(rootRef.current?.querySelector<HTMLElement>(".transport-primary .transport-btn") || null)
         return
       }

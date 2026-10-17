@@ -1,4 +1,4 @@
-import type { HomeCardSize, HomeCardStyle, HomeRowSetting, Preferences, SegmentType, SkipMode } from "./types"
+import type { HomeCardSize, HomeCardStyle, HomeRowSetting, NavItemSetting, Preferences, RatingsDisplay, SegmentType, SkipMode } from "./types"
 import { generateUuid } from "./uuid"
 
 const SERVER = "mirufin.server"
@@ -26,8 +26,11 @@ const LEGACY_SKIP: Partial<Record<SegmentType, SkipMode>> = {
 export const DEFAULT_PREFS: Preferences = {
   showTitles: true,
   preferLogos: true,
+  ratings: "both",
   showClock: true,
+  signInAutomatically: true,
   themeMusic: true,
+  pauseWithOneClick: true,
   autoplayNext: true,
   nextUp: "credits",
   nextUpDelay: 12,
@@ -36,11 +39,13 @@ export const DEFAULT_PREFS: Preferences = {
   skipForward: 30,
   cinemaMode: true,
   screensaverMinutes: 5,
+  screensaverSeconds: 8,
   maxBitrate: 80_000_000,
   subtitleSize: "medium",
   subtitleRaise: 8,
   showHero: true,
   homeRows: [],
+  navItems: [],
   libraryStyle: "poster",
   librarySize: "medium",
   skip: {
@@ -178,9 +183,12 @@ export function loadPrefs(): Preferences {
       ...DEFAULT_PREFS,
       ...parsed,
       showTitles: parsed.showTitles !== false,
+      ratings: RATINGS.includes(parsed.ratings as RatingsDisplay) ? (parsed.ratings as RatingsDisplay) : "both",
       preferLogos: parsed.preferLogos !== false,
       showClock: parsed.showClock !== false,
+      signInAutomatically: parsed.signInAutomatically !== false,
       themeMusic: parsed.themeMusic !== false,
+      pauseWithOneClick: parsed.pauseWithOneClick !== false,
       autoplayNext: parsed.autoplayNext !== false,
       cinemaMode: parsed.cinemaMode !== false,
       nextUp,
@@ -189,11 +197,13 @@ export function loadPrefs(): Preferences {
       skipBack: clampNumber(parsed.skipBack, 5, 60, DEFAULT_PREFS.skipBack),
       skipForward: clampNumber(parsed.skipForward, 5, 90, DEFAULT_PREFS.skipForward),
       screensaverMinutes: clampNumber(parsed.screensaverMinutes, 0, 60, DEFAULT_PREFS.screensaverMinutes),
+      screensaverSeconds: clampNumber(parsed.screensaverSeconds, 3, 120, DEFAULT_PREFS.screensaverSeconds),
       maxBitrate: Number(parsed.maxBitrate) || DEFAULT_PREFS.maxBitrate,
       subtitleSize: subtitleChoice(parsed.subtitleSize),
       subtitleRaise: clampNumber(parsed.subtitleRaise, 0, 32, DEFAULT_PREFS.subtitleRaise),
       showHero: parsed.showHero !== false,
       homeRows: normalizeHomeRows(parsed.homeRows),
+      navItems: normalizeNavItems(parsed.navItems),
       libraryStyle: HOME_STYLES.includes(parsed.libraryStyle as HomeCardStyle) ? (parsed.libraryStyle as HomeCardStyle) : "poster",
       librarySize: HOME_SIZES.includes(parsed.librarySize as HomeCardSize) ? (parsed.librarySize as HomeCardSize) : "medium",
       skip,
@@ -210,6 +220,26 @@ export function loadPrefs(): Preferences {
 
 const HOME_STYLES: HomeCardStyle[] = ["poster", "landscape"]
 const HOME_SIZES: HomeCardSize[] = ["small", "medium", "large"]
+const RATINGS: RatingsDisplay[] = ["both", "community", "critic", "none"]
+
+/**
+ * The saved rail. An entry without a usable library id is dropped, and a library the viewer
+ * has never touched is added by mergeNavItems rather than here, because only the server can
+ * say which libraries exist.
+ */
+function normalizeNavItems(value: unknown): NavItemSetting[] {
+  if (!Array.isArray(value)) return []
+  const items: NavItemSetting[] = []
+  const seen = new Set<string>()
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue
+    const item = entry as Partial<NavItemSetting>
+    if (!item.id || typeof item.id !== "string" || seen.has(item.id)) continue
+    seen.add(item.id)
+    items.push({ id: item.id, visible: item.visible !== false })
+  }
+  return items
+}
 
 function normalizeHomeRows(value: unknown): HomeRowSetting[] {
   if (!Array.isArray(value)) return []
@@ -238,3 +268,4 @@ function clampNumber(value: unknown, min: number, max: number, fallback: number)
 export function savePrefs(prefs: Preferences) {
   localStorage.setItem(PREFS, JSON.stringify(prefs))
 }
+
