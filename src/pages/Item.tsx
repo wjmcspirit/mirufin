@@ -11,6 +11,7 @@ import { useThemeSong } from "../components/Theme"
 import { TitleLogo } from "../components/Title"
 import * as api from "../lib/api"
 import { collectionSizeLabel, collectionStageItem, collectionsLibrary, loadCollections } from "../lib/collections"
+import { creditsOf, filmographyRows, type Credit } from "../lib/people"
 import { canPlayDirectly, episodeCode, formatRuntime, isInProgress, metaLine, personFacts, progressPct, techChips } from "../lib/format"
 import { hasMediaInfo } from "../lib/mediaInfo"
 import { lastSeason, rememberSeason, resolveSeason, seasonLineText, seasonProgress, seasonProgressBySeason, seasonStart, type SeasonProgress } from "../lib/seasons"
@@ -1224,10 +1225,13 @@ function PersonBody({ person }: { person: Item }) {
     }
   }, [person.Name])
 
-  if (!items && !known) return <Loading label="Loading titles" />
-  const movies = (items || []).filter((entry) => entry.Type === "Movie")
-  const shows = (items || []).filter((entry) => entry.Type === "Series")
-  const empty = items && known && movies.length === 0 && shows.length === 0 && known.length === 0
+  if (!items) return <Loading label="Loading titles" />
+  const rows = filmographyRows(items)
+  // What the library does not hold. The filmography above already lists everything it does, so a
+  // recognised title the viewer owns is not drawn a second time here: the page draws each item
+  // once, and this row is left holding the works with nowhere to go inside Mirufin.
+  const elsewhere = (known || []).filter((work) => !knownForCredit(work, credits))
+  const empty = rows.length === 0 && known !== null && elsewhere.length === 0
 
   return (
     <>
@@ -1235,26 +1239,22 @@ function PersonBody({ person }: { person: Item }) {
           biography and rows below are never re-rendered by the backdrop beat. */}
       <PersonBackdrop items={items} known={known} focused={Boolean(hovered)} />
       <div className="detail-body">
-        {known && known.length > 0 && (
-          <Row title="Known for">
-            {known.map((work) => {
-              const match = knownForCredit(work, credits)
-              if (match) return <PosterCard key={work.id} item={match} layout="poster" href={`/item/${match.Id}`} />
-              return <KnownCard key={work.id} work={work} />
-            })}
-          </Row>
-        )}
-        {movies.length > 0 && (
-          <Row title="Movies in Library">
-            {movies.map((entry) => (
+        {/* The filmography is the page, and it is drawn from Jellyfin alone: it is here as soon
+            as the server answers, whether or not the lookups that follow ever do. */}
+        {rows.map((row) => (
+          <Row key={row.title} title={row.title}>
+            {row.items.map((entry) => (
               <PosterCard key={entry.Id} item={entry} layout="poster" href={`/item/${entry.Id}`} />
             ))}
           </Row>
-        )}
-        {shows.length > 0 && (
-          <Row title="TV Shows In Library">
-            {shows.map((entry) => (
-              <PosterCard key={entry.Id} item={entry} layout="poster" href={`/item/${entry.Id}`} />
+        ))}
+        {/* Last, because it is the only row whose cards lead out of Mirufin: the titles the
+            viewer can actually open are above it, and this one arrives whenever the lookup
+            answers without pushing them anywhere. */}
+        {elsewhere.length > 0 && (
+          <Row title="Also known for">
+            {elsewhere.map((work) => (
+              <KnownCard key={work.id} work={work} />
             ))}
           </Row>
         )}
@@ -1354,27 +1354,58 @@ function libraryTarget(item: Item, libraries: Item[]) {
   return matches.length === 1 ? matches[0].Id : ""
 }
 
+/**
+ * Who is in this, and who made it.
+ *
+ * Two rows rather than one strip: the cast is the long one, and the crew - the director first,
+ * then the writers - would otherwise sit at the far end of it, which is where a television
+ * remote is least likely to arrive. Both rows are the same card, with the same portrait, the
+ * same name and the same focus ring, and each card opens that person's own page inside Mirufin.
+ */
 function PeopleRows({ people }: { people: Item["People"] }) {
-  const list = people || []
-  const cast = list.filter((person) => person.Id && person.Name && person.Type !== "Director" && person.Type !== "Writer" && person.Type !== "Producer").slice(0, 18)
-  const writers = list.filter((person) => person.Type === "Writer" && person.Id && person.Name)
-  const directors = list.filter((person) => person.Type === "Director" && person.Id && person.Name)
-  const row = [...cast, ...writers, ...directors]
-  if (row.length === 0) return null
+  const { cast, crew } = creditsOf(people)
+  if (cast.length === 0 && crew.length === 0) return null
   return (
-    <section className="row people-row">
-      <div className="scroller">
-        {row.map((person) => (
-          <Link key={`${person.Id}-${person.Type || ""}-${person.Role || ""}`} className="person" to={`/item/${person.Id}`}>
-            <MediaImage src={person.PrimaryImageTag && person.Id ? imageUrl(person.Id, "Primary", { maxWidth: 520, tag: person.PrimaryImageTag }) : null} alt="" className="avatar" />
-            <span className="person-copy">
-              <span className="card-title">{person.Name}</span>
-              <span className="card-sub">{person.Role || person.Type}</span>
-            </span>
-          </Link>
-        ))}
-      </div>
-    </section>
+    <>
+      {cast.length > 0 && (
+        <Row title="Cast" className="people-row">
+          {cast.map((credit) => (
+            <PersonCard key={`${credit.id || credit.name}-${credit.role}`} credit={credit} />
+          ))}
+        </Row>
+      )}
+      {crew.length > 0 && (
+        <Row title="Crew" className="people-row">
+          {crew.map((credit) => (
+            <PersonCard key={`${credit.id || credit.name}-${credit.role}`} credit={credit} />
+          ))}
+        </Row>
+      )}
+    </>
+  )
+}
+
+/**
+ * One person as a card. A person the server gave no id for is drawn exactly the same way, but as
+ * a plain card rather than a link: their name is worth reading, and a remote must never be able
+ * to open a page that does not exist.
+ */
+function PersonCard({ credit }: { credit: Credit }) {
+  const portrait = credit.id && credit.portrait ? imageUrl(credit.id, "Primary", { maxWidth: 520, tag: credit.portrait }) : null
+  const body = (
+    <>
+      <MediaImage src={portrait} alt="" className="avatar" />
+      <span className="person-copy">
+        <span className="card-title">{credit.name}</span>
+        {credit.role ? <span className="card-sub">{credit.role}</span> : null}
+      </span>
+    </>
+  )
+  if (!credit.id) return <span className="person">{body}</span>
+  return (
+    <Link className="person" to={`/item/${credit.id}`}>
+      {body}
+    </Link>
   )
 }
 

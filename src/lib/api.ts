@@ -595,6 +595,13 @@ export function collectionItems(userId: string, collectionId: string) {
   return jf<ItemList>(`/Users/${userId}/Items?${params}`)
 }
 
+/**
+ * A person's films and series, in one request.
+ *
+ * The order is the server's own - highest rated first, then newest - and is deliberately left
+ * alone by the page that draws it: it is the one ordering Jellyfin answers for a whole body of
+ * work, and it puts the titles a viewer is most likely to want at the front.
+ */
 export function filmography(userId: string, personId: string) {
   const params = new URLSearchParams({
     PersonIds: personId,

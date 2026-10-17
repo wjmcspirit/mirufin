@@ -449,19 +449,24 @@ function grid(main: El, hrefs: string[], cols = 6) {
 }
 
 /** A title's cast carousel: a row of people, with no heading to name it by. */
-function people(main: El, ids: string[]) {
-  const section = new El("section", "row people-row")
+/** A row of people: a heading, and a sideways strip of cast or crew cards. */
+function people(main: El, ids: string[], title = "Cast", top = 500) {
+  const section = new El("section", "row size-medium people-row")
+  const head = new El("div", "row-head")
+  const h2 = new El("h2")
+  h2.text = title
+  head.add(h2)
   const scroller = new El("div", "scroller")
-  scroller.place(500, 0, 1600, 300)
+  scroller.place(top, 0, 1600, 300)
   scroller.clientWidth = 1600
   scroller.scrollWidth = 4000
   const links = ids.map((id, index) => {
     const link = new El("a", "person").attr("href", `/item/${id}`)
-    link.place(500, index * 180, 150, 220)
+    link.place(top, index * 180, 150, 220)
     scroller.add(link)
     return link
   })
-  section.add(scroller)
+  section.add(head, scroller)
   main.add(section)
   return { section, scroller, links }
 }
@@ -1003,6 +1008,140 @@ function testCollectionsRow() {
   cancel()
 }
 
+/**
+ * A person's page: the filmography, opened from there and returned to by Back - on the same
+ * poster, with the row's sideways offset and the column's offset where the viewer left them.
+ */
+function testPersonFilmography() {
+  clearSeats()
+  resetFocusState()
+  const personPage = () => {
+    const { main } = shell()
+    detailHero(main)
+    const films = row(main, "Movies in Library", ["/item/F1", "/item/F2", "/item/F3", "/item/F4"])
+    return { main, films }
+  }
+  const first = personPage()
+  noteRoute("/item/ACTOR")
+  placeFocus(first.films.cards[2])
+  first.main.scrollTop = 300
+  first.films.scroller.scrollLeft = 180
+  activate(first.films.cards[2])
+
+  shell()
+  noteRoute("/item/F3")
+  restoreSeat("/item/F3", true, () => {})
+
+  const back = personPage()
+  noteRoute("/item/ACTOR")
+  let fellBack = false
+  const cancel = restoreSeat("/item/ACTOR", true, () => {
+    fellBack = true
+  })
+  run(200)
+  check("Back returns to the same title in the filmography", active === back.films.cards[2], label(active))
+  check("Back restores the filmography's sideways offset", back.films.scroller.scrollLeft === 180, String(back.films.scroller.scrollLeft))
+  check("Back restores the column offset", back.main.scrollTop === 300, String(back.main.scrollTop))
+  check("Back is not answered by the generic landing", !fellBack)
+  cancel()
+}
+
+/**
+ * The whole journey, and Back out of it one level at a time: a title, the actor it names, a title
+ * of theirs, and then back to the filmography card that was opened and on to the actor it started
+ * from. Nothing here is a second memory of its own - both steps are the seat the page was left on.
+ */
+function testPersonChain() {
+  clearSeats()
+  resetFocusState()
+  const movie = () => {
+    const { main } = shell()
+    detailHero(main)
+    const cast = people(main, ["ACTOR_A", "ACTOR_B", "ACTOR_C"])
+    return { main, cast }
+  }
+  const personPage = () => {
+    const { main } = shell()
+    detailHero(main)
+    const films = row(main, "Movies in Library", ["/item/F1", "/item/F2"])
+    return { main, films }
+  }
+
+  const first = movie()
+  noteRoute("/item/MOVIE")
+  placeFocus(first.cast.links[1])
+  activate(first.cast.links[1])
+
+  const opened = personPage()
+  noteRoute("/item/ACTOR_B")
+  let landed = false
+  restoreSeat("/item/ACTOR_B", true, () => {
+    landed = true
+  })
+  check("the actor's page opens with its own landing", landed)
+  placeFocus(opened.films.cards[1])
+  activate(opened.films.cards[1])
+
+  shell()
+  noteRoute("/item/F2")
+  restoreSeat("/item/F2", true, () => {})
+
+  const backToPerson = personPage()
+  noteRoute("/item/ACTOR_B")
+  let fellBackToPerson = false
+  const cancelPerson = restoreSeat("/item/ACTOR_B", true, () => {
+    fellBackToPerson = true
+  })
+  run(200)
+  check("the first Back returns to the title of theirs that was opened", active === backToPerson.films.cards[1], label(active))
+  check("the first Back is not answered by the generic landing", !fellBackToPerson)
+  cancelPerson()
+
+  const backToMovie = movie()
+  noteRoute("/item/MOVIE")
+  let fellBackToMovie = false
+  const cancelMovie = restoreSeat("/item/MOVIE", true, () => {
+    fellBackToMovie = true
+  })
+  run(200)
+  check("the second Back returns to the title it started from, on the actor it named", active === backToMovie.cast.links[1], label(active))
+  check("the second Back is not answered by the generic landing", !fellBackToMovie)
+  cancelMovie()
+}
+
+/** A director is reachable in the crew row, and Back returns to that director. */
+function testCrewRow() {
+  clearSeats()
+  resetFocusState()
+  const movie = () => {
+    const { main } = shell()
+    detailHero(main)
+    people(main, ["ACTOR_A", "ACTOR_B"])
+    const crew = people(main, ["DIRECTOR", "WRITER"], "Crew", 800)
+    return { main, crew }
+  }
+  const first = movie()
+  noteRoute("/item/MOVIE")
+  placeFocus(first.crew.links[0])
+  activate(first.crew.links[0])
+
+  shell()
+  noteRoute("/item/DIRECTOR")
+  restoreSeat("/item/DIRECTOR", true, () => {})
+
+  const back = movie()
+  noteRoute("/item/MOVIE")
+  let fellBack = false
+  const cancel = restoreSeat("/item/MOVIE", true, () => {
+    fellBack = true
+  })
+  run(200)
+  check("Back returns to the director in the crew row", active === back.crew.links[0], label(active))
+  check("Back does not land on the writer beside them", active !== back.crew.links[1], label(active))
+  check("Back is not answered by the generic landing", !fellBack)
+  cancel()
+}
+
 installDom()
 trackSeats()
 testHomeRow()
@@ -1017,6 +1156,9 @@ testSeasonWalk()
 testSeasonBack()
 testCollectionGrid()
 testCollectionsRow()
+testPersonFilmography()
+testPersonChain()
+testCrewRow()
 testClearingAndOverlays()
 console.log(failures === 0 ? "\nAll navigation checks passed." : `\n${failures} navigation check(s) failed.`)
 if (failures > 0) throw new Error(`${failures} navigation check(s) failed`)

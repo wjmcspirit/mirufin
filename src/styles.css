@@ -1898,7 +1898,18 @@ select {
 .episode:focus .episode-title,
 .episode:focus-visible .episode-title,
 .episode.dpad-focus .episode-title { color: #fff; }
-.people-row .scroller { flex-wrap: nowrap; }
+.people-row .scroller { flex-wrap: nowrap; align-items: start; }
+/* A cast name is read from across the room and is often long, so it wraps onto a second line
+   instead of being cut off at the first: the role under it is what says which part it was, and
+   the portrait above it is what makes the person recognisable. */
+.people-row .person .card-title {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.2;
+}
 .person {
   position: relative;
   width: 188px;
