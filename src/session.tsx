@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { useNavigate } from "react-router-dom"
 import * as api from "./lib/api"
+import { loadLibraries } from "./lib/libraryLoad"
 import { forgetSession, keepSession, savedSession } from "./lib/startup"
 import {
   clearAuth,
@@ -164,18 +165,22 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!session.userId || !session.accessToken) return
-    let cancel = false
-    api
-      .views(session.userId)
-      .then((result) => {
-        if (!cancel) setSession((current) => ({ ...current, libraries: result.Items || [] }))
-      })
-      .catch(() => {
-        if (!cancel) setSession((current) => ({ ...current, libraries: [] }))
-      })
-    return () => {
-      cancel = true
-    }
+    const userId = session.userId
+    // One failed request must not cost the viewer the rail. A television can start this app
+    // before its network is up, and this list is what Movies, TV Shows and Collections are drawn
+    // from: it is asked for again, on the waits in `libraryLoad`, until an answer arrives. The
+    // list is applied only while it is still the same sign-in, so a late answer cannot land on
+    // somebody else's session.
+    return loadLibraries({
+      fetchLibraries: async () => (await api.views(userId)).Items || [],
+      apply: (libraries) =>
+        setSession((current) => (current.userId === userId ? { ...current, libraries } : current)),
+      after: (ms, fn) => {
+        const timer = window.setTimeout(fn, ms)
+        return () => window.clearTimeout(timer)
+      },
+      giveUp: () => setSession((current) => (current.userId === userId ? { ...current, libraries: [] } : current)),
+    })
   }, [session.userId, session.accessToken])
 
   const sessionValue = useMemo<SessionValue>(() => {
