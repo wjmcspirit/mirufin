@@ -876,31 +876,48 @@ html:not(.remote) .nav:hover .nav-label {
 }
 .hero.stage-copy::before, .detail-hero.stage-copy::before { display: none; }
 /* Home's featured title: the artwork behind it is the full-bleed stage, so this block's own
-   height is what the copy occupies, and it is measured against the television's usable
-   height rather than fixed at 520px. At 1080p the artwork, the title block and its actions
-   take a little over half the window, which is what puts the first row of posters - heading,
-   artwork and caption - on screen beneath it without a scroll. The height is taken from
-   `--app-height` (the shell's scaled height; see index.html) so a 4K panel draws the same
-   picture, and a browser falls back to its own viewport.
+   height is what the copy occupies, and it is measured against the television's usable height
+   rather than fixed at 520px. The height is taken from `--app-height` (the shell's scaled
+   height; see index.html) so a 4K panel draws the same picture, and a browser falls back to its
+   own viewport.
 
    It is a height, not a minimum: the featured title changing can no longer move the rows
-   below it. Every line the copy draws is held to a fixed size instead - the title to one box,
-   the eyebrow, the episode's name, the facts and the synopsis to one or two lines, the actions
-   to one row - so the composition is the same for a film with a logo, a series named in type
-   and an episode whose name is a paragraph long. */
+   below it, and the share is what the first row of posters needs. `.hero`'s own 520px floor was
+   written for a browser window, where the canvas *is* the window; on a television the canvas is
+   1500x844 units, so that floor was 62% of the screen and the first row - artwork and caption
+   alike - was pushed off the bottom edge. The floor is lifted here, and only here.
+
+   Every line the copy draws is held to a fixed size instead - the title to one box, the eyebrow,
+   the episode's name, the facts and the synopsis to one or two lines, the actions to one row -
+   so the composition is the same for a film with a logo, a series named in type and an episode
+   whose name is a paragraph long. */
 .home .hero.stage-copy {
-  height: calc(var(--app-height, 100dvh) * 0.44);
-  margin-bottom: 12px;
+  height: calc(var(--app-height, 100dvh) * 0.42);
+  /* Never less than the copy itself needs - the title's box, the facts and the synopsis at two
+     lines each, and one row of actions. On a 16:9 panel the share above is already taller than
+     this; it is here for a panel wider than that, where the copy would otherwise be crushed
+     into a title box too short for its own type. */
+  min-height: 350px;
+  margin-bottom: 8px;
 }
+/* Home's own vertical rhythm is tighter than the rest of the app's. Under the hero there is a
+   heading, a strip of posters and a caption of two lines of title and up to three of detail, and
+   all of it has to clear the bottom edge of the screen without a scroll - so the space between
+   those parts is what it needs to be and no more. It is scoped to Home: every other page keeps
+   the rhythm it has. */
+.home .row { margin-top: 0; }
+.home .row-head { margin-bottom: 8px; }
+.home .row .scroller { padding-top: 16px; }
 /* The copy fills the hero and stacks up from its bottom edge, so what a title does not use is
-   empty artwork above it rather than a shorter hero. */
+   empty artwork above it rather than a shorter hero. Its own gap and padding are what make it fit
+   inside that share: they are the two things that can give without touching the size of the type. */
 .home .hero .hero-copy {
   height: 100%;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  padding: 20px 36px;
-  gap: 8px;
+  padding: 16px 36px;
+  gap: 6px;
   max-width: 720px;
 }
 /* The title's own box: one height for a logo, a name in type and an episode's name alike. */
@@ -2833,16 +2850,21 @@ input[type="range"]::-webkit-slider-thumb {
 @media (min-width: 2200px) {
   .main { padding: 40px 56px 96px; }
   .scroller { padding: 40px 52px 56px; scroll-padding-inline: 52px; }
+  /* Home's fold. On a wider viewport the page's top padding and the row's own padding grow, and
+     the first row of posters still has to clear the bottom edge with its caption under it - the
+     artwork alone is 252 units of a 844-unit canvas. Both keep the sizes they have at 1080p,
+     where they already clear a focused card's ring and its lift, so the fold is the same at every
+     resolution. See tools/foldCheck.ts, which measures it in a browser at each panel size. */
+  .main { padding-top: 32px; }
+  .home .row .scroller { padding-top: 16px; }
   /* The bigger screens enlarge .main's padding; the search console keeps the same
      effective rhythm it has at 1080p so its poster row stays above the bottom edge. */
   .search-screen { margin-top: -32px; margin-bottom: -80px; }
-  .side { padding: 16px 48px; gap: 28px; }
-  .brand-logo { height: 46px; }
-  .nav { width: 62px; height: 62px; }
-  .nav svg { width: 30px; height: 30px; }
-  .nav-label { font-size: 22px; }
-  .clock, .account { font-size: 18px; }
-  .account-mark { width: 36px; height: 36px; font-size: 16px; }
+  /* The rail keeps the height it has at 1080p. Its mark, its icons and its clock are already
+     scaled to the screen by the canvas the layout is drawn on (see index.html), so growing them
+     here grew them twice over - and on a canvas 844 units tall the top bar sits above every
+     page's fold. Only the room they sit in, across, grows. */
+  .side { padding: 10px 48px; gap: 28px; }
   .settings { width: min(1100px, 100%); font-size: 22px; }
   .settings > h1 { font-size: 56px; }
   .settings .hint { font-size: 22px; }
@@ -2918,17 +2940,16 @@ input[type="range"]::-webkit-slider-thumb {
 @media (min-width: 3200px) {
   .main { padding: 48px 72px 112px; }
   .scroller { padding: 48px 64px 68px; scroll-padding-inline: 64px; }
+  /* Home's fold, as above: the two paddings stay where they are, and the rail keeps its height
+     here too, so the hero's share of the screen is the same as it is at 1080p. */
+  .main { padding-top: 32px; }
+  .home .row .scroller { padding-top: 16px; }
+  .side { padding: 10px 64px; gap: 36px; }
   /* A 4K panel gives the console less height (the navigation bar is taller there), so it
      takes a little more of the page padding back to keep the poster row fully on screen. */
   .search-screen { margin-top: -40px; margin-bottom: -96px; }
-  .side { padding: 22px 64px; gap: 36px; }
-  .brand-logo { height: 68px; }
-  .nav { width: 84px; height: 84px; }
-  .nav svg { width: 40px; height: 40px; }
-  .nav-label { font-size: 30px; }
-  .nav.active::after { width: 22px; height: 3px; bottom: 12px; }
-  .clock, .account { font-size: 26px; }
-  .account-mark { width: 48px; height: 48px; font-size: 22px; }
+  /* The rail keeps its 1080p height here as well; only its horizontal room grows. */
+  .side { padding: 10px 64px; gap: 36px; }
   .settings { width: min(1400px, 100%); font-size: 30px; }
   .settings > h1 { font-size: 72px; }
   .settings .hint { font-size: 26px; }

@@ -188,7 +188,51 @@ function rule(selector: string) {
 
 const hero = rule(".home .hero.stage-copy")
 check("Home's hero declares a height, not a minimum, so the rows below it cannot move", hero.includes("height: calc(var(--app-height"), hero.trim())
-check("and that height is a share of the television's own, so 4K draws the same picture", hero.includes("* 0.44"), hero.trim())
+check("and that height is a share of the television's own, so 4K draws the same picture", /\*\s*[\d.]+\)/.test(hero), hero.trim())
+/* The floor is the reason the fold broke: `.hero` itself carries a 520px minimum, which is right
+   for a browser window - where the canvas is the window - but on a television's 844-unit canvas
+   it was 62% of the screen, and the first row of posters was pushed off the bottom edge. Home's
+   own floor has to stay under the share, so the share is what decides the height. */
+const share = Number(hero.match(/\*\s*([\d.]+)\)/)?.[1] ?? "0")
+const floor = Number(hero.match(/min-height:\s*(\d+)px/)?.[1] ?? "0")
+check(
+  "and Home's own floor stays under that share on a 16:9 television, so it never takes over",
+  share > 0 && floor > 0 && share * 843.75 >= floor,
+  `a share of ${share} of 843.75 units is ${(share * 843.75).toFixed(1)}, against a floor of ${floor}`,
+)
+/* The fold itself, which `tools/foldCheck.ts` measures in a real browser at 1080p, 1440p and 4K:
+   these are the declarations that measurement rests on, so a later change to any of them is
+   caught here rather than on a television. */
+check("Home's rows sit closer together than the rest of the app's", css.includes("\n.home .row { margin-top: 0; }"), rule(".home .row"))
+check("the heading sits close to the posters it names", rule(".home .row-head").includes("margin-bottom: 8px"), rule(".home .row-head").trim())
+check(
+  "the strip keeps just enough padding for a focused card's ring and its lift",
+  rule(".home .row .scroller").includes("padding-top: 16px"),
+  rule(".home .row .scroller").trim(),
+)
+
+/** One media query's block, as it is written. */
+function mediaBlock(query: string) {
+  const match = css.match(new RegExp(`@media ${query.replace(/[()]/g, "\\$&")} \\{[\\s\\S]*?\\r?\\n\\}`))
+  return match ? match[0] : ""
+}
+
+const wide = mediaBlock("(min-width: 2200px)")
+const wider = mediaBlock("(min-width: 3200px)")
+check("the wide breakpoints are there to be checked", wide.length > 0 && wider.length > 0)
+check(
+  "a wider viewport does not push Home's first row down",
+  wide.includes(".main { padding-top: 32px; }") &&
+    wide.includes(".home .row .scroller { padding-top: 16px; }") &&
+    wider.includes(".main { padding-top: 32px; }") &&
+    wider.includes(".home .row .scroller { padding-top: 16px; }"),
+  `2200: ${wide.includes(".main { padding-top: 32px; }")}, 3200: ${wider.includes(".main { padding-top: 32px; }")}`,
+)
+check(
+  "and the rail keeps the height it has at 1080p, since the canvas already scales it",
+  !/\.nav \{/.test(wide) && !/\.brand-logo \{/.test(wide) && !/\.nav \{/.test(wider) && !/\.brand-logo \{/.test(wider),
+  "the rail's own sizes are set once, at the top of the stylesheet",
+)
 check("the copy stacks up from the hero's bottom edge", rule(".home .hero .hero-copy").includes("justify-content: flex-end"))
 check("the title sits in one box of one height, whatever it holds", rule(".home .hero .hero-title").includes("height: 92px"))
 check("a name in type is held to two lines in it", rule(".home .hero .hero-title h1").includes("-webkit-line-clamp: 2"))

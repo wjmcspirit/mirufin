@@ -15,6 +15,7 @@
     "discoverycheck": "esbuild tools/discoveryCheck.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.mirufin/discoveryCheck.mjs && node node_modules/.mirufin/discoveryCheck.mjs",
     "homecheck": "esbuild tools/homeCheck.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.mirufin/homeCheck.mjs && node node_modules/.mirufin/homeCheck.mjs",
     "playbackcheck": "esbuild tools/playbackCheck.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.mirufin/playbackCheck.mjs && node node_modules/.mirufin/playbackCheck.mjs",
+    "foldcheck": "esbuild tools/foldCheck.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.mirufin/foldCheck.mjs && node node_modules/.mirufin/foldCheck.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

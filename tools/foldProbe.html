@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Mirufin fold probe</title>
+    <link rel="stylesheet" href="../src/styles.css" />
+    <style>
+      html, body { margin: 0; overflow: hidden; }
+      #probe { position: fixed; left: -10000px; top: 0; }
+    </style>
+  </head>
+  <body>
+    <!--
+      Home, drawn from the app's own stylesheet, so the fold can be measured instead of reasoned
+      about. The structure mirrors the real one: the shell's two rows (the rail and the scrolling
+      main), the fixed-height hero, and a first row of poster cards with the captions that
+      Continue watching and the library rows draw.
+
+      The point of the probe is the two questions only a layout engine can answer: does the first
+      row's artwork clear the bottom edge of the screen, and does its caption. Both are reported in
+      design units - the 1500-wide canvas the television layout is drawn on - so a 1080p panel and
+      a 4K panel can be compared directly.
+
+      Run it through `npm run foldcheck`, which drives it in a headless browser at 1080p, 1440p and
+      4K. Opened by hand it measures whatever window it is given.
+    -->
+    <div class="shell">
+      <header class="side">
+        <div class="brand" role="img" aria-label="Mirufin">
+          <img class="brand-logo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='34'%3E%3C/svg%3E" alt="" />
+        </div>
+        <nav class="side-nav" aria-label="Main">
+          <button class="nav"><svg viewBox="0 0 24 24"></svg></button>
+          <button class="nav"><svg viewBox="0 0 24 24"></svg></button>
+          <button class="nav"><svg viewBox="0 0 24 24"></svg></button>
+          <button class="nav"><svg viewBox="0 0 24 24"></svg></button>
+          <button class="nav"><svg viewBox="0 0 24 24"></svg></button>
+        </nav>
+        <div class="side-end">
+          <time class="clock">9:41</time>
+          <p class="account">
+            <span class="account-mark" aria-hidden="true">W</span>
+            <span class="account-name">Viewer</span>
+          </p>
+        </div>
+      </header>
+      <div class="main">
+        <div class="home">
+          <section class="hero stage-copy">
+            <div class="hero-copy">
+              <p class="eyebrow">Series · S2 E4</p>
+              <div class="hero-title"><h1>The Long Way Round And Back Again</h1></div>
+              <p class="hero-episode">S2 E4 · A Rather Long Episode Name</p>
+              <p class="kicker">2019 · 1h 52m · Drama, Mystery, Science Fiction</p>
+              <p class="overview clamp">
+                A synopsis of the sort a server actually sends: two lines of it at this width, no
+                more, held to the space reserved for it whatever it says.
+              </p>
+              <div class="actions">
+                <a class="btn btn-primary" href="#">Play</a>
+                <a class="btn" href="#">Details</a>
+                <button class="btn icon-btn" type="button">Favorite</button>
+                <button class="btn" type="button">Trailer</button>
+              </div>
+            </div>
+          </section>
+          <section class="row size-medium" id="poster-row">
+            <div class="row-head"><h2>Continue watching</h2></div>
+            <div class="scroller">
+              <a class="card poster labeled" href="#">
+                <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='252'%3E%3C/svg%3E" alt="" /></span>
+                <span class="card-copy">
+                  <span class="card-title">The Extremely Long Series Name It Belongs To</span>
+                  <span class="card-sub">S2 E4  ·  A Rather Long Episode Title  ·  34m left  ·  4K</span>
+                </span>
+              </a>
+              <a class="card poster labeled" href="#">
+                <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='252'%3E%3C/svg%3E" alt="" /></span>
+                <span class="card-copy">
+                  <span class="card-title">The Series It Belongs To</span>
+                  <span class="card-sub">S2 E4  ·  A Rather Long Episode Title  ·  34m left</span>
+                </span>
+              </a>
+              <a class="card poster labeled" href="#">
+                <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='252'%3E%3C/svg%3E" alt="" /></span>
+                <span class="card-copy">
+                  <span class="card-title">A Third Series</span>
+                  <span class="card-sub">S3 E9  ·  The Last One  ·  2m left</span>
+                </span>
+              </a>
+            </div>
+          </section>
+          <section class="row size-medium" id="wide-row">
+            <div class="row-head"><h2>Next up</h2></div>
+            <div class="scroller">
+              <a class="card wide" href="#">
+                <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='169'%3E%3C/svg%3E" alt="" /></span>
+                <span class="card-copy">
+                  <span class="card-title">The Next Episode To Watch</span>
+                  <span class="card-sub">S2 E5  ·  The Series It Belongs To</span>
+                </span>
+              </a>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+    <div id="probe">pending</div>
+    <script>
+      /**
+       * The same fit the app applies in index.html: the layout is drawn on a 1500-wide canvas,
+       * scaled to the screen with a root zoom, and `--app-height` is that screen's height in the
+       * canvas's own units.
+       */
+      ;(function () {
+        var width = window.innerWidth
+        var height = window.innerHeight
+        var scale = width / 1500
+        var root = document.documentElement
+        root.style.zoom = String(scale)
+        root.style.setProperty("--app-scale", String(scale))
+        root.style.setProperty("--app-height", Math.round(height / scale) + "px")
+
+        var shell = document.querySelector(".shell")
+        // A diagnostic: ?free=1 lets the hero take the height its copy asks for, so the copy's
+        // natural size can be read rather than inferred. It is not a layout under test.
+        if (/(^|[?&])free=1(&|$)/.test(location.search)) {
+          document.querySelector(".hero").style.height = "auto"
+        }
+        // Under a root zoom the browser reports rectangles in scaled pixels, so one factor
+        // converts every measurement back into design units - and it is read off the shell,
+        // whose height the stylesheet pins to --app-height.
+        var appHeight = parseFloat(getComputedStyle(root).getPropertyValue("--app-height"))
+        var rectScale = shell.getBoundingClientRect().height / appHeight
+        function units(node) {
+          var rect = node.getBoundingClientRect()
+          return { top: rect.top / rectScale, bottom: rect.bottom / rectScale, height: rect.height / rectScale }
+        }
+        function round(value) {
+          return Math.round(value * 10) / 10
+        }
+
+        var posterRow = document.querySelector("#poster-row")
+        var wideRow = document.querySelector("#wide-row")
+        // A first row of landscape cards is a different first row, so the probe can be asked for
+        // one: loading the page with ?row=wide puts that row directly under the hero before
+        // anything is measured, rather than measuring a row that sits further down the page.
+        var asked = /(^|[?&])row=wide(&|$)/.test(location.search) ? wideRow : posterRow
+        var home = document.querySelector(".home")
+        if (asked !== posterRow) home.insertBefore(asked, home.children[1])
+
+        var art = units(asked.querySelector(".card-art"))
+        var caption = units(asked.querySelector(".card-copy"))
+        var report = {
+          row: asked.id === "wide-row" ? "wide" : "poster",
+          viewport: { width: width, height: height },
+          zoom: round(scale),
+          fold: round(appHeight),
+          rectScale: round(rectScale),
+          rail: round(units(document.querySelector(".side")).height),
+          hero: {
+            top: round(units(document.querySelector(".hero")).top),
+            bottom: round(units(document.querySelector(".hero")).bottom),
+          },
+          rowTop: round(units(asked).top),
+          headingBottom: round(units(asked.querySelector(".row-head")).bottom),
+          art: { top: round(art.top), bottom: round(art.bottom), height: round(art.height) },
+          caption: { top: round(caption.top), bottom: round(caption.bottom), height: round(caption.height) },
+          copy: (function () {
+            // The copy's own content, not its box: `.hero-copy` is pinned to the hero's height and
+            // stacks its children up from the bottom edge, so what matters is where the first line
+            // starts and where the actions end.
+            var content = units(document.querySelector(".hero .eyebrow"))
+            var actions = units(document.querySelector(".hero .actions"))
+            return {
+              top: round(content.top),
+              bottom: round(actions.bottom),
+              height: round(actions.bottom - content.top),
+              actionsBottom: round(actions.bottom),
+            }
+          })(),
+          parts: (function () {
+            // Each line the copy draws, so a change in the copy's total height can be read rather
+            // than guessed at.
+            var out = {}
+            var names = [".eyebrow", ".hero-title", ".hero-episode", ".kicker", ".overview", ".actions"]
+            for (var i = 0; i < names.length; i += 1) {
+              var node = document.querySelector(".hero " + names[i])
+              out[names[i].slice(1)] = node ? round(units(node).height) : 0
+            }
+            return out
+          })(),
+          artInside: art.bottom <= appHeight + 0.5,
+          captionInside: caption.bottom <= appHeight + 0.5,
+        }
+        document.getElementById("probe").textContent = JSON.stringify(report)
+      })()
+    </script>
+  </body>
+</html>
