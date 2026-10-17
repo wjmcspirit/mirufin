@@ -717,9 +717,14 @@ export function PlayerPage() {
   function controlRows() {
     const pick = (selector: string) =>
       [...(rootRef.current?.querySelectorAll<HTMLElement>(selector) || [])].filter((el) => el.getClientRects().length > 0)
+    // The bottom bar is one line, but it is walked as two rows: the transport buttons, and
+    // the subtitle, audio, speed, chapter and fullscreen chips at the lower right. Down
+    // reaches the chips from any transport button, and moveAcross carries on from the end of
+    // one row into the next, so the whole bar is one walk whichever way the viewer goes.
     return [
       pick(".seek-row input"),
-      pick(".transport button"),
+      pick(".transport-primary button"),
+      pick(".transport-secondary button"),
       pick(".skip-prompt"),
       pick(".next-up button"),
     ].filter((row) => row.length > 0)
@@ -739,10 +744,19 @@ export function PlayerPage() {
   }
 
   function moveAcross(from: HTMLElement, delta: number) {
-    const row = controlRows().find((entry) => entry.includes(from))
-    if (!row) return
+    const rows = controlRows()
+    const rowIndex = rows.findIndex((entry) => entry.includes(from))
+    if (rowIndex < 0) return
+    const row = rows[rowIndex]
     const next = row[row.indexOf(from) + delta]
-    if (next) focusControl(next)
+    if (next) {
+      focusControl(next)
+      return
+    }
+    // The end of a row is not the end of the bar: Right carries on into the first control of
+    // the next row and Left back into the last control of the previous one.
+    const beyond = rows[rowIndex + (delta > 0 ? 1 : -1)]
+    if (beyond) focusControl(beyond[delta > 0 ? 0 : beyond.length - 1] || null)
   }
 
   function changeVolume(delta: number) {
@@ -818,8 +832,20 @@ export function PlayerPage() {
     }
     const onTimeline = Boolean(target.closest(".seek-row"))
     const onVolume = Boolean(target.closest(".volume-pop"))
+    const onVolumeButton = Boolean(target.closest(".volume-pop button"))
     const onTransport = Boolean(target.closest(".transport, .seek-row"))
-    if ((key === "ArrowLeft" || key === "ArrowRight") && onVolume) {
+    // The volume control sits in the middle of the bar, so it cannot keep Left and Right to
+    // itself: doing that is what made the subtitle, audio, speed and chapter chips at the end
+    // of the bar unreachable. The button steps the level with Up and Down instead (its popup
+    // is drawn above it), and Left and Right walk on along the bar to the chips. The slider
+    // itself still answers Left and Right, which is what its shape promises.
+    if (onVolumeButton && (key === "ArrowUp" || key === "ArrowDown")) {
+      event.preventDefault()
+      changeVolume(key === "ArrowUp" ? 0.05 : -0.05)
+      wake()
+      return
+    }
+    if ((key === "ArrowLeft" || key === "ArrowRight") && onVolume && !onVolumeButton) {
       event.preventDefault()
       changeVolume(key === "ArrowRight" ? 0.05 : -0.05)
       wake()
