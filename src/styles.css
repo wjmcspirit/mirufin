@@ -2591,6 +2591,10 @@ input[type="range"]::-webkit-slider-thumb {
   object-fit: cover;
   background: var(--raise-2);
 }
+/* A profile without a picture shows its initial, not the app mark as well: the two
+   together made the one thing the viewer needs to read the smaller of the two. */
+.profile-card .ph.profile-avatar .ph-mark { display: none; }
+.profile-card .ph.profile-avatar .ph-title { font-size: 32px; font-weight: 600; }
 .profile-card .profile-name { color: var(--text); font-size: 15px; font-weight: 600; text-align: center; }
 .profile-card .profile-note { color: var(--accent); font-size: 12px; }
 .profile-card.current { border-color: rgba(62, 200, 255, 0.45); }
