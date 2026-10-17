@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode, type SyntheticEvent } from "react"
-import { NavLink, Outlet } from "react-router-dom"
+import { NavLink, Outlet, useLocation } from "react-router-dom"
 import { railLibraries } from "../lib/homeLayout"
 import { usePrefs, useSession } from "../session"
+import { ErrorBoundary } from "./ErrorBoundary"
 import { HeartIcon, HomeIcon, LibraryIcon, SearchIcon, SettingsIcon } from "./Icons"
 import { Screensaver } from "./Screensaver"
 import { StageProvider } from "./Stage"
@@ -20,6 +21,7 @@ function NavItem({ to, end = false, label, children }: { to: string; end?: boole
 export function Shell() {
   const { libraries, userName } = useSession()
   const { prefs } = usePrefs()
+  const location = useLocation()
   const [clock, setClock] = useState(() => new Date())
   const icon = 22
   // Home, Search, Favorites and Settings are always here; the libraries a server reports fill
@@ -104,7 +106,12 @@ export function Shell() {
         </div>
       </header>
       <div className="main">
-        <Outlet />
+        {/* A screen that throws is contained here rather than at the root, so the rail stays on
+            screen and the remote can still walk out of it: the boundary is keyed on the route,
+            so leaving the broken page clears it and the app carries on. */}
+        <ErrorBoundary key={location.pathname}>
+          <Outlet />
+        </ErrorBoundary>
       </div>
       <Screensaver />
     </div>

@@ -229,6 +229,9 @@ export function HomePage() {
         if (section.id === "continue" && inProgress.length > 0) {
           return (
             <Row key={section.id} className={`size-${section.size}`} title="Continue watching">
+              {/* Continue watching is a resume, not a browse: the card plays the title again from
+                  where it stopped, the way Plex and Wholphin do. The same title's page is still a
+                  press away from its library row, its series, or Search. */}
               {inProgress.map((item) => (
                 <PosterCard
                   key={item.Id}
@@ -236,7 +239,7 @@ export function HomePage() {
                   layout="poster"
                   size={section.size}
                   seriesArt={item.Type === "Episode"}
-                  href={`/item/${item.Id}`}
+                  href={`/play/${item.Id}?resume=1`}
                   heading={resumeCardTitle(item)}
                   detail={resumeCardDetail(item, prefs.ratings)}
                 />

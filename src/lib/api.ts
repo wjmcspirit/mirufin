@@ -468,8 +468,15 @@ export function item(userId: string, itemId: string) {
   return jf<Item>(`/Users/${userId}/Items/${itemId}?Fields=${ITEM_FIELDS}`)
 }
 
-export function specialFeatures(userId: string, itemId: string) {
-  return jf<Item[]>(`/Users/${userId}/Items/${itemId}/SpecialFeatures?Fields=${CARD_FIELDS}`)
+/**
+ * Jellyfin answers this with a bare array (the Kotlin SDK types it List<BaseItemDto>), but the
+ * endpoint has been wrapped in a paged result by some servers and proxies. Reading it as an
+ * array only is what used to throw "items is not iterable" and take the whole title page - and
+ * with it the app - down, so both shapes are accepted here.
+ */
+export async function specialFeatures(userId: string, itemId: string) {
+  const list = await jf<Item[] | ItemList>(`/Users/${userId}/Items/${itemId}/SpecialFeatures?Fields=${CARD_FIELDS}`)
+  return Array.isArray(list) ? list : list?.Items || []
 }
 
 export function seasons(userId: string, seriesId: string) {
