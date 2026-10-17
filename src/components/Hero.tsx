@@ -78,6 +78,18 @@ function HeroCopy({ face, onTrailer }: { face: HeroFace; onTrailer: (open: boole
   const label = playLabel || (series ? "View series" : progress > 1 ? "Resume" : "Play")
   const detailsTo = freshEpisode && item.SeriesId ? `/item/${item.SeriesId}` : `/item/${item.Id}`
   const episodeLine = [episodeCode(item), item.Name].filter(Boolean).join(" · ")
+  // What the three lines under the title say. Each is always drawn, even when the server sent
+  // nothing for it: Home's hero reserves their height, so the copy cannot change size between one
+  // featured title and the next. See `.home .hero` in the stylesheet.
+  const eyebrow = episode
+    ? freshEpisode
+      ? ""
+      : [item.SeriesName, episodeCode(item)].filter(Boolean).join(" · ")
+    : item.Type && item.Type !== "Movie"
+      ? labelFor(item.Type)
+      : ""
+  const under = detail || (episode ? (freshEpisode ? episodeLine : item.Name) : "")
+  const kicker = [metaLine(item, prefs.ratings), item.Genres?.slice(0, 3).join(", ")].filter(Boolean).join("   ·   ")
 
   async function toggleFavorite() {
     if (saving.current) return
@@ -95,17 +107,16 @@ function HeroCopy({ face, onTrailer }: { face: HeroFace; onTrailer: (open: boole
 
   return (
     <div className="hero-copy">
-      {episode && !freshEpisode && (
-        <p className="eyebrow">
-          {item.SeriesName} {episodeCode(item) ? `· ${episodeCode(item)}` : ""}
-        </p>
-      )}
-      {!episode && item.Type && item.Type !== "Movie" && <p className="eyebrow">{labelFor(item.Type)}</p>}
-      <TitleLogo item={item} />
-      {detail && <p className="hero-episode">{detail}</p>}
-      {!detail && episode && <p className="hero-episode">{freshEpisode ? episodeLine : item.Name}</p>}
-      <p className="kicker">{[metaLine(item, prefs.ratings), item.Genres?.slice(0, 3).join(", ")].filter(Boolean).join("   ·   ")}</p>
-      {item.Overview && <p className="overview clamp">{item.Overview}</p>}
+      <p className="eyebrow">{eyebrow}</p>
+      {/* One box for the title, of one height: a logo, a name in type and the name of an
+          episode all sit in the same space, so nothing under them moves when the hero turns
+          to a title the server describes at a different length. */}
+      <div className="hero-title">
+        <TitleLogo item={item} />
+      </div>
+      <p className="hero-episode">{under}</p>
+      <p className="kicker">{kicker}</p>
+      <p className="overview clamp">{item.Overview || ""}</p>
       <div className="actions">
         <Link className="btn btn-primary" to={href}>
           <PlayIcon />

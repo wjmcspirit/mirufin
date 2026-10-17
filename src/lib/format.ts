@@ -290,14 +290,22 @@ export function resumeCardDetail(item: Item, ratings: RatingsDisplay = "both") {
   return [year, criticLabel(item, false, ratings), left].filter(Boolean).join("  ·  ")
 }
 
-/** One Next Up episode per series, in the order Jellyfin returned them. */
-export function comingUpEpisodes(nextUp: Item[], watching: Item[]) {
+/**
+ * One Next Up episode per series, in the order Jellyfin returned them.
+ *
+ * What separates this row from Next up is what it leaves out: an episode already in progress is
+ * in Continue watching, and an episode the Next up row is offering is not offered again here, so
+ * the same episode cannot appear in two rows of the same screen. What is left is the next episode
+ * of the series the viewer is not already part-way through.
+ */
+export function comingUpEpisodes(nextUp: Item[], watching: Item[], following: Item[] = []) {
   const watchingIds = new Set(watching.map((item) => item.Id))
+  const listed = new Set(following.map((item) => item.Id))
   const seen = new Set<string>()
   const list: Item[] = []
   for (const item of nextUp) {
     if ((item.Type && item.Type !== "Episode") || !item.SeriesId) continue
-    if (item.UserData?.Played || isInProgress(item) || watchingIds.has(item.Id)) continue
+    if (item.UserData?.Played || isInProgress(item) || watchingIds.has(item.Id) || listed.has(item.Id)) continue
     if (seen.has(item.SeriesId)) continue
     seen.add(item.SeriesId)
     list.push(item)

@@ -881,11 +881,76 @@ html:not(.remote) .nav:hover .nav-label {
    take a little over half the window, which is what puts the first row of posters - heading,
    artwork and caption - on screen beneath it without a scroll. The height is taken from
    `--app-height` (the shell's scaled height; see index.html) so a 4K panel draws the same
-   picture, and a browser falls back to its own viewport. */
+   picture, and a browser falls back to its own viewport.
+
+   It is a height, not a minimum: the featured title changing can no longer move the rows
+   below it. Every line the copy draws is held to a fixed size instead - the title to one box,
+   the eyebrow, the episode's name, the facts and the synopsis to one or two lines, the actions
+   to one row - so the composition is the same for a film with a logo, a series named in type
+   and an episode whose name is a paragraph long. */
 .home .hero.stage-copy {
-  min-height: calc(var(--app-height, 100dvh) * 0.45);
+  height: calc(var(--app-height, 100dvh) * 0.44);
   margin-bottom: 12px;
 }
+/* The copy fills the hero and stacks up from its bottom edge, so what a title does not use is
+   empty artwork above it rather than a shorter hero. */
+.home .hero .hero-copy {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 20px 36px;
+  gap: 8px;
+  max-width: 720px;
+}
+/* The title's own box: one height for a logo, a name in type and an episode's name alike. */
+.home .hero .hero-title {
+  height: 92px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 0;
+}
+.home .hero .hero-title h1 {
+  font-size: clamp(26px, 3.2vw, 44px);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 0;
+}
+.home .hero .hero-title .logo-title { max-height: 92px; }
+.home .hero .eyebrow {
+  margin: 0;
+  font-size: 13px;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.home .hero .hero-episode {
+  font-size: 20px;
+  min-height: 1.45em;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.home .hero .kicker {
+  font-size: 17px;
+  min-height: 2.9em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.home .hero .overview {
+  font-size: 17px;
+  -webkit-line-clamp: 2;
+  min-height: 2.9em;
+}
+/* One row of actions, whatever the labels are: a second row would be a taller copy. */
+.home .hero .actions { flex-wrap: nowrap; }
 .hero-copy, .detail-copy { position: relative; z-index: 1; }
 /* One copy at a time: the incoming title block fades in only after the outgoing
    one has left the tree, so no second set of text or buttons is ever painted. */
@@ -992,22 +1057,8 @@ html:not(.remote) .nav:hover .nav-label {
    artwork rather than as text and buttons floating on top of a picture. The synopsis is
    held to two lines here - the whole of it is on the title's own page, one press away -
    and both it and the facts are set a step larger than the page's body copy, because this
-   is the text that is read from across the room. */
-.home .hero .hero-copy {
-  padding: 28px 36px;
-  gap: 10px;
-  max-width: 720px;
-}
-.home .hero .eyebrow { font-size: 13px; }
-.home .hero .kicker { font-size: 17px; }
-.home .hero .overview {
-  font-size: 17px;
-  -webkit-line-clamp: 2;
-}
-/* The title is a logo when the server has one and the name in type when it does not, and it
-   is capped so the block above the actions is the same height whatever the artwork's own
-   proportions are: that is what keeps the hero inside its share of the screen. */
-.home .hero .logo-title { max-height: 96px; }
+   is the text that is read from across the room. Their sizes, and the sizes of the lines
+   above them, are set with the hero's fixed height at the top of this file. */
 /* On the detail page the episode name is the title of the page, so it reads
    larger than the same line inside Home's hero. */
 .detail-copy .hero-episode { font-size: 24px; font-weight: 500; line-height: 1.25; }

@@ -9,7 +9,7 @@ import * as api from "../lib/api"
 import { comingUpEpisodes, continueWatching, resumeCardDetail, resumeCardTitle, upNextCardDetail, upNextCardTitle } from "../lib/format"
 import { followingEpisodes } from "../lib/watch"
 import { remoteKey } from "../lib/remote"
-import { isShowLibrary, latestTitle, libraryRowId, mergeHomeRows } from "../lib/homeLayout"
+import { heroDeck, isShowLibrary, latestTitle, libraryRowId, mergeHomeRows } from "../lib/homeLayout"
 import { backdropSrc, loadImage, logoSrc, warmImage } from "../lib/images"
 import type { Item } from "../lib/types"
 import { usePrefs, useSession } from "../session"
@@ -17,28 +17,6 @@ import { usePrefs, useSession } from "../session"
 interface LatestRow {
   view: Item
   items: Item[]
-}
-
-function addedStamp(item: Item) {
-  const created = Date.parse(item.DateCreated || "")
-  const media = Date.parse(item.DateLastMediaAdded || "")
-  return Math.max(Number.isFinite(created) ? created : 0, Number.isFinite(media) ? media : 0)
-}
-
-function recentHeroItems(rows: LatestRow[]) {
-  const ranked = rows
-    .flatMap((row) => row.items)
-    .filter((item) => item.Id && backdropSrc(item))
-    .sort((a, b) => addedStamp(b) - addedStamp(a))
-  const seen = new Set<string>()
-  const list: Item[] = []
-  for (const item of ranked) {
-    if (seen.has(item.Id)) continue
-    seen.add(item.Id)
-    list.push(item)
-    if (list.length >= 10) break
-  }
-  return list
 }
 
 async function settle<T>(work: Promise<T>, fallback: T) {
@@ -136,12 +114,14 @@ export function HomePage() {
   }, [userId])
 
   const inProgress = useMemo(() => continueWatching(resumeItems), [resumeItems])
-  const comingUp = useMemo(() => comingUpEpisodes(nextItems, inProgress), [nextItems, inProgress])
+  // What is left for Coming up once Next up has taken what it is offering: the same episode is
+  // never drawn in two rows of this screen.
+  const comingUp = useMemo(() => comingUpEpisodes(nextItems, inProgress, upcomingItems), [nextItems, inProgress, upcomingItems])
   const views = rows.map((row) => row.view)
   const libraryKey = views.map((view) => view.Id).join("\n")
   const sections = useMemo(() => mergeHomeRows(prefs.homeRows, libraryKey ? libraryKey.split("\n") : []), [libraryKey, prefs.homeRows])
   const pool = status === "ready" ? [...resumeItems, ...nextItems, ...rows.flatMap((row) => row.items)] : []
-  const featured = useMemo(() => recentHeroItems(rows), [rows])
+  const featured = useMemo(() => heroDeck(rows), [rows])
   const featuredKey = featured.map((item) => item.Id).join("\n")
   const [index, setIndex] = useState(0)
   const [hold, setHold] = useState(false)

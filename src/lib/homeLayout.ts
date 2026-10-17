@@ -1,4 +1,40 @@
 import type { HomeCardSize, HomeCardStyle, HomeRowSetting, Item, NavItemSetting } from "./types"
+import { backdropSrc } from "./images"
+
+/** How many titles Home's hero rotates through. */
+const HERO_DECK = 10
+
+/** When a title joined the library, by the newest of the dates the server gave for it. */
+function addedStamp(item: Item) {
+  const created = Date.parse(item.DateCreated || "")
+  const media = Date.parse(item.DateLastMediaAdded || "")
+  return Math.max(Number.isFinite(created) ? created : 0, Number.isFinite(media) ? media : 0)
+}
+
+/**
+ * The titles Home's hero rotates through.
+ *
+ * The newest of what was just added, and only titles the server gave a wide backdrop: the hero
+ * paints that artwork full-bleed behind the copy, so a title without one would be copy floating
+ * on a gradient. Identity is the id the server gave, so the same title reported by two libraries
+ * is one slide, and the deck is capped so a library that adds a hundred things at once still
+ * rotates through a familiar handful.
+ */
+export function heroDeck(rows: { items: Item[] }[], limit = HERO_DECK): Item[] {
+  const ranked = rows
+    .flatMap((row) => row.items)
+    .filter((item) => item.Id && backdropSrc(item))
+    .sort((a, b) => addedStamp(b) - addedStamp(a))
+  const seen = new Set<string>()
+  const list: Item[] = []
+  for (const item of ranked) {
+    if (seen.has(item.Id)) continue
+    seen.add(item.Id)
+    list.push(item)
+    if (list.length >= limit) break
+  }
+  return list
+}
 
 export function libraryRowId(viewId: string) {
   return `lib:${viewId}`

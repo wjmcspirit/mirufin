@@ -1,0 +1,203 @@
+/**
+ * A focused check of Home: which titles its hero turns through, what its rows are made of, and
+ * what the stylesheet promises about the hero's size.
+ *
+ * The first two are pure decisions and run against the real modules. The last is different in
+ * kind, and says so: it reads `src/styles.css` and asserts the *declarations* that keep the
+ * featured title from moving the rows below it. It cannot measure a rendered layout - that needs
+ * a browser on a television - so it guards the shape of the rule rather than its result, and
+ * fails if the fixed height or the line clamps are ever quietly removed.
+ *
+ * Run it with `npm run homecheck`. Like the other harnesses here it is a check rather than a
+ * suite: delete it when the project grows a real test runner.
+ */
+import { readFileSync } from "node:fs"
+import { comingUpEpisodes, continueWatching } from "../src/lib/format"
+import { heroDeck, mergeHomeRows, sectionTitle } from "../src/lib/homeLayout"
+import type { Item } from "../src/lib/types"
+
+let failures = 0
+
+function check(name: string, ok: boolean, detail = "") {
+  if (ok) {
+    console.log(`ok   ${name}`)
+    return
+  }
+  failures += 1
+  console.log(`FAIL ${name}${detail ? ` - ${detail}` : ""}`)
+}
+
+function same(name: string, actual: unknown, expected: unknown) {
+  const got = JSON.stringify(actual)
+  const wanted = JSON.stringify(expected)
+  check(name, got === wanted, `got ${got}, wanted ${wanted}`)
+}
+
+const MINUTE = 600_000_000
+
+function title(id: string, name: string, patch: Partial<Item> = {}): Item {
+  return { Id: id, Name: name, Type: "Movie", ...patch }
+}
+
+function episode(id: string, seriesId: string, index: number, patch: Partial<Item> = {}): Item {
+  return {
+    Id: id,
+    Name: `Episode ${index}`,
+    Type: "Episode",
+    SeriesId: seriesId,
+    ParentIndexNumber: 1,
+    IndexNumber: index,
+    RunTimeTicks: 45 * MINUTE,
+    ...patch,
+  }
+}
+
+/** A title with wide artwork, which is what the hero paints behind its copy. */
+function framed(id: string, name: string, added: string, patch: Partial<Item> = {}): Item {
+  return title(id, name, { BackdropImageTags: [`tag-${id}`], DateLastMediaAdded: added, ...patch })
+}
+
+/**
+ * The hero's deck asks the artwork layer whether a title has a wide image, and that layer builds
+ * a URL from the saved server and sign-in. Node has neither, so both are stood up here.
+ */
+function installStore() {
+  const store = new Map<string, string>([
+    ["mirufin.server", "http://server"],
+    ["mirufin.token", "token"],
+  ])
+  ;(globalThis as unknown as { localStorage: Storage }).localStorage = {
+    get length() {
+      return store.size
+    },
+    clear: () => store.clear(),
+    getItem: (key: string) => (store.has(key) ? store.get(key) ?? null : null),
+    key: (index: number) => [...store.keys()][index] ?? null,
+    removeItem: (key: string) => void store.delete(key),
+    setItem: (key: string, value: string) => void store.set(key, String(value)),
+  }
+  ;(globalThis as unknown as { location: { port: string } }).location = { port: "" }
+}
+
+installStore()
+
+// --------------------------------------------------------------------------- the hero's deck
+
+const deck = heroDeck([
+  { items: [framed("a", "Older", "2026-01-01T00:00:00Z"), framed("b", "Newest", "2026-03-01T00:00:00Z")] },
+  { items: [framed("c", "Middle", "2026-02-01T00:00:00Z"), framed("b", "Newest", "2026-03-01T00:00:00Z")] },
+])
+
+same("the hero turns through the newest of what was added", deck.map((item) => item.Id), ["b", "c", "a"])
+same("a title two libraries both report is one slide", deck.length, 3)
+same("a title with no wide artwork is not featured", heroDeck([{ items: [title("x", "No art")] }]), [])
+same("and a title with no id is not featured either", heroDeck([{ items: [title("", "No id", { BackdropImageTags: ["t"] })] }]), [])
+same("a Home with nothing new features nothing", heroDeck([]), [])
+same("a Home with empty rows features nothing", heroDeck([{ items: [] }, { items: [] }]), [])
+
+const many = heroDeck([{ items: Array.from({ length: 40 }, (_, index) => framed(`m${index}`, `Film ${index}`, "2026-01-01T00:00:00Z")) }])
+same("the deck is capped, so a big import still turns through a familiar handful", many.length, 10)
+
+const createdOnly = heroDeck([{ items: [title("d", "Dated", { ImageTags: { Primary: "p" }, BackdropImageTags: ["t"], DateCreated: "2026-05-01T00:00:00Z" })] }])
+same("a title the server dated only by when it was created is still ranked", createdOnly.map((item) => item.Id), ["d"])
+
+const undated = heroDeck([{ items: [framed("e", "Undated", ""), framed("f", "Dated", "2020-01-01T00:00:00Z")] }])
+same("a title with no date at all sorts behind one that has a date", undated.map((item) => item.Id), ["f", "e"])
+
+// --------------------------------------------------------------------------- what is worth resuming
+
+const inProgress = episode("e2", "s1", 2, { UserData: { PlaybackPositionTicks: 10 * MINUTE } })
+same("Continue watching keeps what can be resumed", continueWatching([inProgress]).map((item) => item.Id), ["e2"])
+same("and drops what has been finished", continueWatching([episode("e1", "s1", 1, { UserData: { Played: true, PlaybackPositionTicks: 45 * MINUTE } })]), [])
+same("and drops what was never started", continueWatching([episode("e3", "s1", 3)]), [])
+same(
+  "and drops what is all but over",
+  continueWatching([episode("e4", "s1", 4, { UserData: { PlaybackPositionTicks: 45 * MINUTE - 5_000_000 } })]),
+  [],
+)
+same("a series is not something to resume", continueWatching([title("s1", "A Show", { Type: "Series", RunTimeTicks: 45 * MINUTE, UserData: { PlaybackPositionTicks: 10 * MINUTE } })]), [])
+
+// --------------------------------------------------------------------------- what is coming up
+
+const watching = episode("n1", "series-a", 2, { UserData: { PlaybackPositionTicks: 10 * MINUTE } })
+const nextUp = [
+  episode("n1", "series-a", 2),
+  episode("n2", "series-b", 1),
+  episode("n3", "series-c", 1),
+  episode("n4", "series-d", 1),
+  episode("n5", "series-e", 1),
+  episode("n6", "series-b", 2),
+]
+
+same(
+  "Coming up offers one episode per series, in the server's order",
+  comingUpEpisodes(nextUp, []).map((item) => item.Id),
+  ["n1", "n2", "n3", "n4", "n5"],
+)
+same(
+  "an episode the Next up row is already offering is not offered twice",
+  comingUpEpisodes(nextUp, [], [episode("n1", "series-a", 2), episode("n3", "series-c", 1)]).map((item) => item.Id),
+  ["n2", "n4", "n5"],
+)
+same(
+  "an episode the viewer is part-way through is Continue watching's, not Coming up's",
+  comingUpEpisodes(nextUp, [watching]).map((item) => item.Id),
+  ["n2", "n3", "n4", "n5"],
+)
+same(
+  "and an episode the viewer has finished is not coming up",
+  comingUpEpisodes([episode("n7", "series-f", 1, { UserData: { Played: true } })], []),
+  [],
+)
+same("nothing to come up to is nothing", comingUpEpisodes([], []), [])
+same("a series with no id is not a series to come up in", comingUpEpisodes([episode("n8", "", 1)], []), [])
+same("and something that is not an episode is not coming up", comingUpEpisodes([title("m1", "A Film")], []), [])
+
+// --------------------------------------------------------------------------- what the rows remember
+
+const libraries = [{ Id: "l1", Name: "Movies" }, { Id: "l2", Name: "TV Shows" }]
+const saved = [
+  { id: "lib:l2", visible: true, style: "poster" as const, size: "large" as const },
+  { id: "continue", visible: false, style: "landscape" as const, size: "medium" as const },
+]
+const merged = mergeHomeRows(saved, ["l1", "l2"])
+
+same("an arranged row keeps its place", merged[0].id, "lib:l2")
+same("and its shape and size", [merged[0].style, merged[0].size], ["poster", "large"])
+same("a row the viewer turned off stays off", merged.find((row) => row.id === "continue")?.visible, false)
+same("a library the server no longer reports is dropped", merged.some((row) => row.id === "lib:l3"), false)
+same("a library that has just appeared is added, visible", merged.find((row) => row.id === "lib:l1")?.visible, true)
+same(
+  "Coming up sits with the other built-in rows, right after Next up",
+  merged.findIndex((row) => row.id === "soon") - merged.findIndex((row) => row.id === "next"),
+  1,
+)
+same("the built-in rows are named for what they hold", ["continue", "next", "soon"].map((id) => sectionTitle(id, libraries)), ["Continue watching", "Next up", "Coming up"])
+same("and a library row is named for the library", sectionTitle("lib:l1", libraries), "Recently Added Movies")
+
+// --------------------------------------------------------------------------- what the stylesheet promises
+
+const css = readFileSync("src/styles.css", "utf8")
+
+/** One rule's declarations, as they are written. */
+function rule(selector: string) {
+  const start = css.indexOf(`\n${selector} {`)
+  if (start < 0) return ""
+  return css.slice(start, css.indexOf("}", start))
+}
+
+const hero = rule(".home .hero.stage-copy")
+check("Home's hero declares a height, not a minimum, so the rows below it cannot move", hero.includes("height: calc(var(--app-height"), hero.trim())
+check("and that height is a share of the television's own, so 4K draws the same picture", hero.includes("* 0.44"), hero.trim())
+check("the copy stacks up from the hero's bottom edge", rule(".home .hero .hero-copy").includes("justify-content: flex-end"))
+check("the title sits in one box of one height, whatever it holds", rule(".home .hero .hero-title").includes("height: 92px"))
+check("a name in type is held to two lines in it", rule(".home .hero .hero-title h1").includes("-webkit-line-clamp: 2"))
+check("a logo is capped to the same box", rule(".home .hero .hero-title .logo-title").includes("max-height: 92px"))
+check("the eyebrow is held to one line", rule(".home .hero .eyebrow").includes("-webkit-line-clamp: 1"))
+check("the episode's own name keeps its place", rule(".home .hero .hero-episode").includes("min-height: 1.45em"))
+check("the facts keep theirs, over two lines at most", rule(".home .hero .kicker").includes("min-height: 2.9em"))
+check("and so does the synopsis", rule(".home .hero .overview").includes("min-height: 2.9em"))
+check("the actions stay on one row, whatever their labels are", rule(".home .hero .actions").includes("flex-wrap: nowrap"))
+
+console.log(failures === 0 ? "\nAll home checks passed." : `\n${failures} check(s) failed.`)
+if (failures > 0) throw new Error(`${failures} check(s) failed`)

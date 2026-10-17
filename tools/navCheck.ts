@@ -538,7 +538,30 @@ function seasonBlock(main: El) {
   return { section, scroller, cards, playSeason, favorite }
 }
 
-/** Home row -> title -> Back. */
+/**
+ * The hero and the first row: Down leaves the hero's own actions for the first card under it,
+ * and Up comes back to those actions rather than to the rail or to nothing.
+ */
+function testHeroAndFirstRow() {
+  clearSeats()
+  resetFocusState()
+  const { main } = shell()
+  const spot = hero(main, "/item/MOVIE")
+  const first = row(main, "Continue watching", ["/item/R1", "/item/R2", "/item/R3"])
+  noteRoute("/")
+
+  placeFocus(spot.details)
+  moveFocus("ArrowDown")
+  check("Down leaves the hero's actions for the first row", active === first.cards[0], label(active))
+
+  moveFocus("ArrowRight")
+  check("and the row walks sideways from there", active === first.cards[1], label(active))
+
+  moveFocus("ArrowUp")
+  check("Up comes back to the hero's actions", active === spot.details, label(active))
+}
+
+/** A Home row poster -> details -> Back, on the same poster. */
 function testHomeRow() {
   clearSeats()
   // The hero offers a link to the same title a row card does: the old memory took the first
@@ -1264,6 +1287,7 @@ function testStudioDiscovery() {
 installDom()
 trackSeats()
 testHomeRow()
+testHeroAndFirstRow()
 testActorCarousel()
 testLibraryGrid()
 testSearchResult()
