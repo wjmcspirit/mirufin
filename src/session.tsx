@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
 import { useNavigate } from "react-router-dom"
 import * as api from "./lib/api"
 import { loadLibraries } from "./lib/libraryLoad"
+import { restoreSession } from "./lib/sessionRestore"
 import { forgetSession, keepSession, savedSession } from "./lib/startup"
 import {
   clearAuth,
@@ -68,59 +69,77 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [prefs, setPrefsState] = useState<Preferences>(loadPrefs)
   const [restored, setRestored] = useState(false)
   const checking = useRef(false)
+  // Which lookup a shell answer belongs to. A viewer action takes a new generation, so nothing a
+  // lookup is still holding can land on the session afterwards.
+  const generation = useRef(0)
+  const mounted = useRef(true)
+  const stopRestore = useRef<(() => void) | null>(null)
+  const claimSession = () => {
+    generation.current += 1
+  }
+  useEffect(
+    () => () => {
+      mounted.current = false
+    },
+    [],
+  )
 
   // The saved server and sign-in live in the WebView's own store, and that store is not
   // permanent: Mirufin clears it to repair a launch that died before the app came up, and a
   // store damaged by an abrupt kill can stop keeping anything at all. The shell keeps a copy,
   // so a launch that starts without a session takes that one back instead of asking the
-  // viewer to sign in again.
+  // viewer to sign in again. See `lib/sessionRestore` for what a late answer may and may not do.
   useEffect(() => {
     if (restored) return
-    let cancelled = false
-    const finish = () => {
-      if (!cancelled) setRestored(true)
-    }
-    // A shell that never answers must not hold the launch: the splash would stay up.
-    const timer = window.setTimeout(finish, 1500)
-    void (async () => {
-      try {
+    const mine = (generation.current += 1)
+    stopRestore.current = restoreSession({
+      readStored: () => {
         const current = readSession()
-        if (!current.serverUrl || !current.accessToken) {
-          const kept = await savedSession()
-          if (cancelled) return
-          if (kept.server || kept.token) {
-            // Written back so the WebView's own store holds it again, but the session for this
-            // run is taken from the shell either way: a store that cannot be written to still
-            // leaves the viewer signed in.
-            try {
-              if (kept.server && !current.serverUrl) saveServer(kept.server)
-              if (kept.serverName || kept.serverVersion) saveServerMeta(kept.serverName, kept.serverVersion)
-              if (kept.device) saveDeviceId(kept.device)
-              if (kept.token) saveAuth(kept.token, kept.userId, kept.userName)
-            } catch {
-              // The shell's copy is still good for this run.
-            }
-            setSession({
-              serverUrl: kept.server || current.serverUrl,
-              serverName: kept.serverName || current.serverName,
-              serverVersion: kept.serverVersion || current.serverVersion,
-              accessToken: kept.token || current.accessToken,
-              userId: kept.userId || current.userId,
-              userName: kept.userName || current.userName,
-              libraries: [],
-            })
-          }
+        return { serverUrl: current.serverUrl, accessToken: current.accessToken }
+      },
+      readShell: savedSession,
+      // Written back so the WebView's own store holds it again, but the session for this run is
+      // taken from the shell either way: a store that cannot be written to still leaves the
+      // viewer signed in.
+      writeBack: (kept) => {
+        try {
+          const current = readSession()
+          if (kept.server && !current.serverUrl) saveServer(kept.server)
+          if (kept.serverName || kept.serverVersion) saveServerMeta(kept.serverName, kept.serverVersion)
+          if (kept.device) saveDeviceId(kept.device)
+          if (kept.token) saveAuth(kept.token, kept.userId, kept.userName)
+        } catch {
+          // The shell's copy is still good for this run.
         }
-      } finally {
-        window.clearTimeout(timer)
-        finish()
-      }
-    })()
-    return () => {
-      cancelled = true
-      window.clearTimeout(timer)
-    }
+      },
+      apply: (kept) =>
+        setSession((current) => ({
+          serverUrl: kept.server || current.serverUrl,
+          serverName: kept.serverName || current.serverName,
+          serverVersion: kept.serverVersion || current.serverVersion,
+          accessToken: kept.token || current.accessToken,
+          userId: kept.userId || current.userId,
+          userName: kept.userName || current.userName,
+          libraries: [],
+        })),
+      proceed: () => setRestored(true),
+      after: (ms, fn) => {
+        const timer = window.setTimeout(fn, ms)
+        return () => window.clearTimeout(timer)
+      },
+      stillWanted: () => mounted.current && generation.current === mine,
+    })
+    // No cleanup here on purpose. This effect re-runs the moment `restored` flips, which is the
+    // timer firing - and stopping the lookup then is exactly what used to throw away a shell
+    // that answered a moment too late. A real unmount stops it, below.
   }, [restored])
+
+  useEffect(
+    () => () => {
+      stopRestore.current?.()
+    },
+    [],
+  )
 
   // The shell's copy follows the session, so a later launch can take it back. Only the fields
   // that make up the session are watched: the library list changes on every refresh and is not
@@ -187,6 +206,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return {
       ...session,
       async connect(url: string) {
+        claimSession()
         const normalized = normalizeServer(url)
         const previous = getServer()
         saveServer(normalized)
@@ -212,6 +232,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
       },
       async login(username: string, password: string) {
+        claimSession()
         const result = await api.authenticate(username, password)
         saveAuth(result.AccessToken, result.User.Id, result.User.Name)
         api.invalidateReads()
@@ -223,6 +244,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }))
       },
       accept(result: AuthResult) {
+        claimSession()
         saveAuth(result.AccessToken, result.User.Id, result.User.Name)
         api.invalidateReads()
         setSession((current) => ({
@@ -233,12 +255,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }))
       },
       logout() {
+        claimSession()
         clearAuth()
         api.invalidateReads()
         setSession((current) => ({ ...current, accessToken: "", userId: "", userName: "", libraries: [] }))
         navigate("/login")
       },
       disconnect() {
+        claimSession()
         clearAuth()
         clearServer()
         api.invalidateReads()
