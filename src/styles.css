@@ -725,6 +725,69 @@ h1, h2, h3 {
   gap: 14px;
   margin-left: auto;
 }
+/* The rail's menu: one wide glass pill, drawn over the app's cinematic artwork. The stage
+   (`.stage`) is a fixed, full-screen layer behind everything, so there is real art under the
+   pill for the surface to let through rather than a flat colour.
+
+   The pill is the height the rail has always been, so the row it lives in does not change and
+   the fold the harness measures at 1080p, 1440p and 4K is the fold it measured before. The
+   material is stated here, once, and the fallback for a WebView with no `backdrop-filter` is
+   stated with it rather than left to chance. */
+.glass-menu {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
+  height: 46px;
+  padding: 0 6px;
+  border: 1px solid rgba(244, 247, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(13, 14, 18, 0.44);
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(22px) saturate(1.35);
+  -webkit-backdrop-filter: blur(22px) saturate(1.35);
+}
+/* Without the blur a 44% tint is not enough to read over artwork, so the surface darkens until
+   the labels are legible on their own. */
+@supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+  .glass-menu { background: rgba(11, 12, 16, 0.82); }
+}
+/* A third of the pill each, so the three stops are evenly spaced at every width and every one
+   of them is a target a remote can land on from across a room. */
+.glass-item {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 0 18px;
+  border-radius: 999px;
+  color: #f4f7ff;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+html:not(.remote) .glass-item:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+}
+.glass-item.active { color: #fff; }
+/* Focus is a ring and a tint, never a size: the pill keeps its height, the labels keep their
+   place, and nothing under the rail moves when the viewer walks the menu. 3px of cyan on an
+   844-unit canvas is legible from the sofa, which is where this has to work. */
+.glass-item:focus,
+.glass-item:focus-visible,
+.glass-item.dpad-focus {
+  outline: 3px solid #8ee6ff;
+  outline-offset: 2px;
+  background: rgba(62, 200, 255, 0.18);
+  color: #fff;
+}
 .nav {
   position: relative;
   display: grid;
@@ -774,39 +837,6 @@ html:not(.remote) .nav:hover {
 .nav.dpad-focus svg {
   transform: scale(1.16);
   filter: drop-shadow(0 0 6px rgba(62, 200, 255, 0.95)) drop-shadow(0 0 14px rgba(62, 200, 255, 0.55));
-}
-.nav-label {
-  position: absolute;
-  top: calc(100% + 2px);
-  left: 50%;
-  z-index: 6;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: none;
-  box-shadow: none;
-  color: #fff;
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  line-height: 1;
-  white-space: nowrap;
-  pointer-events: none;
-  opacity: 0;
-  visibility: hidden;
-  transform: translateX(-50%);
-  text-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.95),
-    0 0 14px rgba(0, 0, 0, 0.85);
-  transition: opacity 0.12s ease, visibility 0s linear 0.12s;
-}
-.nav:focus .nav-label,
-.nav:focus-visible .nav-label,
-.nav.dpad-focus .nav-label,
-html:not(.remote) .nav:hover .nav-label {
-  opacity: 1;
-  visibility: visible;
-  transition: opacity 0.12s ease;
 }
 .account {
   display: flex;
@@ -2851,6 +2881,10 @@ input[type="range"]::-webkit-slider-thumb {
   .shell { height: auto; max-height: none; min-height: 100vh; overflow: visible; }
   .side { position: sticky; top: 0; padding: 10px 14px; }
   .side-nav { overflow-x: auto; scrollbar-width: none; }
+  /* A phone cannot give each of the three labels a third of the pill, so on a narrow screen
+     they take the width they need and the pill scrolls rather than clipping or wrapping them. */
+  .glass-menu { overflow-x: auto; scrollbar-width: none; }
+  .glass-item { flex: 0 0 auto; padding: 0 14px; }
   .account-name { display: none; }
   .main { height: auto; overflow: visible; padding: 20px 20px 48px; }
   .scroller { padding: 24px 28px 36px; scroll-padding-inline: 28px; }

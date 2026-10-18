@@ -182,7 +182,7 @@ function focusNode(node: HTMLElement) {
   rememberSeat(node)
   node.focus({ preventScroll: true })
   if (node.closest(".side")) {
-    const rail = node.closest(".side-nav")
+    const rail = node.closest(".glass-menu, .side-nav")
     if (rail instanceof HTMLElement) scrollInside(rail, node)
     return
   }
@@ -970,7 +970,18 @@ export function resetFocusState() {
   returnMain = null
 }
 
+/**
+ * A control the rail draws. The rail is one glass pill (`.glass-item`); `.nav` is what the
+ * measurement harnesses and the mock screens still draw the rail with.
+ */
+function railTab(node: HTMLElement) {
+  return node.classList.contains("glass-item") || node.classList.contains("nav")
+}
+
 function focusMenu(from: HTMLElement, side: HTMLElement[]) {
-  const tab = (alive(returnSide) ? returnSide : null) || side.find((item) => item.classList.contains("nav") && item.classList.contains("active")) || side.find((item) => item.classList.contains("nav"))
+  const tab =
+    (alive(returnSide) ? returnSide : null) ||
+    side.find((item) => railTab(item) && item.classList.contains("active")) ||
+    side.find(railTab)
   if (tab) cross(from, tab)
 }

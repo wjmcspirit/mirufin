@@ -17,10 +17,11 @@
  * a real test runner.
  */
 import { DEFAULT_LIBRARY_VIEW, EPISODE_SORT, librarySorts, normalizeLibraryViews, savedLibraryView } from "../src/lib/libraryView"
+import { menuDestinations } from "../src/lib/homeLayout"
 import { loadPrefs, savePrefs } from "../src/lib/storage"
 import { libraryToolNeighbor, libraryTools } from "../src/lib/toolMenu"
 import { moveFocus, ownArrows } from "../src/lib/remote"
-import type { LibraryView, Preferences } from "../src/lib/types"
+import type { Item, LibraryView, Preferences } from "../src/lib/types"
 
 const PREFS_KEY = "mirufin.prefs"
 
@@ -215,10 +216,63 @@ function checkMenuOwnsTheSidewaysPress() {
   same("a closed menu is offered nothing", asked, ["ArrowLeft"])
 }
 
+/**
+ * The rail's menu. The rail is one glass pill of the three library kinds Mirufin names itself,
+ * and this is the decision behind it: which stops are drawn, in what order, and where each one
+ * goes. How the pill is drawn - the `NavLink`s and the focus ring - is React and the stylesheet;
+ * what can be settled without a DOM is settled here.
+ */
+function checkRailMenu() {
+  const view = (Id: string, Name: string, CollectionType: string): Item => ({ Id, Name, CollectionType })
+  const shows = view("shows-1", "TV Shows", "tvshows")
+  const movies = view("movies-1", "Movies", "movies")
+  const collections = view("collections-1", "Collections", "boxsets")
+  const music = view("music-1", "Music", "music")
+
+  const menu = menuDestinations([movies, shows, collections, music])
+  same(
+    "the rail offers TV Shows, then Movies, then Collections",
+    menu.map((stop) => stop.label),
+    ["TV Shows", "Movies", "Collections"],
+  )
+  same(
+    "and every stop is the app's own library route for that library",
+    menu.map((stop) => stop.to),
+    ["/library/shows-1", "/library/movies-1", "/library/collections-1"],
+  )
+  same(
+    "the order is Mirufin's, not the order the server happened to report",
+    menuDestinations([collections, music, shows, movies]).map((stop) => stop.label),
+    ["TV Shows", "Movies", "Collections"],
+  )
+  same(
+    "a server whose show library is named rather than typed is still read as the shows",
+    menuDestinations([view("s", "Shows", ""), movies]).map((stop) => stop.label),
+    ["TV Shows", "Movies"],
+  )
+  same(
+    "a kind the server does not have is left out rather than drawn as a dead stop",
+    menuDestinations([movies]).map((stop) => stop.label),
+    ["Movies"],
+  )
+  same(
+    "a library with no id has no route, so it is left out too",
+    menuDestinations([view("", "Movies", "movies")]).map((stop) => stop.label),
+    [],
+  )
+  same(
+    "and a library the server reports twice is one stop",
+    menuDestinations([movies, view("movies-1", "Movies", "movies")]).map((stop) => stop.label),
+    ["Movies"],
+  )
+  same("a server with nothing to browse offers no stops at all", menuDestinations([]), [])
+}
+
 installStore()
 checkToolbarWalk()
 checkPersistence()
 checkOpeningView()
 checkMenuOwnsTheSidewaysPress()
+checkRailMenu()
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`)
 if (failures > 0) throw new Error(`${failures} check(s) failed`)

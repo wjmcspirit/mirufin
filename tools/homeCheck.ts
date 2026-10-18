@@ -243,5 +243,71 @@ check("the facts keep theirs, over two lines at most", rule(".home .hero .kicker
 check("and so does the synopsis", rule(".home .hero .overview").includes("min-height: 2.9em"))
 check("the actions stay on one row, whatever their labels are", rule(".home .hero .actions").includes("flex-wrap: nowrap"))
 
+/* The rail's menu. This reads the stylesheet for the same reason the hero's rules above are
+   read: the glass has to keep the four things the design rests on - a surface the artwork shows
+   through, a blur with a stated fallback, a pill that keeps the rail's height, and a focus
+   treatment that is drawn rather than sized - and none of it can be measured without a
+   television. The stops themselves are checked in `tools/check.ts`. */
+const pill = rule(".glass-menu")
+check("the rail's menu is a fully rounded pill", pill.includes("border-radius: 999px"), pill.trim())
+check(
+  "with a translucent surface, so the artwork behind it shows through",
+  /background:\s*rgba\([^)]*,\s*0\.\d+\)/.test(pill),
+  pill.trim(),
+)
+check("and a blur over that artwork", pill.includes("backdrop-filter: blur("), pill.trim())
+check(
+  "and a stated fallback for a WebView that cannot blur, rather than a tint too thin to read",
+  css.includes("@supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px)))"),
+  "the @supports block beside .glass-menu",
+)
+check("a thin, low-opacity light border around the perimeter", /border:\s*1px solid rgba\(244, 247, 255, 0\.\d+\)/.test(pill), pill.trim())
+check("and a soft shadow to lift it off the artwork", pill.includes("box-shadow:"), pill.trim())
+/* The rail's height is what the fold at 1080p, 1440p and 4K was measured against: the pill is
+   the 46px the rail's controls have always been, inside the same 10px of padding. */
+check("the pill is the height the rail's controls have always been", pill.includes("height: 46px"), pill.trim())
+check("and the rail's own padding around it is unchanged", rule(".side").includes("padding: 10px 28px"), rule(".side").trim())
+
+const stop = rule(".glass-item")
+check("each stop takes an even share of the pill, so three of them are evenly spaced", stop.includes("flex: 1 1 0"), stop.trim())
+check("and its label never wraps", stop.includes("white-space: nowrap"), stop.trim())
+const focusRing = css.slice(css.indexOf(".glass-item:focus,"), css.indexOf("}", css.indexOf(".glass-item:focus,")))
+check("focus is drawn as a cyan ring", focusRing.includes("outline: 3px solid #8ee6ff"), focusRing.trim())
+check(
+  "and never as a size, so walking the menu moves nothing under it",
+  !/\bwidth:|\bheight:|\btransform:|\bfont-size:|\bpadding:/.test(focusRing),
+  focusRing.trim(),
+)
+/* Everything the menu's own rules say, from the pill to the stop that follows it. Nothing in
+   here may move on its own: the menu is still until the viewer presses something, and the only
+   transition allowed is the brief one a stop makes when focus arrives or leaves it. */
+const menuRules = css.slice(css.indexOf(".glass-menu"), css.indexOf("\n.nav {"))
+check(
+  "the menu never animates on its own",
+  !/\banimation:/.test(menuRules) && !/@keyframes/.test(menuRules),
+  "no animation or keyframes in the rail's menu rules",
+)
+check(
+  "and the only thing that moves is the stop the viewer is on, briefly",
+  /\.glass-item \{[\s\S]*?transition: color 0\.15s ease, background-color 0\.15s ease;/.test(menuRules),
+  menuRules.trim(),
+)
+
+/* The wiring, read the same way. Every check above would still pass if the shell stopped
+   drawing the menu at all, so the lines that join the pieces are asserted too: the rail has to
+   keep the element the remote walks as the rail, draw the glass menu, and take its stops from
+   the libraries the server reports, each one a real route the router can mark. */
+const shell = readFileSync("src/components/Shell.tsx", "utf8")
+check("the rail is still the element the remote walks as the rail", shell.includes('<header className="side">'), "Shell.tsx")
+check("and it draws the glass menu", shell.includes("<GlassMenu items={menu} />"), "Shell.tsx")
+check("whose stops come from the libraries the server reports", /menuDestinations\(libraries\)/.test(shell), "Shell.tsx")
+const menuSource = readFileSync("src/components/GlassMenu.tsx", "utf8")
+check("each stop is a real route, so a press goes where the destination says", menuSource.includes("<NavLink"), "GlassMenu.tsx")
+check(
+  "and the stop the viewer is on is marked, so the remote can land back on it",
+  menuSource.includes('"glass-item active"'),
+  "GlassMenu.tsx",
+)
+
 console.log(failures === 0 ? "\nAll home checks passed." : `\n${failures} check(s) failed.`)
 if (failures > 0) throw new Error(`${failures} check(s) failed`)
