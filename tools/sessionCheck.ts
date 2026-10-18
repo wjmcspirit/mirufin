@@ -14,7 +14,7 @@
  * grows a real test runner.
  */
 import { readFileSync } from "node:fs"
-import { LIBRARY_RETRY_MS, libraryRetryDelay, loadLibraries } from "../src/lib/libraryLoad"
+import { LIBRARY_RETRY_MS, librariesFor, libraryRetryDelay, loadLibraries } from "../src/lib/libraryLoad"
 import { RESTORE_MS, restoreSession, type KeptSession, type RestoreWorld } from "../src/lib/sessionRestore"
 import type { Item } from "../src/lib/types"
 
@@ -359,6 +359,49 @@ function testSessionUsesTheLoader() {
   )
 }
 
+/**
+ * The list a page hands over is taken for the sign-in it was loaded for, and only that one.
+ *
+ * The rail and Home ask the same question of the same server, and either can be the one that
+ * answers: without this hand-over a launch whose first request failed leaves the rail empty while
+ * Home - with its own request and its own Retry - comes back, and nothing the viewer can press
+ * puts the rail back.
+ */
+function testLibrariesFromAPage() {
+  const held = { userId: "user", libraries: [view("old")] }
+  same(
+    "a list loaded for the signed-in user is taken",
+    librariesFor("user", held, [view("movies"), view("shows")]).map((item) => item.Id),
+    ["movies", "shows"],
+  )
+  same(
+    "a list loaded for somebody who has since signed out is not",
+    librariesFor("user", { userId: "", libraries: held.libraries }, [view("movies")]).map((item) => item.Id),
+    ["old"],
+  )
+  same(
+    "and neither is one from a previous sign-in landing on a new one",
+    librariesFor("user", { userId: "other", libraries: held.libraries }, [view("movies")]).map((item) => item.Id),
+    ["old"],
+  )
+}
+
+/**
+ * The hand-over has to be wired up, and this is the check that fails on the code as it was: Home
+ * loaded the same list and told nobody, so the rail could not recover with it.
+ */
+function testHomeHandsOverTheList() {
+  const home = readFileSync("src/pages/Home.tsx", "utf8")
+  check("Home hands the list it loaded to the session", /refreshLibraries\(\s*library\.Items/.test(home), "Home.tsx")
+  const session = readFileSync("src/session.tsx", "utf8")
+  check("the session takes a list from a page", session.includes("librariesFor("), "session.tsx")
+  check(
+    "and guards it the same way the loader guards its own answer",
+    (session.match(/librariesFor\(/g) || []).length >= 2,
+    `${(session.match(/librariesFor\(/g) || []).length} guard(s)`,
+  )
+}
+
 /** The session is what a launch draws from, so it has to be the module that restores it. */
 function testSessionUsesTheRestore() {
   const session = readFileSync("src/session.tsx", "utf8")
@@ -381,6 +424,8 @@ await testAsksAgainUntilAnAnswerArrives()
 await testGivesUpEventually()
 await testStopping()
 testSessionUsesTheLoader()
+testLibrariesFromAPage()
+testHomeHandsOverTheList()
 testSessionUsesTheRestore()
 await testLateAnswerStillRestores()
 await testPromptAnswerProceedsAtOnce()

@@ -69,7 +69,7 @@ function useHeroQuiet(engaged: boolean) {
 }
 
 export function HomePage() {
-  const { userId, userName } = useSession()
+  const { userId, userName, refreshLibraries } = useSession()
   const { prefs } = usePrefs()
   const [resumeItems, setResumeItems] = useState<Item[]>([])
   const [nextItems, setNextItems] = useState<Item[]>([])
@@ -82,6 +82,11 @@ export function HomePage() {
     setStatus("loading")
     const run = async () => {
       const library = await api.views(userId)
+      // The rail draws its Movies, TV Shows and Collections from this same list, and it has its
+      // own request - one that is retried for a while and then gives up. Home's request has just
+      // succeeded, so the list is handed over rather than asked for a second time: the rail
+      // recovers with Home, including when the viewer presses Retry here.
+      void refreshLibraries(library.Items || [])
       const [resumeList, nextList, playedList, latestRows] = await Promise.all([
         settle(api.resume(userId), { Items: [] }),
         settle(api.nextUp(userId), { Items: [] }),

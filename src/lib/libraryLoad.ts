@@ -17,6 +17,22 @@ export function libraryRetryDelay(attempt: number) {
   return attempt >= 0 && attempt < LIBRARY_RETRY_MS.length ? LIBRARY_RETRY_MS[attempt] : null
 }
 
+/**
+ * The library list a session should hold after a page has loaded one of its own.
+ *
+ * Home and the rail ask the same question of the same server, and they can answer at different
+ * times: a launch whose first request failed - and whose retries then ran out - leaves the rail
+ * without Movies, TV Shows or Collections while Home, with its own request and its own Retry,
+ * comes back. So Home hands over the list it already has rather than the session asking a second
+ * time, and the two cannot disagree.
+ *
+ * It is taken only while it is still the same sign-in. A list that arrives after a sign-out, or
+ * after somebody else has signed in, belongs to nobody, and the session keeps what it holds.
+ */
+export function librariesFor(userId: string, session: { userId: string; libraries: Item[] }, items: Item[]) {
+  return session.userId === userId ? items : session.libraries
+}
+
 /** The four things the loader needs from the world, so that it can be checked without one. */
 export interface LibraryLoadWorld {
   /** Ask the server for the library list. Rejects when the server does not answer. */

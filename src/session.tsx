@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { useNavigate } from "react-router-dom"
 import * as api from "./lib/api"
-import { loadLibraries } from "./lib/libraryLoad"
+import { librariesFor, loadLibraries } from "./lib/libraryLoad"
 import { restoreSession } from "./lib/sessionRestore"
 import { forgetSession, keepSession, savedSession } from "./lib/startup"
 import {
@@ -40,7 +40,7 @@ interface SessionValue extends SessionState {
   accept: (result: AuthResult) => void
   logout: () => void
   disconnect: () => void
-  refreshLibraries: () => Promise<void>
+  refreshLibraries: (libraries?: Item[]) => Promise<void>
 }
 
 const SessionContext = createContext<SessionValue | null>(null)
@@ -277,10 +277,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         })
         navigate("/connect")
       },
-      async refreshLibraries() {
-        if (!getUserId()) return
-        const result = await api.views(getUserId())
-        setSession((current) => ({ ...current, libraries: result.Items || [] }))
+      async refreshLibraries(libraries?: Item[]) {
+        // A page that has just loaded this list hands it over rather than making the session ask
+        // for the same thing twice. Either way it is taken only while it is still the same
+        // sign-in, so a list that arrives after a sign-out cannot land on the next one.
+        if (libraries) {
+          setSession((current) => ({ ...current, libraries: librariesFor(current.userId, current, libraries) }))
+          return
+        }
+        const userId = getUserId()
+        if (!userId) return
+        const result = await api.views(userId)
+        setSession((current) => ({ ...current, libraries: librariesFor(userId, current, result.Items || []) }))
       },
     }
   }, [navigate, session])
