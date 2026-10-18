@@ -232,6 +232,12 @@ interface SeasonStrip {
   cardLeft: number
   cardRight: number
   cardInside: boolean
+  /** The still with the ring a focused card draws 3 units outside itself, inside the row. */
+  ringInside: boolean
+  /** Whether this still was outside the row before the press that reached it. */
+  needed: boolean
+  /** The still's own width, in the design units the row is drawn in. */
+  artWidth: number
 }
 
 interface SeasonReport {
@@ -239,6 +245,10 @@ interface SeasonReport {
   page: { left: number; right: number }
   atEnd: SeasonStrip
   atStart: SeasonStrip
+  /** Every press of the walk, right to the last episode and back to the first. */
+  right: SeasonStrip[]
+  left: SeasonStrip[]
+  railScrollLeft: number
   pageScrollLeft: number
   seasonStrip: { clientWidth: number; scrollWidth: number; scrollLeft: number; left: number; right: number; cardIndex: number; cardInside: boolean }
 }
@@ -382,13 +392,23 @@ const seasonProbe = pathToFileURL(resolve("tools/seasonProbe.html")).href
 console.log("\nThe season page's episode row, with the remote walking right along it\n")
 
 for (const { panel, report } of await measureSeason(browser, seasonProbe, PANELS)) {
+  const steps = [...report.right, ...report.left]
+  const movedRight = report.right.filter((step, index) => step.scrollLeft !== (index === 0 ? 0 : report.right[index - 1].scrollLeft)).length
+  const movedLeft = report.left.filter(
+    (step, index) => step.scrollLeft !== (index === 0 ? report.right[report.right.length - 1].scrollLeft : report.left[index - 1].scrollLeft),
+  ).length
+  const end = report.strip.scrollWidth - report.strip.clientWidth
   console.log(`${panel.name} - ${panel.width}x${panel.height}`)
   console.log(
     `     strip ${report.strip.clientWidth} wide, ${report.strip.scrollWidth} of cards\n` +
       `     at the end:  episode ${report.atEnd.index} at ${report.atEnd.cardLeft}..${report.atEnd.cardRight} ` +
       `inside ${report.strip.left}..${report.strip.right}, scrolled ${report.atEnd.scrollLeft}\n` +
       `     back at the start: episode ${report.atStart.index} at ${report.atStart.cardLeft}..${report.atStart.cardRight}, ` +
-      `scrolled ${report.atStart.scrollLeft}`,
+      `scrolled ${report.atStart.scrollLeft}\n` +
+      `     ${report.right.length} presses right and ${report.left.length} back: every still inside the row ` +
+      `${steps.filter((step) => step.cardInside).length}/${steps.length}, the ring inside ` +
+      `${steps.filter((step) => step.ringInside).length}/${steps.length}, the row moved on ${movedRight} presses ` +
+      `right and ${movedLeft} back, stills ${report.right[0]?.artWidth ?? 0} design units wide`,
   )
   check(
     `${panel.name}: the episode row is wider than the screen, so it has something to scroll`,
@@ -430,6 +450,52 @@ for (const { panel, report } of await measureSeason(browser, seasonProbe, PANELS
     report.seasonStrip.scrollWidth <= report.seasonStrip.clientWidth ||
       (report.seasonStrip.scrollLeft > 0 && report.seasonStrip.cardInside),
     `strip ${report.seasonStrip.clientWidth} of ${report.seasonStrip.scrollWidth}, scrolled ${report.seasonStrip.scrollLeft}, card inside ${report.seasonStrip.cardInside}`,
+  )
+  // Every press of the walk, not only the two ends: the viewer's complaint is about the episode
+  // the remote lands on part way along the row, which is where a row that followed only at its
+  // ends would still be wrong.
+  const outside = steps.filter((step) => !step.cardInside)
+  check(
+    `${panel.name}: every episode the remote reached is inside the row, going right and back`,
+    outside.length === 0,
+    outside.map((step) => `${step.index} at ${step.cardLeft}..${step.cardRight}`).join(", "),
+  )
+  check(
+    `${panel.name}: every one of them keeps its focus ring inside the row too`,
+    steps.every((step) => step.ringInside),
+    steps.filter((step) => !step.ringInside).map((step) => String(step.index)).join(", "),
+  )
+  check(
+    `${panel.name}: and focus was in the row at every press`,
+    steps.every((step) => step.inRow),
+    steps.filter((step) => !step.inRow).map((step) => String(step.index)).join(", "),
+  )
+  // The row has to move for a still that was not already showing - unless it has reached its own
+  // end, where there is nowhere left to scroll to.
+  const stuck = report.right.filter(
+    (step, index) => step.needed && step.scrollLeft === (index === 0 ? 0 : report.right[index - 1].scrollLeft) && step.scrollLeft !== end,
+  )
+  check(
+    `${panel.name}: the row moved for every still that was not already in view`,
+    stuck.length === 0,
+    stuck.map((step) => `${step.index} at ${step.cardLeft}..${step.cardRight}`).join(", "),
+  )
+  check(
+    `${panel.name}: the first episode needed no scrolling, and the last did not run past the row's end`,
+    report.right[0] !== undefined && report.right[0].scrollLeft === 0 && report.atEnd.scrollLeft === end,
+    `start ${report.right[0]?.scrollLeft ?? "?"}, end ${report.atEnd.scrollLeft} of ${end}`,
+  )
+  check(
+    `${panel.name}: the top navigation was never scrolled sideways`,
+    report.railScrollLeft === 0,
+    `rail scrolled ${report.railScrollLeft}`,
+  )
+  // The row is not fixed by shrinking every episode: the stills keep the size the row is drawn
+  // at, which is what keeps five of them readable from across the room.
+  check(
+    `${panel.name}: the stills keep the width the row is designed at`,
+    report.right.length > 0 && report.right.every((step) => step.artWidth === report.right[0].artWidth) && report.right[0].artWidth === 240,
+    `${report.right[0]?.artWidth ?? 0} design units`,
   )
   console.log("")
 }

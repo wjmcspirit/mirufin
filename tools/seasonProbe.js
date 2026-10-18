@@ -4,10 +4,12 @@
  * The same fit the app applies in index.html (a 1500-wide canvas scaled to the screen, with
  * `--app-height` as that screen's height in canvas units), twelve episode cards in the season
  * page's own strip, nine seasons in the strip above it, and then the app's own navigation engine
- * walking right along the episodes the way the remote does.
+ * walking right along the episodes the way the remote does - and back again.
  *
  * It reports what a television cannot be asked politely: how wide the strip is, how far it has
- * scrolled, and whether the card the remote landed on is actually inside the strip's own box.
+ * scrolled, and whether the card the remote landed on is actually inside the strip's own box -
+ * at every press of the walk, not only at its two ends, and with the focus ring the viewer has
+ * to be able to see.
  */
 ;(function () {
   var width = window.innerWidth
@@ -50,6 +52,7 @@
 
   var remote = window.mirufinRemote
   var cards = [].slice.call(episodes.querySelectorAll(".episode"))
+  var rail = document.querySelector(".side-nav")
 
   function nextFrame() {
     return new Promise(function (done) {
@@ -59,9 +62,21 @@
     })
   }
 
-  function stripState(strip, focused) {
+  /**
+   * Where the remote's card sits in the row, and whether the row is showing it - the card whole,
+   * and with the ring a focused still draws 3 units outside itself.
+   *
+   * `was` is the strip's offset before the press that brought focus here, which is what says
+   * whether the row had to move for this card at all.
+   */
+  function look(strip, focused, was) {
     var box = strip.getBoundingClientRect()
     var rect = focused ? focused.getBoundingClientRect() : null
+    var art = focused ? focused.querySelector(".episode-art") : null
+    var artRect = art ? art.getBoundingClientRect() : null
+    var fit = strip.offsetWidth > 0 ? box.width / strip.offsetWidth : 1
+    var ring = 6 * fit
+    var before = rect ? rect.left + (strip.scrollLeft - was) * fit : 0
     return {
       clientWidth: Math.round(strip.clientWidth),
       scrollWidth: Math.round(strip.scrollWidth),
@@ -73,29 +88,46 @@
       cardLeft: rect ? Math.round(rect.left) : 0,
       cardRight: rect ? Math.round(rect.right) : 0,
       cardInside: Boolean(rect && rect.left >= box.left - 0.5 && rect.right <= box.right + 0.5),
+      ringInside: Boolean(artRect && artRect.left - ring >= box.left - 0.5 && artRect.right + ring <= box.right + 0.5),
+      needed: Boolean(rect && was !== null && before < box.left - 0.5),
+      artWidth: artRect ? Math.round(artRect.width / fit) : 0,
     }
   }
 
   ;(async function walk() {
     // Walk the row the way a remote does: to the far end, then all the way back. Each press is
-    // given the couple of frames the engine reveals a card over before the row is measured.
+    // given the couple of frames the engine reveals a card over before the row is measured, so
+    // what is measured is what the viewer ends up looking at.
     remote.placeFocus(cards[0])
     await nextFrame()
-    for (var out = 1; out < cards.length; out += 1) remote.moveFocus("ArrowRight")
-    await nextFrame()
-    var atEnd = stripState(episodes, document.activeElement)
 
-    for (var back = 0; back < cards.length - 1; back += 1) remote.moveFocus("ArrowLeft")
-    await nextFrame()
-    var atStart = stripState(episodes, document.activeElement)
+    var right = []
+    for (var out = 1; out < cards.length; out += 1) {
+      var was = episodes.scrollLeft
+      remote.moveFocus("ArrowRight")
+      await nextFrame()
+      right.push(look(episodes, document.activeElement, was))
+    }
+    var atEnd = look(episodes, document.activeElement, episodes.scrollLeft)
+
+    var left = []
+    for (var back = cards.length - 2; back >= 0; back -= 1) {
+      var wasBack = episodes.scrollLeft
+      remote.moveFocus("ArrowLeft")
+      await nextFrame()
+      left.push(look(episodes, document.activeElement, wasBack))
+    }
+    var atStart = look(episodes, document.activeElement, episodes.scrollLeft)
 
     // The season row above it is walked the same way, so both rows are measured doing the thing
     // the viewer complained about rather than one of them sitting at offset zero.
     var seasonCards = [].slice.call(seasons.querySelectorAll(".season-card"))
     remote.placeFocus(seasonCards[0])
     await nextFrame()
-    for (var seasonStep = 1; seasonStep < seasonCards.length; seasonStep += 1) remote.moveFocus("ArrowRight")
-    await nextFrame()
+    for (var seasonStep = 1; seasonStep < seasonCards.length; seasonStep += 1) {
+      remote.moveFocus("ArrowRight")
+      await nextFrame()
+    }
 
     var strip = episodes.getBoundingClientRect()
     var seasonStrip = seasons.getBoundingClientRect()
@@ -112,6 +144,9 @@
       page: { left: Math.round(page.left), right: Math.round(page.right) },
       atEnd: atEnd,
       atStart: atStart,
+      right: right,
+      left: left,
+      railScrollLeft: rail ? Math.round(rail.scrollLeft) : 0,
       pageScrollLeft: Math.round(document.getElementById("main").scrollLeft),
       seasonStrip: {
         clientWidth: Math.round(seasons.clientWidth),

@@ -8,6 +8,13 @@ import { useSession } from "../session"
 
 const ARROWS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])
 const TEXT_TYPES = new Set(["text", "password", "search", "url", "email", "tel"])
+/**
+ * How long a landing keeps looking for the page's own content, in 60ms looks: about two and a
+ * half seconds, which is longer than a title page's two reads from a server on the same
+ * network. It stops the moment the content is drawn, so the wait is only ever paid by a page
+ * that is slow - and never by a page that has content already.
+ */
+const LAND_LOOKS = 40
 
 function isTextField(node: HTMLElement) {
   if (node instanceof HTMLTextAreaElement) return true
@@ -64,17 +71,34 @@ export function RemoteNav() {
     let cancelled = false
     let attempts = 0
     let timer = 0
+    /** The control the landing is holding the remote on, while the viewer has not moved it. */
+    let held: HTMLElement | null = null
+    /** A press of the viewer's own: the page is no longer the one choosing where focus goes. */
+    const takenOver = () => {
+      held = null
+      window.clearTimeout(timer)
+    }
     /**
      * The landing a page gets when there is nothing to return to, or when the item the
      * viewer left is genuinely gone: the first control of the page's own content, never the
      * navigation rail, and never the body. Prefer a non-text control so entering a page
      * never opens the TV keyboard; the viewer can still move onto a field to type.
+     *
+     * A page whose own content is still on its way - a title page while the server answers,
+     * and an episode row while its season is read - has nothing of its own to offer at that
+     * moment, and the rail used to win the landing there: the viewer opened a season and the
+     * remote sat on the navigation above the row they came for. The navigation still holds
+     * the remote while the page is empty, so a press is never lost, but the landing keeps
+     * looking and moves to the page's own content the moment it is drawn - which is what
+     * puts the remote on the episode row rather than on the rail. Looking ends the instant
+     * the viewer presses anything themselves: the landing must never pull focus away from
+     * someone who has already started.
      */
     const land = () => {
       if (cancelled) return
       const current = document.activeElement
-      // Stop if the viewer or the page already moved focus somewhere.
-      if (current instanceof HTMLElement && current !== document.body) return
+      // Stop if the viewer or the page already moved focus somewhere of its own.
+      if (current instanceof HTMLElement && current !== document.body && current !== held) return
       const items = focusables()
       const outside = items.filter((item) => !item.closest(".side"))
       const controls = outside.filter((item) => !isTextField(item))
@@ -84,20 +108,22 @@ export function RemoteNav() {
         outside.find((item) => item.closest(".hero .btn-primary, .detail-hero .btn-primary, .hero, .detail-hero, .card")) ||
         outside[0]
       if (content) {
+        held = null
         placeFocus(content)
         return
       }
-      if (items[0]) {
+      // Nothing of the page's own is drawn yet: the rail holds the remote in the meantime,
+      // and the looking below is what takes it to the page the moment the page arrives.
+      if (!held && items[0]) {
+        held = items[0]
         placeFocus(items[0])
-        return
       }
-      // Content may still be loading: keep looking for a moment rather than leave the
-      // screen with nothing focused at all.
-      if (attempts < 25) {
+      if (attempts < LAND_LOOKS) {
         attempts += 1
         timer = window.setTimeout(land, 60)
       }
     }
+    window.addEventListener("keydown", takenOver, true)
     // Back is a real history step and the screen it lands on is the one the viewer left, so
     // its record is honoured even when the page has put focus somewhere of its own. A plain
     // visit only borrows the record, and lands the page itself if it has already chosen.
@@ -107,6 +133,7 @@ export function RemoteNav() {
     return () => {
       cancelled = true
       window.clearTimeout(timer)
+      window.removeEventListener("keydown", takenOver, true)
       cancel()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -127,8 +127,11 @@ class El {
     return this.parent
   }
 
+  /** What the browser reports for `offsetLeft`: measured from the offsetParent's padding edge. */
+  offsetLeftOverride: number | null = null
+
   get offsetLeft() {
-    return this.rect.left
+    return this.offsetLeftOverride ?? this.rect.left
   }
 
   get offsetWidth() {
@@ -541,6 +544,68 @@ function seasonBlock(main: El) {
 }
 
 /**
+ * One season's episode row as the page lays it out: a strip of twelve stills, each 240 wide with
+ * a 14 gap, inside a scroller with the app's own 40 of padding either side. The strip is 1200
+ * wide, so five stills are on screen and the rest are a sideways press away - and the strip
+ * clips, exactly as `overflow-x: auto` does on the television.
+ *
+ * The cards are laid out in the strip's own content coordinates, and each one is told what the
+ * browser would report as its `offsetLeft`: its position inside the strip, which is what the
+ * reveal measures a card with. The strip's own `scrollTo` clamps the way a browser does, so a
+ * check cannot pass on a row that scrolled past its last still.
+ */
+function episodeRow(main: El, count: number) {
+  const PADDING = 40
+  const CARD = 240
+  const GAP = 14
+  const section = new El("section", "episode-block")
+  const head = new El("div", "row-head")
+  const h2 = new El("h2")
+  h2.text = "Season 2"
+  head.add(h2)
+  const spot = new El("div", "episode-spot")
+  spot.place(300, 400, 1000, 104)
+  const scroller = new El("div", "scroller episode-scroller")
+  scroller.place(430, 400, 1200, 268)
+  scroller.clientWidth = 1200
+  scroller.clientHeight = 268
+  scroller.scrollWidth = PADDING * 2 + count * CARD + (count - 1) * GAP
+  scroller.scrollHeight = 268
+  scroller.scrollTo = (options: { left?: number; top?: number } | number) => {
+    const left = typeof options === "number" ? options : options.left ?? scroller.scrollLeft
+    scroller.scrollLeft = Math.max(0, Math.min(scroller.scrollWidth - scroller.clientWidth, left))
+  }
+  const cards = Array.from({ length: count }, (_, index) => {
+    const card = new El("a", index === 1 ? "episode is-next" : "episode").attr("href", `/item/EP${index + 1}`)
+    card.place(430, 400 + PADDING + index * (CARD + GAP), CARD, 268)
+    card.offsetLeftOverride = PADDING + index * (CARD + GAP)
+    scroller.add(card)
+    return card
+  })
+  const actions = new El("div", "actions episode-actions")
+  actions.place(720, 400, 700, 48)
+  const play = new El("button", "btn btn-primary")
+  play.text = "Play season"
+  play.place(730, 440, 176, 48)
+  actions.add(play)
+  section.add(head, spot, scroller, actions)
+  main.add(section)
+  return { section, scroller, cards, play }
+}
+
+/** The part of the row's own contents the strip is showing, in the coordinates it lays out in. */
+function rowWindow(scroller: El) {
+  const left = scroller.rect.left + scroller.scrollLeft
+  return { left, right: left + scroller.clientWidth }
+}
+
+/** Is the whole of this still inside what the row is showing? */
+function inWindow(scroller: El, card: El) {
+  const window = rowWindow(scroller)
+  return card.rect.left >= window.left - 0.5 && card.rect.right <= window.right + 0.5
+}
+
+/**
  * The hero and the first row: Down leaves the hero's own actions for the first card under it,
  * and Up comes back to those actions rather than to the rail or to nothing.
  */
@@ -929,6 +994,90 @@ function testSeasonWalk() {
   check("Up comes back into the episode row", active !== null && block.cards.includes(active), label(active))
   moveFocus("ArrowUp")
   check("Up again leaves it for the seasons, not for the rail", active !== null && seasons.cards.includes(active), label(active))
+}
+
+/**
+ * The season page's episode row with the remote walking it: the row itself is what has to
+ * scroll, and the episode the remote lands on has to be inside what the row is showing.
+ *
+ * The complaint was that the stills run past the right edge of the screen and the row never
+ * follows, so the remote ends up on an episode nobody can see. What is checked here is the
+ * behaviour that has to hold instead, at every press rather than at the two ends: the episode
+ * row is the band that moves, the still the remote lands on is inside the row's own window,
+ * the row scrolls whenever that still would otherwise be outside it, the first and last
+ * episodes are reached without the row running past its own ends, focus never leaves the row
+ * for the navigation, and neither the page nor the season strip above is scrolled by any of it.
+ */
+function testEpisodeRowScroll() {
+  clearSeats()
+  resetFocusState()
+  const page = shell()
+  const seasons = row(page.main, "Seasons", ["/item/SERIES?season=S1", "/item/SERIES?season=S2"])
+  const block = episodeRow(page.main, 12)
+  noteRoute("/item/SEASON1")
+
+  placeFocus(block.cards[0])
+  check("the row starts at its own beginning", block.scroller.scrollLeft === 0, String(block.scroller.scrollLeft))
+  check(
+    "the row is narrower than its stills, so it has something to scroll",
+    block.scroller.scrollWidth > block.scroller.clientWidth,
+    `${block.scroller.clientWidth} of ${block.scroller.scrollWidth}`,
+  )
+
+  // Right, one press at a time, from the first episode to the last.
+  const missed: string[] = []
+  let scrolled = 0
+  for (let step = 1; step < block.cards.length; step += 1) {
+    const card = block.cards[step]
+    const before = block.scroller.scrollLeft
+    const wasInside = inWindow(block.scroller, card)
+    moveFocus("ArrowRight")
+    if (active !== card) missed.push(`${step}: landed on ${label(active)}`)
+    if (!block.scroller.contains(active)) missed.push(`${step}: focus left the row`)
+    if (!inWindow(block.scroller, card)) missed.push(`${step}: still ${step} outside the row's window`)
+    if (!wasInside && block.scroller.scrollLeft === before) missed.push(`${step}: the row did not follow`)
+    if (block.scroller.scrollLeft !== before) scrolled += 1
+  }
+  check("Right walks the row a still at a time, each one inside it", missed.length === 0, missed.join("; "))
+  check("and the row followed the remote as it went", scrolled > 0, `${scrolled} of ${block.cards.length - 1} presses moved it`)
+  check("the last episode the remote reached is inside the row", inWindow(block.scroller, block.cards[11]))
+  check(
+    "the row stopped at its own end rather than running past it",
+    block.scroller.scrollLeft === block.scroller.scrollWidth - block.scroller.clientWidth,
+    `${block.scroller.scrollLeft} of ${block.scroller.scrollWidth - block.scroller.clientWidth}`,
+  )
+  check("focus never left the row for the navigation", !(active instanceof El) || !active.closest(".side"), label(active))
+
+  // One more press at the last episode: nothing moves, and focus is not pushed out of the row.
+  const atEnd = block.scroller.scrollLeft
+  moveFocus("ArrowRight")
+  check("Right at the last episode leaves the remote where it is", active === block.cards[11], label(active))
+  check("and does not scroll the row any further", block.scroller.scrollLeft === atEnd, String(block.scroller.scrollLeft))
+
+  // Left, all the way back: the same walk in reverse.
+  const back: string[] = []
+  for (let step = block.cards.length - 2; step >= 0; step -= 1) {
+    const card = block.cards[step]
+    const before = block.scroller.scrollLeft
+    const wasInside = inWindow(block.scroller, card)
+    moveFocus("ArrowLeft")
+    if (active !== card) back.push(`${step}: landed on ${label(active)}`)
+    if (!block.scroller.contains(active)) back.push(`${step}: focus left the row`)
+    if (!inWindow(block.scroller, card)) back.push(`${step}: still ${step} outside the row's window`)
+    if (!wasInside && block.scroller.scrollLeft === before) back.push(`${step}: the row did not follow`)
+  }
+  check("Left walks the row back the same way, each still inside it", back.length === 0, back.join("; "))
+  check("and brings the row back to its own beginning", block.scroller.scrollLeft === 0, String(block.scroller.scrollLeft))
+  check("the first episode is where the remote is", active === block.cards[0], label(active))
+
+  // One more press at the first episode: nothing moves, and focus is not pushed out of the row.
+  moveFocus("ArrowLeft")
+  check("Left at the first episode leaves the remote where it is", active === block.cards[0], label(active))
+  check("and the row stays at its own beginning", block.scroller.scrollLeft === 0, String(block.scroller.scrollLeft))
+
+  // Nothing else on the page moved: not the strip above, not the page itself.
+  check("the season strip above was never scrolled by the episode row", seasons.scroller.scrollLeft === 0, String(seasons.scroller.scrollLeft))
+  check("and the page itself was never scrolled sideways", page.main.scrollLeft === 0, String(page.main.scrollLeft))
 }
 
 /**
@@ -1356,6 +1505,42 @@ function testFocusDeclarations() {
       "styles.css",
     )
   }
+  // The episode row scrolls because the strip is a scroll container narrower than its contents.
+  // A grid item is as wide as its contents unless it is told otherwise, so the row has to say
+  // so: without it `scrollWidth` and `clientWidth` are the same number and the remote can land
+  // on a still the page has clipped. The stills keep the width they are designed at, too - the
+  // row is not fixed by shrinking every episode until the season fits on one screen.
+  check(
+    "the episode row is told it may be narrower than the stills it holds",
+    /\.episode-scroller\s*\{[^}]*min-width:\s*0/.test(css),
+    "styles.css",
+  )
+  check(
+    "and its stills keep the width they are designed at",
+    /\.episode\s*\{[^}]*width:\s*240px/.test(css) && /\.episode\s*\{[^}]*flex:\s*0 0 auto/.test(css),
+    "styles.css",
+  )
+  // A title page has nothing of its own to focus while the server answers, and the navigation
+  // used to win the landing there: the viewer opened a season and the remote sat on the rail
+  // above the episode row they came for. The landing has to hold the rail only as a place to
+  // keep the remote alive, keep looking for the page's own content, and let go of it the moment
+  // the viewer presses anything themselves.
+  const nav = readFileSync("src/components/RemoteNav.tsx", "utf8")
+  check(
+    "the landing holds the rail only while the page has no content of its own",
+    /if \(!held && items\[0\]\)[\s\S]{0,200}?placeFocus\(items\[0\]\)/.test(nav),
+    "RemoteNav.tsx",
+  )
+  check(
+    "and keeps looking for the page's own content rather than settling for it",
+    /attempts < LAND_LOOKS/.test(nav) && /const LAND_LOOKS = 40/.test(nav),
+    "RemoteNav.tsx",
+  )
+  check(
+    "while a press of the viewer's own ends the looking",
+    /window\.addEventListener\("keydown", takenOver, true\)/.test(nav) && /current !== held/.test(nav),
+    "RemoteNav.tsx",
+  )
 }
 
 installDom()
@@ -1370,6 +1555,7 @@ testDelayedList()
 testMissingTarget()
 testRailIsNotASeat()
 testSeasonWalk()
+testEpisodeRowScroll()
 testSeasonBack()
 testCollectionGrid()
 testCollectionsRow()

@@ -1891,11 +1891,22 @@ select {
 .episode-block { display: grid; }
 /* The episode row: a strip of landscape stills, sized so five are on screen with a sixth at the
    edge, and the rest a sideways press away. The design canvas is 1500 wide; the page's own
-   padding and the strip's leave about 1330 for the row at 1080p and about 1276 at 4K, and five
-   stills with their gaps come to 1256 - so the row reads the same at both. Each card is the
+   padding and the strip's leave 1332 for the row at 1080p, 1284 at 1440p and 1228 at 4K, and
+   five stills with their gaps come to 1256 - so five are on screen at 1080p and 1440p, and four
+   with most of a fifth at 4K, where the row is read from further away anyway. Each card is the
    still with the episode's number and name beneath it, and the marks the row has always carried
    - watched, and how far in. */
-.episode-scroller { align-items: start; }
+.episode-scroller {
+  align-items: start;
+  /* The row is a grid item of the block above it, and a grid item is as wide as its contents
+     unless it is told otherwise: without this the strip would be as wide as all of the season's
+     stills together, `scrollWidth` and `clientWidth` would be the same number, the row would
+     have nothing to scroll, and the page would clip the stills past its right edge - the remote
+     would land on an episode that is not on screen with the row never following it. Stating the
+     minimum is what makes the strip the scroll container its own width, at every panel size and
+     whatever an engine makes of the track. */
+  min-width: 0;
+}
 .episode {
   display: grid;
   flex: 0 0 auto;
