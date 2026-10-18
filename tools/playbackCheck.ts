@@ -9,8 +9,10 @@
  * Run it with `npm run playbackcheck`. Like the other harnesses here it is a check rather than a
  * suite: delete it when the project grows a real test runner.
  */
-import { playbackStep, startTicks, type PlaybackMark } from "../src/lib/playback"
-import type { Item } from "../src/lib/types"
+import { readFileSync } from "node:fs"
+import { playbackStep, skipAction, skipMode, startTicks, type PlaybackMark } from "../src/lib/playback"
+import { DEFAULT_PREFS } from "../src/lib/storage"
+import type { Item, SegmentType } from "../src/lib/types"
 
 let failures = 0
 
@@ -121,6 +123,92 @@ for (const signal of signals) {
 
 same("a film is reported as started once, and paused once, however often it stalls", seen, ["start", "progress:paused"])
 same("and it is still marked as started at the end", mark.started, true)
+
+// --------------------------------------------------------------------------- what a skip point deserves
+
+const KINDS: SegmentType[] = ["Intro", "Outro", "Recap", "Preview", "Commercial"]
+
+for (const kind of KINDS) {
+  same(
+    `a store that has never been written skips a ${kind.toLowerCase()} automatically`,
+    skipMode(DEFAULT_PREFS.skip, kind),
+    "auto",
+  )
+}
+same("and a store with nothing saved for this kind answers the same way", skipMode({}, "Intro"), "auto")
+same("as does one with no skip map at all", skipMode(undefined, "Intro"), "auto")
+same("a choice the viewer made is the one that is used", skipMode({ Intro: "ask" }, "Intro"), "ask")
+same("and so is playing through", skipMode({ Outro: "off" }, "Outro"), "off")
+same(
+  "a kind the viewer never touched still skips automatically",
+  skipMode({ Intro: "ask", Outro: "off" }, "Recap"),
+  "auto",
+)
+
+// The player reports its position several times a second, so the same segment is asked about over
+// and over. The two sets are what make the answer settle: skipping happens once, and an offer the
+// viewer has turned down is not made again - which is also what keeps an automatic skip of the
+// credits and the next-episode panel from both acting on the same moment.
+const skipped = new Set<string>()
+same("a segment that has not been skipped is skipped", skipAction("auto", "intro", skipped, new Set()), "skip")
+skipped.add("intro")
+same("and one already skipped in this playback is not skipped again", skipAction("auto", "intro", skipped, new Set()), "none")
+same("which is what keeps the credits from being skipped twice", skipAction("auto", "outro", new Set(["outro"]), new Set()), "none")
+same("an offer to skip is made once", skipAction("ask", "intro", new Set(), new Set()), "prompt")
+same("and is not made again once the viewer has turned it down", skipAction("ask", "intro", new Set(), new Set(["intro"])), "none")
+same("playing through is playing through, whatever has been seen", skipAction("off", "intro", skipped, new Set(["intro"])), "off")
+
+// --------------------------------------------------------------------------- the ended panel, as written
+
+/** The declarations the checks above rest on, read as they are written. */
+const player = readFileSync("src/pages/Player.tsx", "utf8")
+const detail = readFileSync("src/pages/Item.tsx", "utf8")
+
+check("the playback-ended panel no longer offers to play it again", !/Play again/.test(player), "Player.tsx")
+
+// The end of the last thing there is to play draws one line of text and no control at all, so
+// there is nothing in it for the remote to land on: the engine focuses links, buttons and form
+// controls, and this block holds none of them.
+const finished = player.match(/\{ended && !menu && !next && \(([\s\S]{0,400}?)\)\}/)
+check(
+  "and it draws nothing the remote can land on",
+  Boolean(finished) && !/<(button|a|input|select|textarea)\b/.test(finished?.[1] ?? "<button"),
+  finished ? "the ended block is a line of text" : "the ended block was not found in Player.tsx",
+)
+
+// The mode is the viewer's answer about the kind of segment rather than about what is playing, and
+// a film and an episode both get their segments from the same call, so the enabled default reaches
+// both of them.
+check(
+  "the mode a segment is skipped in is decided by the kind of segment, not by what is playing",
+  /skipMode\(prefs\.skip, activeSegment\.Type/.test(player),
+  "Player.tsx",
+)
+check(
+  "a film and an episode ask the server for their segments the same way",
+  (player.match(/api\.mediaSegments\(/g) || []).length === 1,
+  "Player.tsx",
+)
+check(
+  "skipping lands past the end of the segment, so the credits are left behind rather than re-entered",
+  /seekTo\(segmentEnd\(activeSegment\) \+ 0\.2\)/.test(player),
+  "Player.tsx",
+)
+check(
+  "the next-episode countdown clears its own timer, so a re-run cannot leave two counting",
+  /setCountdown\(ended \? 10 : prefs\.nextUpDelay\)[\s\S]{0,700}?window\.clearInterval\(timer\)/.test(player),
+  "Player.tsx",
+)
+check(
+  "what has already been skipped is forgotten when a new item is played",
+  /autoSkipped\.current = new Set\(\)/.test(player),
+  "Player.tsx",
+)
+check(
+  "the detail pages still carry their own Play control",
+  /to=\{`\/play\/\$\{item\.Id\}/.test(detail),
+  "Item.tsx",
+)
 
 console.log(failures === 0 ? "\nAll playback checks passed." : `\n${failures} check(s) failed.`)
 if (failures > 0) throw new Error(`${failures} check(s) failed`)

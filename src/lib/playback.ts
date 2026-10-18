@@ -1,5 +1,5 @@
 import { secondsToTicks } from "./format"
-import type { Item } from "./types"
+import type { Item, SegmentType, SkipMode } from "./types"
 
 /**
  * The two decisions the player makes over and over: where playback starts, and what to tell
@@ -8,6 +8,10 @@ import type { Item } from "./types"
  * Both are pure, and both are the parts of playback that go wrong quietly - a resume that carries
  * on from the wrong place, a pause reported for a stream that merely stalled - so they live here,
  * where they can be read and checked, rather than inside the player's effects.
+ *
+ * The third decision here is what to do about the segment the viewer is inside. It is the same
+ * kind of decision: it is taken several times a second, and the wrong answer is quiet - a segment
+ * skipped twice, or a prompt that keeps coming back.
  */
 
 /** An episode within a few seconds of its end is not a place to carry on from. */
@@ -69,4 +73,44 @@ export function playbackStep(mark: PlaybackMark, signal: PlaybackSignal): Playba
   if (playing && !mark.started) return { mark: next, report: { kind: "start", paused: false } }
   if (signal.paused && mark.started && !mark.paused) return { mark: next, report: { kind: "progress", paused: true } }
   return { mark: next, report: null }
+}
+
+/**
+ * The mode a segment of this kind is skipped in.
+ *
+ * The viewer's own choice when they have made one, and automatic skipping when they have not. A
+ * store that has never been written starts on `DEFAULT_PREFS.skip`, which is `auto` for every kind
+ * of segment, and a store written by an older build has its factory values upgraded to the same
+ * place by `loadPrefs` - so a saved choice of `ask` or `off` is the only thing that changes the
+ * answer here, and "nothing saved for this kind" answers the way a fresh store does.
+ *
+ * A movie and an episode are not told apart: the mode is the viewer's answer about the *kind* of
+ * segment, and both of them send the same kinds.
+ */
+export function skipMode(skip: Partial<Record<SegmentType, SkipMode>> | undefined, type: SegmentType): SkipMode {
+  return skip?.[type] || "auto"
+}
+
+/** What the player should do about the segment the viewer is inside. */
+export type SkipAction = "off" | "skip" | "prompt" | "none"
+
+/**
+ * Decide what a segment deserves right now.
+ *
+ * The player reports its position several times a second, so this is asked far more often than
+ * anything should happen: `seen` is what has already been skipped in this playback and `dismissed`
+ * is what the viewer has already turned down, and both are what make the answer settle. Automatic
+ * skipping therefore happens once for a segment however often it is asked about, and an offer the
+ * viewer has declined is not made again - which is also what keeps an automatic skip and the
+ * next-episode transition from both acting on the same credits.
+ */
+export function skipAction(
+  mode: SkipMode,
+  key: string,
+  seen: ReadonlySet<string>,
+  dismissed: ReadonlySet<string>,
+): SkipAction {
+  if (mode === "off") return "off"
+  if (mode === "auto") return seen.has(key) ? "none" : "skip"
+  return dismissed.has(key) ? "none" : "prompt"
 }

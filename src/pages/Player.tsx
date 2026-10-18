@@ -12,7 +12,7 @@ import { backdropSrc, primarySrc, trickplayUrl } from "../lib/images"
 import { nativeEngine, nativePlayer } from "../lib/nativePlayer"
 import { isTrailerItem } from "../lib/trailer"
 import { pickTrickplay, segmentAt, segmentEnd, segmentKey, segmentLabel } from "../lib/segments"
-import { playbackStep, startTicks, type PlaybackMark } from "../lib/playback"
+import { playbackStep, skipAction, skipMode, startTicks, type PlaybackMark } from "../lib/playback"
 import type { Chapter, Item, MediaSegment, SegmentType, TrickplayInfo } from "../lib/types"
 import { usePrefs, useSession } from "../session"
 
@@ -501,7 +501,7 @@ export function PlayerPage() {
   }, [plan, rate])
 
   const activeSegment = prelude ? null : segmentAt(segments, position)
-  const activeMode = activeSegment?.Type ? prefs.skip[activeSegment.Type as SegmentType] || "off" : "off"
+  const activeMode = activeSegment?.Type ? skipMode(prefs.skip, activeSegment.Type as SegmentType) : "off"
 
   useEffect(() => {
     if (prelude || !activeSegment) {
@@ -511,19 +511,14 @@ export function PlayerPage() {
     }
     if (activeSegment.Type === "Outro" && prefs.nextUp === "credits") setCreditsOpen(true)
     const key = segmentKey(activeSegment)
-    if (activeMode === "off") {
+    const action = skipAction(activeMode, key, autoSkipped.current, dismissed.current)
+    if (action === "skip") {
+      autoSkipped.current.add(key)
+      seekTo(segmentEnd(activeSegment) + 0.2)
       setPromptId(null)
       return
     }
-    if (activeMode === "auto") {
-      if (!autoSkipped.current.has(key)) {
-        autoSkipped.current.add(key)
-        seekTo(segmentEnd(activeSegment) + 0.2)
-      }
-      setPromptId(null)
-      return
-    }
-    if (!dismissed.current.has(key)) setPromptId(key)
+    setPromptId(action === "prompt" ? key : null)
     // seekTo is recreated each render; the skipped-id set keeps this from looping.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeMode, activeSegment, ended, prefs.nextUp, prelude])
@@ -1000,43 +995,34 @@ export function PlayerPage() {
           {segmentLabel(prompt.Type)}
         </button>
       )}
-      {((offerNext && next) || (ended && !menu && !next)) && (
+      {offerNext && next && (
         <div className="next-up">
-          {offerNext && next ? (
-            <>
-              <p className="eyebrow">{passout ? "Still watching?" : "Up next"}</p>
-              <h2>
-                {episodeCode(next) ? `${episodeCode(next)}  ·  ` : ""}
-                {next.Name}
-              </h2>
-              <div className="actions">
-                <button className="btn btn-primary" type="button" onClick={playNextNow}>
-                  <PlayIcon />
-                  {countdown != null ? `Play in ${countdown}s` : "Play now"}
-                </button>
-                <button className="btn" type="button" onClick={() => { setNextHold(true); setCountdown(null); setCreditsOpen(false) }}>
-                  Cancel
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="eyebrow">Finished</p>
-              <div className="actions">
-                <button
-                  className="btn btn-primary"
-                  type="button"
-                  onClick={() => {
-                    if (!request) return
-                    setEnded(false)
-                    setRequest({ ...request, startTicks: 0, nonce: request.nonce + 1 })
-                  }}
-                >
-                  Play again
-                </button>
-              </div>
-            </>
-          )}
+          <p className="eyebrow">{passout ? "Still watching?" : "Up next"}</p>
+          <h2>
+            {episodeCode(next) ? `${episodeCode(next)}  ·  ` : ""}
+            {next.Name}
+          </h2>
+          <div className="actions">
+            <button className="btn btn-primary" type="button" onClick={playNextNow}>
+              <PlayIcon />
+              {countdown != null ? `Play in ${countdown}s` : "Play now"}
+            </button>
+            <button className="btn" type="button" onClick={() => { setNextHold(true); setCountdown(null); setCreditsOpen(false) }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {/*
+        The end of the last thing there is to play: a film, or the final episode of a season.
+        There is nothing to offer here - the next episode has its own panel above, and the
+        transport under it plays this one again - so this is a line of text and no control at
+        all. Nothing inside it can take the remote, which is the point: a panel that said the
+        film was over used to hold a button, and a button is a place the focus ring can stop.
+      */}
+      {ended && !menu && !next && (
+        <div className="next-up">
+          <p className="eyebrow">Finished</p>
         </div>
       )}
       {seekFlash && (
