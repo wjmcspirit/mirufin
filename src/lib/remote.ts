@@ -182,7 +182,7 @@ function focusNode(node: HTMLElement) {
   rememberSeat(node)
   node.focus({ preventScroll: true })
   if (node.closest(".side")) {
-    const rail = node.closest(".glass-menu, .side-nav")
+    const rail = node.closest(".glass-menu")
     if (rail instanceof HTMLElement) scrollInside(rail, node)
     return
   }
@@ -971,11 +971,12 @@ export function resetFocusState() {
 }
 
 /**
- * A control the rail draws. The rail is one glass pill (`.glass-item`); `.nav` is what the
- * measurement harnesses and the mock screens still draw the rail with.
+ * A control the rail draws: one stop of the glass menu. The rail is the only thing in the app
+ * that puts controls inside `.side`, so this is what the engine lands back on when the remote
+ * comes up out of a page.
  */
 function railTab(node: HTMLElement) {
-  return node.classList.contains("glass-item") || node.classList.contains("nav")
+  return node.classList.contains("glass-item")
 }
 
 function focusMenu(from: HTMLElement, side: HTMLElement[]) {

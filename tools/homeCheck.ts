@@ -230,7 +230,7 @@ check(
 )
 check(
   "and the rail keeps the height it has at 1080p, since the canvas already scales it",
-  !/\.nav \{/.test(wide) && !/\.brand-logo \{/.test(wide) && !/\.nav \{/.test(wider) && !/\.brand-logo \{/.test(wider),
+  !/\.glass-menu \{/.test(wide) && !/\.brand-logo \{/.test(wide) && !/\.glass-menu \{/.test(wider) && !/\.brand-logo \{/.test(wider),
   "the rail's own sizes are set once, at the top of the stylesheet",
 )
 check("the copy stacks up from the hero's bottom edge", rule(".home .hero .hero-copy").includes("justify-content: flex-end"))
@@ -281,7 +281,7 @@ check(
 /* Everything the menu's own rules say, from the pill to the stop that follows it. Nothing in
    here may move on its own: the menu is still until the viewer presses something, and the only
    transition allowed is the brief one a stop makes when focus arrives or leaves it. */
-const menuRules = css.slice(css.indexOf(".glass-menu"), css.indexOf("\n.nav {"))
+const menuRules = css.slice(css.indexOf(".glass-menu"), css.indexOf("\n.account {"))
 check(
   "the menu never animates on its own",
   !/\banimation:/.test(menuRules) && !/@keyframes/.test(menuRules),
@@ -291,6 +291,15 @@ check(
   "and the only thing that moves is the stop the viewer is on, briefly",
   /\.glass-item \{[\s\S]*?transition: color 0\.15s ease, background-color 0\.15s ease;/.test(menuRules),
   menuRules.trim(),
+)
+
+/* One vocabulary for the rail. The icon tabs the rail used to be drawn with are gone from the
+   stylesheet entirely, so there is no rule left that could style a rail control the app does
+   not render - and the probes and the mock screen draw the glass menu the app actually has. */
+check(
+  "the rail's stylesheet has one vocabulary, and the old icon tabs are gone",
+  !/\.side-nav\b|\n\.nav\b/.test(css),
+  "no .side-nav or .nav rules remain",
 )
 
 /* The wiring, read the same way. Every check above would still pass if the shell stopped

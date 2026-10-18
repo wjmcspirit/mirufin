@@ -710,14 +710,6 @@ h1, h2, h3 {
   border: 0;
   box-shadow: none;
 }
-.side-nav {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  gap: 2px;
-  min-width: 0;
-  overflow: visible;
-}
 .side-end {
   display: flex;
   flex: 0 0 auto;
@@ -787,56 +779,6 @@ html:not(.remote) .glass-item:hover {
   outline-offset: 2px;
   background: rgba(62, 200, 255, 0.18);
   color: #fff;
-}
-.nav {
-  position: relative;
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 46px;
-  height: 46px;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.74);
-  transition: color 0.12s ease;
-}
-.nav svg {
-  width: 22px;
-  height: 22px;
-  transition: transform 0.12s ease, filter 0.12s ease;
-}
-.nav.active { color: #fff; }
-.nav.active::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: 4px;
-  width: 14px;
-  height: 2px;
-  border-radius: 2px;
-  background: rgba(122, 223, 255, 0.9);
-  box-shadow: 0 0 8px rgba(62, 200, 255, 0.55);
-  transform: translateX(-50%);
-}
-html:not(.remote) .nav:hover {
-  color: #fff;
-  background: transparent;
-}
-.nav:focus,
-.nav:focus-visible,
-.nav.dpad-focus {
-  z-index: 2;
-  color: #9be8ff;
-  background: transparent;
-  box-shadow: none;
-}
-.nav:focus svg,
-.nav:focus-visible svg,
-.nav.dpad-focus svg {
-  transform: scale(1.16);
-  filter: drop-shadow(0 0 6px rgba(62, 200, 255, 0.95)) drop-shadow(0 0 14px rgba(62, 200, 255, 0.55));
 }
 .account {
   display: flex;
@@ -2880,7 +2822,6 @@ input[type="range"]::-webkit-slider-thumb {
 @media (max-width: 860px) {
   .shell { height: auto; max-height: none; min-height: 100vh; overflow: visible; }
   .side { position: sticky; top: 0; padding: 10px 14px; }
-  .side-nav { overflow-x: auto; scrollbar-width: none; }
   /* A phone cannot give each of the three labels a third of the pill, so on a narrow screen
      they take the width they need and the pill scrolls rather than clipping or wrapping them. */
   .glass-menu { overflow-x: auto; scrollbar-width: none; }

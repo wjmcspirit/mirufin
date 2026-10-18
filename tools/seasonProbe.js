@@ -52,7 +52,7 @@
 
   var remote = window.mirufinRemote
   var cards = [].slice.call(episodes.querySelectorAll(".episode"))
-  var rail = document.querySelector(".side-nav")
+  var rail = document.querySelector(".glass-menu")
 
   function nextFrame() {
     return new Promise(function (done) {
