@@ -1,10 +1,18 @@
 /**
- * The Home fold, measured rather than reasoned about.
+ * The Home fold, measured rather than reasoned about - and the season page's episode row with it.
  *
  * `tools/foldProbe.html` draws Home from the app's own stylesheet and reports, in design units,
  * where the first row's artwork and its caption end relative to the bottom edge of the screen.
  * This drives that page in a headless browser at 1080p, 1440p and 4K and checks the two things
  * the viewer sees: the artwork is above the fold, and so is the caption under it.
+ *
+ * `tools/seasonProbe.html` draws a season page's episode row the same way - the real classes, the
+ * app's own navigation engine bundled into the page - and walks it with the remote from the first
+ * episode to the last and back. The viewer's complaint was that the cards run past the right edge
+ * and the row never follows; the checks below state what has to be true instead: the strip is
+ * narrower than its own contents (so it has something to scroll), it follows the remote at both
+ * ends, the card the remote lands on is inside it, focus stays in the row, and the page itself
+ * never moves sideways.
  *
  * The viewport is set through the DevTools protocol rather than with `--window-size`, because a
  * window cannot be larger than the desktop it opens on: a 4K panel would otherwise be measured at
@@ -16,7 +24,7 @@
  *
  * Run it with `npm run foldcheck`.
  */
-import { spawn } from "node:child_process"
+import { execFileSync, spawn } from "node:child_process"
 import { existsSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
@@ -212,6 +220,95 @@ async function measureAll(browser: string, probe: string, panels: Panel[]) {
     }
   }
 }
+/** What the season row probe reports: the strip, the two ends of the walk, and the season row. */
+interface SeasonStrip {
+  clientWidth: number
+  scrollWidth: number
+  scrollLeft: number
+  left: number
+  right: number
+  index: number
+  inRow: boolean
+  cardLeft: number
+  cardRight: number
+  cardInside: boolean
+}
+
+interface SeasonReport {
+  strip: { clientWidth: number; scrollWidth: number; left: number; right: number }
+  page: { left: number; right: number }
+  atEnd: SeasonStrip
+  atStart: SeasonStrip
+  pageScrollLeft: number
+  seasonStrip: { clientWidth: number; scrollWidth: number; scrollLeft: number; left: number; right: number; cardIndex: number; cardInside: boolean }
+}
+
+/**
+ * The season page's episode row, measured in the same browser: twelve episodes in the strip, and
+ * the app's own navigation engine walking right along them. A grid item is as wide as its
+ * contents unless it is told otherwise, so before the strip was given a width it could be
+ * narrower than, `scrollWidth` and `clientWidth` were the same number - the row had nothing to
+ * scroll, the page clipped the cards past its right edge, and the remote could land on an episode
+ * that was not on screen with the row never following.
+ */
+async function measureSeason(browser: string, probe: string, panels: Panel[]) {
+  const port = 9400 + Math.floor(Math.random() * 400)
+  const profile = mkdtempSync(join(tmpdir(), "mirufin-season-"))
+  const child = spawn(
+    browser,
+    [
+      "--headless=new",
+      "--disable-gpu",
+      "--no-sandbox",
+      "--hide-scrollbars",
+      "--no-first-run",
+      "--no-default-browser-check",
+      `--remote-debugging-port=${port}`,
+      `--user-data-dir=${profile}`,
+      "about:blank",
+    ],
+    { stdio: "ignore" },
+  )
+
+  try {
+    const target = await waitFor("the browser to start", async () => {
+      const response = await fetch(`http://127.0.0.1:${port}/json/list`)
+      const list = (await response.json()) as { type: string; webSocketDebuggerUrl?: string }[]
+      return list.find((entry) => entry.type === "page" && entry.webSocketDebuggerUrl) ?? null
+    })
+    const session = await Session.open(target.webSocketDebuggerUrl as string)
+    try {
+      await session.send("Page.enable")
+      const reports: { panel: Panel; report: SeasonReport }[] = []
+      for (const panel of panels) {
+        await session.send("Emulation.setDeviceMetricsOverride", {
+          width: panel.width,
+          height: panel.height,
+          deviceScaleFactor: 1,
+          mobile: false,
+        })
+        await session.send("Page.navigate", { url: probe })
+        const text = await waitFor(`${panel.name} to measure the season row`, async () => {
+          const value = await session.evaluate("document.getElementById('probe').textContent")
+          return typeof value === "string" && value !== "pending" ? value : null
+        })
+        reports.push({ panel, report: JSON.parse(text as string) as SeasonReport })
+      }
+      return reports
+    } finally {
+      session.close()
+    }
+  } finally {
+    child.kill()
+    try {
+      rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
+    } catch {
+      /* the temporary profile can wait for the next sweep of the temp folder */
+    }
+  }
+}
+
+
 
 // The harness is bundled into node_modules before it runs, so the probe page is found from the
 // project root rather than from this file's own folder.
@@ -225,7 +322,6 @@ if (!browser) {
 }
 
 console.log(`Measuring with ${browser}\n`)
-
 for (const { panel, report } of await measureAll(browser, probe, PANELS)) {
   const slack = Math.round((report.fold - report.caption.bottom) * 10) / 10
   console.log(`${panel.name}, first row of ${report.row} cards - ${report.viewport.width}x${report.viewport.height}`)
@@ -265,5 +361,78 @@ for (const { panel, report } of await measureAll(browser, probe, PANELS)) {
   console.log("")
 }
 
-console.log(failures === 0 ? "The fold holds at every panel size." : `${failures} check(s) failed.`)
+// The probe drives the app's own navigation engine, so the engine is bundled for the page the way
+// the app bundles it: one file, loaded before the probe's own script. The bundler is run as the
+// npm scripts run it, because its own library reaches for `require` and cannot be bundled.
+execFileSync(
+  process.execPath,
+  [
+    resolve("node_modules/esbuild/bin/esbuild"),
+    "src/lib/remote.ts",
+    "--bundle",
+    "--format=iife",
+    "--global-name=mirufinRemote",
+    "--log-level=warning",
+    "--outfile=node_modules/.mirufin/remoteProbe.js",
+  ],
+  { stdio: ["ignore", "ignore", "inherit"] },
+)
+
+const seasonProbe = pathToFileURL(resolve("tools/seasonProbe.html")).href
+console.log("\nThe season page's episode row, with the remote walking right along it\n")
+
+for (const { panel, report } of await measureSeason(browser, seasonProbe, PANELS)) {
+  console.log(`${panel.name} - ${panel.width}x${panel.height}`)
+  console.log(
+    `     strip ${report.strip.clientWidth} wide, ${report.strip.scrollWidth} of cards\n` +
+      `     at the end:  episode ${report.atEnd.index} at ${report.atEnd.cardLeft}..${report.atEnd.cardRight} ` +
+      `inside ${report.strip.left}..${report.strip.right}, scrolled ${report.atEnd.scrollLeft}\n` +
+      `     back at the start: episode ${report.atStart.index} at ${report.atStart.cardLeft}..${report.atStart.cardRight}, ` +
+      `scrolled ${report.atStart.scrollLeft}`,
+  )
+  check(
+    `${panel.name}: the episode row is wider than the screen, so it has something to scroll`,
+    report.strip.scrollWidth > report.strip.clientWidth,
+    `strip ${report.strip.clientWidth} of ${report.strip.scrollWidth}`,
+  )
+  check(
+    `${panel.name}: the row stays inside the page, whatever else the block carries`,
+    report.strip.left >= report.page.left - 0.5 && report.strip.right <= report.page.right + 0.5,
+    `strip ${report.strip.left}..${report.strip.right} against the page's ${report.page.left}..${report.page.right}`,
+  )
+  check(
+    `${panel.name}: the row scrolled to follow the remote to the last episode`,
+    report.atEnd.scrollLeft > 0 && report.atEnd.index > 0,
+    `episode ${report.atEnd.index}, scrolled ${report.atEnd.scrollLeft}`,
+  )
+  check(
+    `${panel.name}: the last episode the remote reached is inside the row`,
+    report.atEnd.cardInside,
+    `card ${report.atEnd.cardLeft}..${report.atEnd.cardRight} against ${report.strip.left}..${report.strip.right}`,
+  )
+  check(
+    `${panel.name}: and focus stayed in the row rather than leaving it`,
+    report.atEnd.inRow && report.atStart.inRow,
+    `end ${report.atEnd.inRow}, start ${report.atStart.inRow}`,
+  )
+  check(
+    `${panel.name}: walking back brings the row back with it`,
+    report.atStart.index === 0 && report.atStart.cardInside && report.atStart.scrollLeft < report.atEnd.scrollLeft,
+    `episode ${report.atStart.index} at ${report.atStart.cardLeft}..${report.atStart.cardRight}, scrolled ${report.atStart.scrollLeft}`,
+  )
+  check(
+    `${panel.name}: the page itself did not move sideways`,
+    report.pageScrollLeft === 0,
+    `page scrolled ${report.pageScrollLeft}`,
+  )
+  check(
+    `${panel.name}: the season row above it follows the remote too`,
+    report.seasonStrip.scrollWidth <= report.seasonStrip.clientWidth ||
+      (report.seasonStrip.scrollLeft > 0 && report.seasonStrip.cardInside),
+    `strip ${report.seasonStrip.clientWidth} of ${report.seasonStrip.scrollWidth}, scrolled ${report.seasonStrip.scrollLeft}, card inside ${report.seasonStrip.cardInside}`,
+  )
+  console.log("")
+}
+
+console.log(failures === 0 ? "The layout checks hold at every panel size." : `${failures} check(s) failed.`)
 if (failures > 0) throw new Error(`${failures} check(s) failed`)
