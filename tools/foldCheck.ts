@@ -92,6 +92,24 @@ interface FoldReport {
   parts: { eyebrow: number; "hero-title": number; "hero-episode": number; kicker: number; overview: number; actions: number }
   artInside: boolean
   captionInside: boolean
+  /** The library page's own fold, measured in the same run: its hero, its heading and its grid. */
+  library: {
+    hero: { top: number; bottom: number; height: number }
+    head: { top: number; bottom: number }
+    count: { top: number; bottom: number }
+    tools: { top: number; bottom: number }
+    gridTop: number
+    art: { top: number; bottom: number; height: number }
+    caption: { top: number; bottom: number; height: number }
+    lefts: { hero: number; heading: number; card: number }
+    edges: { logo: number; group: number; grid: number }
+    headInside: boolean
+    countInside: boolean
+    toolsInside: boolean
+    gridTopInside: boolean
+    artInside: boolean
+    captionInside: boolean
+  }
 }
 
 /** Just enough of the DevTools protocol to set a viewport and read a value back. */
@@ -398,6 +416,52 @@ for (const { panel, report } of await measureAll(browser, probe, PANELS)) {
     `${panel.name} (${report.row}): the title, facts, synopsis and actions all fit inside the hero`,
     report.copy.top >= report.hero.top - 0.5 && report.copy.actionsBottom <= report.hero.bottom + 0.5,
     `copy ${report.copy.top}..${report.copy.actionsBottom} in hero ${report.hero.top}..${report.hero.bottom}`,
+  )
+  /* The library page's own fold, measured in the same run. A library's hero is the same `Hero`
+     component Home uses, so it has to stand at the same height - and the heading, the count, the
+     tools and the top of the grid have to be on screen under it. That is what a library page drawn
+     from `.hero`'s own 520px floor could not do: on the 844-unit canvas that floor is 62% of the
+     screen, and the heading, the count and the whole first row sat below the bottom edge. */
+  const library = report.library
+  console.log(
+    `     library: hero ${library.hero.top}..${library.hero.bottom} (${library.hero.height} tall)  ` +
+      `head ends ${library.head.bottom}  count ends ${library.count.bottom}  tools end ${library.tools.bottom}\n` +
+      `     grid starts ${library.gridTop}  art ${library.art.top}..${library.art.bottom}  caption ends ${library.caption.bottom}`,
+  )
+  check(
+    `${panel.name} (${report.row}): a library's hero is the same height as Home's`,
+    Math.abs(library.hero.height - (report.hero.bottom - report.hero.top)) <= 1,
+    `library ${library.hero.height}, home ${Math.round((report.hero.bottom - report.hero.top) * 10) / 10}`,
+  )
+  check(
+    `${panel.name} (${report.row}): and the library's heading is under it, on screen`,
+    library.headInside && library.head.top >= library.hero.bottom - 0.5,
+    `hero ends ${library.hero.bottom}, heading ${library.head.top}..${library.head.bottom} of ${report.fold}`,
+  )
+  check(
+    `${panel.name} (${report.row}): and so are the count and the sorting tools`,
+    library.countInside && library.toolsInside,
+    `count ends ${library.count.bottom}, tools end ${library.tools.bottom} of ${report.fold}`,
+  )
+  check(
+    `${panel.name} (${report.row}): the grid begins on screen, not below the bottom edge`,
+    library.gridTopInside,
+    `grid starts ${library.gridTop} of ${report.fold}`,
+  )
+  check(
+    `${panel.name} (${report.row}): and the first row's artwork is not clipped by the fold`,
+    library.artInside,
+    `art ends ${library.art.bottom} of ${report.fold}`,
+  )
+  check(
+    `${panel.name} (${report.row}): the library's hero title, its heading and its first card share a left edge`,
+    Math.abs(library.lefts.hero - library.lefts.heading) <= 1 && Math.abs(library.lefts.heading - library.lefts.card) <= 1,
+    `hero ${library.lefts.hero}, heading ${library.lefts.heading}, card ${library.lefts.card}`,
+  )
+  check(
+    `${panel.name} (${report.row}): and the header lines up with the library's content too`,
+    Math.abs(library.edges.logo - library.lefts.hero) <= 1 && Math.abs(library.edges.group - library.edges.grid) <= 1,
+    `logo ${library.edges.logo}, hero ${library.lefts.hero}, group ends ${library.edges.group}, grid content ends ${library.edges.grid}`,
   )
   console.log("")
 }

@@ -79,6 +79,19 @@ function ownBackdropUrl(item: Item, maxWidth: number) {
   return null
 }
 
+/**
+ * The item's own backdrop, and nothing else: no parent's artwork, no poster.
+ *
+ * `backdropSrc` deliberately borrows the artwork of the item that holds one - an episode's series,
+ * an album's artist - because a still belongs to the show. A film is not like that: its parent is
+ * the library it sits in, and the image a library holds for itself is not this film's artwork.
+ * Painting it behind a film puts a library's own banner - very often a wordmark of the library's
+ * name - under a film's title, which reads as a splash screen rather than as the film on screen.
+ */
+export function ownBackdropSrc(item: Item, maxWidth: number = 1920) {
+  return ownBackdropUrl(item, maxWidth)
+}
+
 /** The backdrop of the item that holds one for this one, such as a series. */
 function parentBackdropUrl(item: Item, maxWidth: number) {
   if (item.ParentBackdropItemId && item.ParentBackdropImageTags?.[0]) {

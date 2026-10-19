@@ -918,13 +918,19 @@ html:not(.remote) .nav:hover .nav-label {
    below it, and the share is what the first row of posters needs. `.hero`'s own 520px floor was
    written for a browser window, where the canvas *is* the window; on a television the canvas is
    1500x844 units, so that floor was 62% of the screen and the first row - artwork and caption
-   alike - was pushed off the bottom edge. The floor is lifted here, and only here.
+   alike - was pushed off the bottom edge. The floor is lifted here.
+
+   The rule is written for the shared `Hero` itself rather than for one page. Home's rotating hero
+   and a library's rotating hero are the same component, and a library page used to fall back to
+   that 520px floor - the same 62% of the screen - so its heading, its count and its grid were
+   pushed off the bottom edge. Both pages now stand at one share of the television's height, with
+   the same copy, the same left edge and the same one-row actions.
 
    Every line the copy draws is held to a fixed size instead - the title to one box, the eyebrow,
    the episode's name, the facts and the synopsis to one or two lines, the actions to one row -
    so the composition is the same for a film with a logo, a series named in type and an episode
    whose name is a paragraph long. */
-.home .hero.stage-copy {
+.hero.stage-copy {
   height: calc(var(--app-height, 100dvh) * 0.42);
   /* Never less than the copy itself needs - the title's box, the facts and the synopsis at two
      lines each, and one row of actions. On a 16:9 panel the share above is already taller than
@@ -957,26 +963,27 @@ html:not(.remote) .nav:hover .nav-label {
 /* The copy fills the hero and stacks up from its bottom edge, so what a title does not use is
    empty artwork above it rather than a shorter hero. Its own gap and padding are what make it fit
    inside that share: they are the two things that can give without touching the size of the type. */
-.home .hero .hero-copy {
+.hero.stage-copy .hero-copy {
   height: 100%;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  /* The copy's left edge is the home screen's content inset, so the title, the facts and the
-     actions begin where the heading and the first poster below them begin. */
+  /* The copy's left edge is the content inset the page below it uses, so the title, the facts and
+     the actions begin where a heading and the first poster under them begin - on Home's rows and
+     on a library's grid alike. */
   padding: 16px var(--strip-pad);
   gap: 6px;
   max-width: 720px;
 }
 /* The title's own box: one height for a logo, a name in type and an episode's name alike. */
-.home .hero .hero-title {
+.hero.stage-copy .hero-title {
   height: 92px;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
   min-height: 0;
 }
-.home .hero .hero-title h1 {
+.hero.stage-copy .hero-title h1 {
   font-size: clamp(26px, 3.2vw, 44px);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -984,8 +991,8 @@ html:not(.remote) .nav:hover .nav-label {
   overflow: hidden;
   min-height: 0;
 }
-.home .hero .hero-title .logo-title { max-height: 92px; }
-.home .hero .eyebrow {
+.hero.stage-copy .hero-title .logo-title { max-height: 92px; }
+.hero.stage-copy .eyebrow {
   margin: 0;
   font-size: 13px;
   display: -webkit-box;
@@ -993,7 +1000,7 @@ html:not(.remote) .nav:hover .nav-label {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.home .hero .hero-episode {
+.hero.stage-copy .hero-episode {
   font-size: 20px;
   min-height: 1.45em;
   display: -webkit-box;
@@ -1001,7 +1008,7 @@ html:not(.remote) .nav:hover .nav-label {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.home .hero .kicker {
+.hero.stage-copy .kicker {
   font-size: 17px;
   min-height: 2.9em;
   display: -webkit-box;
@@ -1009,13 +1016,13 @@ html:not(.remote) .nav:hover .nav-label {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.home .hero .overview {
+.hero.stage-copy .overview {
   font-size: 17px;
   -webkit-line-clamp: 2;
   min-height: 2.9em;
 }
 /* One row of actions, whatever the labels are: a second row would be a taller copy. */
-.home .hero .actions { flex-wrap: nowrap; }
+.hero.stage-copy .actions { flex-wrap: nowrap; }
 .hero-copy, .detail-copy { position: relative; z-index: 1; }
 /* One copy at a time: the incoming title block fades in only after the outgoing
    one has left the tree, so no second set of text or buttons is ever painted. */
@@ -1159,7 +1166,7 @@ html:not(.remote) .nav:hover .nav-label {
 .row.size-small .card.wide { width: 240px; }
 .row.size-medium .card.wide { width: 300px; }
 .row.size-large .card.wide { width: 420px; }
-.home .hero .actions .btn,
+.hero.stage-copy .actions .btn,
 .hero .actions .btn,
 .detail .actions .btn {
   min-height: 48px;
@@ -1170,9 +1177,9 @@ html:not(.remote) .nav:hover .nav-label {
    than a glow: the app's own cyan, one weight, and nothing that competes with the picture
    behind it. The primary action keeps its white ring, so the button the viewer is most
    likely to press reads as the same one it is everywhere else. */
-.home .hero .actions .btn:focus,
-.home .hero .actions .btn:focus-visible,
-.home .hero .actions .btn.dpad-focus,
+.hero.stage-copy .actions .btn:focus,
+.hero.stage-copy .actions .btn:focus-visible,
+.hero.stage-copy .actions .btn.dpad-focus,
 .hero .actions .btn:focus,
 .hero .actions .btn:focus-visible,
 .hero .actions .btn.dpad-focus,
@@ -1184,9 +1191,9 @@ html:not(.remote) .nav:hover .nav-label {
   box-shadow: 0 14px 30px rgba(0, 0, 0, 0.45);
   filter: brightness(1.12);
 }
-.home .hero .actions .btn-primary:focus,
-.home .hero .actions .btn-primary:focus-visible,
-.home .hero .actions .btn-primary.dpad-focus,
+.hero.stage-copy .actions .btn-primary:focus,
+.hero.stage-copy .actions .btn-primary:focus-visible,
+.hero.stage-copy .actions .btn-primary.dpad-focus,
 .hero .actions .btn-primary:focus,
 .hero .actions .btn-primary:focus-visible,
 .hero .actions .btn-primary.dpad-focus,
@@ -1666,6 +1673,18 @@ html:not(.remote) .nav:hover .nav-label {
 .library-head { align-items: center; margin: 0 0 12px; }
 .library-head h1 { font-size: 32px; }
 .library-head .eyebrow { margin: 0; }
+/* What a library page stacks under its hero begins on the same left edge the hero's copy begins
+   on. The hero draws that inset itself - its copy is padded by `--strip-pad` inside the page's own
+   inset - so the blocks under it take the same one here, the way a row's heading and its strip do
+   on Home. Without it a library's heading, its count, its tools and its whole grid began at the
+   page's own edge: `--strip-pad` to the left of the hero title above them, of the first card in
+   the grid and of the header's logo. */
+.library-head,
+.library-page .grid,
+.library-page .card-board,
+.library-page .letter-row {
+  padding-inline: var(--strip-pad);
+}
 .count-line { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
 .library-icons { display: flex; gap: 6px; }
 .tool { position: relative; }

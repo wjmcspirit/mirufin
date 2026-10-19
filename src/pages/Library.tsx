@@ -9,7 +9,7 @@ import { Loading, Problem } from "../components/Status"
 import { usePinnedArt, useArtMotion, useHeroStage, useStage } from "../components/Stage"
 import * as api from "../lib/api"
 import { episodeCode, heroPlayTarget, libraryItemTypes, mergeAddedSeries, recentlyAddedSeries, seriesFallback, seriesFromAddedEpisodes, addedSeriesNote, type AddedSeries, type RecentSeries } from "../lib/format"
-import { backdropSrc, loadImage, logoSrc, primarySrc, warmImage } from "../lib/images"
+import { backdropSrc, loadImage, logoSrc, ownBackdropSrc, primarySrc, warmImage } from "../lib/images"
 import { DEFAULT_LIBRARY_VIEW, EPISODE_SORT, LIBRARY_FILTERS, librarySorts, savedLibraryView } from "../lib/libraryView"
 import { isBackKey, noteBackKeydown, ownArrows, ownBack, placeFocus } from "../lib/remote"
 import { libraryToolNeighbor, placeToolMenu, type LibraryTool } from "../lib/toolMenu"
@@ -52,7 +52,7 @@ function movieHeroDeck(list: Item[]) {
   for (const entry of list) {
     if (entry.Type !== "Movie" || seen.has(entry.Id)) continue
     seen.add(entry.Id)
-    if (backdropSrc(entry)) framed.push(entry)
+    if (ownBackdropSrc(entry)) framed.push(entry)
     else rest.push(entry)
   }
   const deck = shuffle(framed)
@@ -63,9 +63,9 @@ function movieHeroDeck(list: Item[]) {
   return deck.slice(0, MOVIE_HERO_COUNT)
 }
 
-/** The artwork the stage paints for a hero movie: its own backdrop, then its poster. */
+/** The artwork the stage paints for a hero movie: its own backdrop, then its own poster. */
 function movieHeroArt(item: Item) {
-  return backdropSrc(item) || primarySrc(item, 1600)
+  return ownBackdropSrc(item) || primarySrc(item, 1600)
 }
 
 function backdropSlides(list: Item[]) {
@@ -729,7 +729,11 @@ export function LibraryPage() {
     Boolean(collections && settled),
     collections && settled ? items.filter((item) => item.Type === "BoxSet").slice(0, PAGE) : [],
   )
-  const spotlight = items.find((entry) => backdropSrc(entry)) || library
+  /* The artwork the stage paints is the film on screen and nothing else. The library's own image is
+     not a film's artwork, so the fallback is the first film in the grid that owns a backdrop - and
+     when no film in the grid owns one, the stage keeps its atmosphere rather than borrowing the
+     library's banner. */
+  const spotlight = items.find((entry) => ownBackdropSrc(entry)) || null
   const pinned = movies
     ? letter
       ? shownMovie.current
@@ -749,7 +753,7 @@ export function LibraryPage() {
   useHeroStage(movies)
   // A hero movie without a backdrop of its own borrows the stage's poster fallback,
   // exactly as an A-Z selection already does.
-  const heroPosterArt = Boolean(movies && !letter && pinned && !backdropSrc(pinned))
+  const heroPosterArt = Boolean(movies && !letter && pinned && !ownBackdropSrc(pinned))
   usePinnedArt(pinned, Boolean(letter && (movies || shows)) || heroPosterArt, Boolean(collectionArt))
 
   const live = library?.CollectionType === "livetv"

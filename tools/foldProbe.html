@@ -24,7 +24,7 @@
       Run it through `npm run foldcheck`, which drives it in a headless browser at 1080p, 1440p and
       4K. Opened by hand it measures whatever window it is given.
     -->
-    <div class="shell">
+    <div class="shell" id="home-shell">
       <header class="side">
         <div class="brand" role="img" aria-label="Mirufin">
           <img class="brand-logo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='34'%3E%3C/svg%3E" alt="" />
@@ -102,6 +102,99 @@
               </a>
             </div>
           </section>
+        </div>
+      </div>
+    </div>
+    <!--
+      The same shell with a library's page in it: the library's rotating hero, then what the
+      library states about itself - its eyebrow, its name, its count and its tools - and the grid
+      under them.
+
+      A library page used to draw that hero from the base `.hero`, whose 520px floor is 62% of the
+      844-unit canvas, so the heading, the count and the grid sat below the bottom edge. The
+      measurement below says what has to be true instead: the hero is Home's height, the heading,
+      the count and the tools are above the fold, and so is the first row's artwork.
+    -->
+    <div class="shell" id="library-shell" style="display: none">
+      <header class="side">
+        <div class="brand" role="img" aria-label="Mirufin">
+          <img class="brand-logo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='34'%3E%3C/svg%3E" alt="" />
+        </div>
+        <nav class="side-nav" aria-label="Main">
+          <button class="nav"><svg viewBox="0 0 24 24"></svg></button>
+          <button class="nav"><svg viewBox="0 0 24 24"></svg></button>
+          <button class="nav"><svg viewBox="0 0 24 24"></svg></button>
+          <button class="nav"><svg viewBox="0 0 24 24"></svg></button>
+          <button class="nav"><svg viewBox="0 0 24 24"></svg></button>
+        </nav>
+        <div class="side-end">
+          <time class="clock">9:41</time>
+          <p class="account">
+            <span class="account-mark" aria-hidden="true">W</span>
+            <span class="account-name">Viewer</span>
+          </p>
+        </div>
+      </header>
+      <div class="main">
+        <div class="library-page">
+          <div class="library-body">
+            <div class="library-hero">
+              <section class="hero stage-copy">
+                <div class="hero-copy">
+                  <p class="eyebrow"></p>
+                  <div class="hero-title"><h1>Underworld Awakening</h1></div>
+                  <p class="hero-episode"></p>
+                  <p class="kicker">2012 · 1h 28m · R · 6.3 ★ · Rotten 25% Critics · Action, Fantasy, Horror</p>
+                  <p class="overview clamp">
+                    Having escaped years of imprisonment, vampire warrioress Selene finds herself in a
+                    changed world where humans have discovered the existence of both Vampire and Lycan.
+                  </p>
+                  <div class="actions">
+                    <a class="btn btn-primary" href="#">Play</a>
+                    <a class="btn" href="#">Details</a>
+                    <button class="btn icon-btn" type="button">Favorite</button>
+                    <button class="btn" type="button">Trailers</button>
+                  </div>
+                </div>
+              </section>
+            </div>
+            <header class="page-head library-head">
+              <div>
+                <p class="eyebrow">Library</p>
+                <h1>Movies</h1>
+                <p class="count-line">1,156 titles</p>
+              </div>
+              <div class="library-icons">
+                <button class="tool-btn" type="button">V</button>
+                <button class="tool-btn" type="button">S</button>
+                <button class="tool-btn" type="button">F</button>
+                <button class="tool-btn tool-az" type="button">A–Z</button>
+              </div>
+            </header>
+            <div class="grid poster size-medium" id="library-grid">
+              <a class="card poster labeled" href="#">
+                <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='252'%3E%3C/svg%3E" alt="" /></span>
+                <span class="card-copy">
+                  <span class="card-title">The Extremely Long Film Name It Belongs To</span>
+                  <span class="card-sub">2012  ·  1h 28m  ·  R</span>
+                </span>
+              </a>
+              <a class="card poster labeled" href="#">
+                <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='252'%3E%3C/svg%3E" alt="" /></span>
+                <span class="card-copy">
+                  <span class="card-title">A Second Film</span>
+                  <span class="card-sub">2003  ·  2h 6m</span>
+                </span>
+              </a>
+              <a class="card poster labeled" href="#">
+                <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='252'%3E%3C/svg%3E" alt="" /></span>
+                <span class="card-copy">
+                  <span class="card-title">A Third Film</span>
+                  <span class="card-sub">1999  ·  1h 40m</span>
+                </span>
+              </a>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -223,6 +316,58 @@
           artInside: art.bottom <= appHeight + 0.5,
           captionInside: caption.bottom <= appHeight + 0.5,
         }
+        // The library page, measured on its own: the Home shell is taken out of the layout so the
+        // library's page begins at the top of the screen, exactly as it does when it is opened.
+        report.library = (function () {
+          var homeShell = document.getElementById("home-shell")
+          var libShell = document.getElementById("library-shell")
+          homeShell.style.display = "none"
+          libShell.style.display = "grid"
+
+          var hero = units(libShell.querySelector(".hero"))
+          var head = units(libShell.querySelector(".library-head"))
+          var count = units(libShell.querySelector(".count-line"))
+          var tools = units(libShell.querySelector(".library-icons"))
+          var grid = libShell.querySelector("#library-grid")
+          var gridBox = units(grid)
+          var first = grid.querySelector(".card")
+          var art = units(first.querySelector(".card-art"))
+          var caption = units(first.querySelector(".card-copy"))
+          var pad = parseFloat(getComputedStyle(grid).paddingRight)
+
+          var out = {
+            hero: { top: round(hero.top), bottom: round(hero.bottom), height: round(hero.height) },
+            head: { top: round(head.top), bottom: round(head.bottom) },
+            count: { top: round(count.top), bottom: round(count.bottom) },
+            tools: { top: round(tools.top), bottom: round(tools.bottom) },
+            gridTop: round(gridBox.top),
+            art: { top: round(art.top), bottom: round(art.bottom), height: round(art.height) },
+            caption: { top: round(caption.top), bottom: round(caption.bottom), height: round(caption.height) },
+            // The library's own one left edge: the hero's title, the heading under it and the first
+            // card in the grid are three different boxes, and they have to begin in the same place.
+            lefts: {
+              hero: round(units(libShell.querySelector(".hero-title h1")).left),
+              heading: round(units(libShell.querySelector(".library-head h1")).left),
+              card: round(units(first).left),
+            },
+            // The header's outer edges against the grid's content edge, as on Home.
+            edges: {
+              logo: round(units(libShell.querySelector(".brand-logo")).left),
+              group: round(units(libShell.querySelector(".side-end")).right),
+              grid: round(gridBox.right - pad),
+            },
+            headInside: head.bottom <= appHeight + 0.5,
+            countInside: count.bottom <= appHeight + 0.5,
+            toolsInside: tools.bottom <= appHeight + 0.5,
+            gridTopInside: gridBox.top <= appHeight + 0.5,
+            artInside: art.bottom <= appHeight + 0.5,
+            captionInside: caption.bottom <= appHeight + 0.5,
+          }
+
+          libShell.style.display = "none"
+          homeShell.style.display = ""
+          return out
+        })()
         document.getElementById("probe").textContent = JSON.stringify(report)
       })()
     </script>

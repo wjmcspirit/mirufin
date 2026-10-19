@@ -351,8 +351,8 @@ function rule(selector: string) {
   return css.slice(start, css.indexOf("}", start))
 }
 
-const hero = rule(".home .hero.stage-copy")
-check("Home's hero declares a height, not a minimum, so the rows below it cannot move", hero.includes("height: calc(var(--app-height"), hero.trim())
+const hero = rule(".hero.stage-copy")
+check("the shared hero declares a height, not a minimum, so the rows below it cannot move", hero.includes("height: calc(var(--app-height"), hero.trim())
 check("and that height is a share of the television's own, so 4K draws the same picture", /\*\s*[\d.]+\)/.test(hero), hero.trim())
 /* The floor is the reason the fold broke: `.hero` itself carries a 520px minimum, which is right
    for a browser window - where the canvas is the window - but on a television's 844-unit canvas
@@ -387,8 +387,8 @@ check(
 )
 check(
   "the hero's copy begins at it",
-  rule(".home .hero .hero-copy").includes("padding: 16px var(--strip-pad)"),
-  rule(".home .hero .hero-copy").trim(),
+  rule(".hero.stage-copy .hero-copy").includes("padding: 16px var(--strip-pad)"),
+  rule(".hero.stage-copy .hero-copy").trim(),
 )
 check("and so does a section heading", rule(".home .row-head").includes("padding-inline: var(--strip-pad)"), rule(".home .row-head").trim())
 check("and the strip under that heading", rule(".home .row .scroller").includes("padding-inline: var(--strip-pad)"), rule(".home .row .scroller").trim())
@@ -465,15 +465,114 @@ check(
   !/\.nav \{/.test(wide) && !/\.brand-logo \{/.test(wide) && !/\.nav \{/.test(wider) && !/\.brand-logo \{/.test(wider),
   "the rail's own sizes are set once, at the top of the stylesheet",
 )
-check("the copy stacks up from the hero's bottom edge", rule(".home .hero .hero-copy").includes("justify-content: flex-end"))
-check("the title sits in one box of one height, whatever it holds", rule(".home .hero .hero-title").includes("height: 92px"))
-check("a name in type is held to two lines in it", rule(".home .hero .hero-title h1").includes("-webkit-line-clamp: 2"))
-check("a logo is capped to the same box", rule(".home .hero .hero-title .logo-title").includes("max-height: 92px"))
-check("the eyebrow is held to one line", rule(".home .hero .eyebrow").includes("-webkit-line-clamp: 1"))
-check("the episode's own name keeps its place", rule(".home .hero .hero-episode").includes("min-height: 1.45em"))
-check("the facts keep theirs, over two lines at most", rule(".home .hero .kicker").includes("min-height: 2.9em"))
-check("and so does the synopsis", rule(".home .hero .overview").includes("min-height: 2.9em"))
-check("the actions stay on one row, whatever their labels are", rule(".home .hero .actions").includes("flex-wrap: nowrap"))
+check("the copy stacks up from the hero's bottom edge", rule(".hero.stage-copy .hero-copy").includes("justify-content: flex-end"))
+check("the title sits in one box of one height, whatever it holds", rule(".hero.stage-copy .hero-title").includes("height: 92px"))
+check("a name in type is held to two lines in it", rule(".hero.stage-copy .hero-title h1").includes("-webkit-line-clamp: 2"))
+check("a logo is capped to the same box", rule(".hero.stage-copy .hero-title .logo-title").includes("max-height: 92px"))
+check("the eyebrow is held to one line", rule(".hero.stage-copy .eyebrow").includes("-webkit-line-clamp: 1"))
+check("the episode's own name keeps its place", rule(".hero.stage-copy .hero-episode").includes("min-height: 1.45em"))
+check("the facts keep theirs, over two lines at most", rule(".hero.stage-copy .kicker").includes("min-height: 2.9em"))
+check("and so does the synopsis", rule(".hero.stage-copy .overview").includes("min-height: 2.9em"))
+check("the actions stay on one row, whatever their labels are", rule(".hero.stage-copy .actions").includes("flex-wrap: nowrap"))
+
+/* The hero is one component - `Hero` - and it draws itself as `.hero.stage-copy` wherever it is
+   used: Home's rotating hero, and the rotating hero at the top of a library. The composition above
+   is therefore written for the component rather than for Home, and nothing may put it back behind
+   a `.home` scope: that is exactly what left a library's hero on `.hero`'s own 520px floor - 62%
+   of the television's 844-unit canvas - with its heading, its count and its grid below the bottom
+   edge. `tools/foldCheck.ts` measures the library's own fold in a browser; this is the wiring. */
+check(
+  "the hero's composition is written for the shared component, not for one page",
+  !/\n\.home \.hero/.test(css),
+  "a .home .hero rule would leave every other page on the base hero",
+)
+const libraryPage = readFileSync("src/pages/Library.tsx", "utf8")
+check(
+  "and a library's hero is that same component, inside the library's own hero slot",
+  /<div className="library-hero">\s*<Hero/.test(libraryPage),
+  "Library.tsx",
+)
+check(
+  "and the library's hero slot adds no height of its own to it",
+  !rule(".library-hero").includes("min-height"),
+  rule(".library-hero").trim(),
+)
+
+/* A library's rotating hero: the same behaviour Home's hero has, over the films a library holds.
+   The deck is a random sample of that library, taken from Jellyfin's own random order, so a visit
+   does not always open on the same film; it is de-duplicated by id, films with their own backdrop
+   come first, and it is walked in order, so a film cannot come round again until the deck has been
+   through. What is checked here is the wiring - the sampling itself is Jellyfin's. */
+const api = readFileSync("src/lib/api.ts", "utf8")
+check(
+  "a library's hero deck is a random sample of that library's films",
+  /api\s*\.randomLibraryMovies\(userId, id, MOVIE_HERO_POOL/.test(libraryPage) &&
+    /SortBy: "Random"/.test(api) &&
+    /IncludeItemTypes: "Movie"/.test(api),
+  "Library.tsx and api.ts",
+)
+check(
+  "and one film cannot fill it: it is de-duplicated by id and capped",
+  /entry\.Type !== "Movie" \|\| seen\.has\(entry\.Id\)/.test(libraryPage) && /deck\.slice\(0, MOVIE_HERO_COUNT\)/.test(libraryPage),
+  "Library.tsx",
+)
+check("and films that own a backdrop are drawn first", /if \(ownBackdropSrc\(entry\)\) framed\.push\(entry\)/.test(libraryPage), "Library.tsx")
+check(
+  "and it is walked in order, so a film is not shown twice before the deck has been through",
+  /heroPool\[\(heroSpot \+ 1\) % heroPool\.length\]/.test(libraryPage),
+  "Library.tsx",
+)
+/* The artwork, the copy and the actions are the one film on screen: the stage is pinned to the
+   hero's own item and the `Hero` is handed that same item, so a rotation can never show one film's
+   backdrop under another film's name, and every action points at the film the copy names. */
+check(
+  "the artwork, the copy and the actions are all the one film on screen",
+  /const featured = cardMovie \|\| heroItem/.test(libraryPage) &&
+    /heroItem \|\| spotlight/.test(libraryPage) &&
+    /usePinnedArt\(pinned/.test(libraryPage) &&
+    /<Hero\s+item=\{movieHero\}/.test(libraryPage),
+  "Library.tsx",
+)
+/* And that one film's artwork is its own. `backdropSrc` borrows a parent's artwork on purpose - an
+   episode's series holds its still - but a film's parent is the library it sits in, and a library's
+   own image is very often a wordmark of its name. Painting that behind a film put a "Movies" banner
+   under the film's title: the splash the viewer saw instead of a media library. */
+const images = readFileSync("src/lib/images.ts", "utf8")
+check(
+  "and the artwork a library's hero paints is the film's own, never the library's banner",
+  /if \(ownBackdropSrc\(entry\)\) framed\.push\(entry\)/.test(libraryPage) &&
+    /return ownBackdropSrc\(item\) \|\| primarySrc\(item, 1600\)/.test(libraryPage) &&
+    /const spotlight = items\.find\(\(entry\) => ownBackdropSrc\(entry\)\) \|\| null/.test(libraryPage) &&
+    /const heroPosterArt = Boolean\(movies && !letter && pinned && !ownBackdropSrc\(pinned\)\)/.test(libraryPage),
+  "Library.tsx",
+)
+check(
+  "and that helper takes the item's own backdrop and no parent's",
+  /export function ownBackdropSrc\(item: Item, maxWidth: number = 1920\) \{\s*\n\s*return ownBackdropUrl\(item, maxWidth\)/.test(images),
+  "images.ts",
+)
+/* A calm beat, and one the viewer's own use of the screen holds: the same 15s Home's hero waits
+   between titles, paused while the remote rests on the hero or a trailer is open, and stopped
+   outright for a viewer who asked for less motion or while the app is in the background. */
+const homePage = readFileSync("src/pages/Home.tsx", "utf8")
+const stage = readFileSync("src/components/Stage.tsx", "utf8")
+check(
+  "a library's hero waits as long as Home's does between films",
+  /const MOVIE_HERO_DWELL = 15000/.test(libraryPage) && /const HERO_ROTATE_MS = 15_000/.test(homePage),
+  "Library.tsx and Home.tsx",
+)
+check(
+  "and the viewer's own use of the screen holds it still",
+  /const heroPaused = heroHold \|\| trailerHold/.test(libraryPage) && /!heroPaused && !cardMovie && heroMoves/.test(libraryPage),
+  "Library.tsx",
+)
+check(
+  "and asking for less motion, or leaving the app, stops it outright",
+  /const heroMoves = useArtMotion\(\)/.test(libraryPage) &&
+    /visibilitychange/.test(stage) &&
+    /prefers-reduced-motion: reduce/.test(stage),
+  "Library.tsx and Stage.tsx",
+)
 
 console.log(failures === 0 ? "\nAll home checks passed." : `\n${failures} check(s) failed.`)
 if (failures > 0) throw new Error(`${failures} check(s) failed`)
