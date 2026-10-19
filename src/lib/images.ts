@@ -92,6 +92,18 @@ export function ownBackdropSrc(item: Item, maxWidth: number = 1920) {
   return ownBackdropUrl(item, maxWidth)
 }
 
+/**
+ * The artwork a hero paints for the title it is featuring: the title's own backdrop, and its own
+ * poster when it has none.
+ *
+ * Never another title's artwork and never a library's: the hero names one title and shows that
+ * title, so a series with no backdrop of its own shows its poster rather than the picture of the
+ * shelf it stands on.
+ */
+export function heroArt(item: Item) {
+  return ownBackdropSrc(item) || primarySrc(item, 1600)
+}
+
 /** The backdrop of the item that holds one for this one, such as a series. */
 function parentBackdropUrl(item: Item, maxWidth: number) {
   if (item.ParentBackdropItemId && item.ParentBackdropImageTags?.[0]) {

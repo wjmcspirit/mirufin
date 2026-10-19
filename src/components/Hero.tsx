@@ -14,6 +14,7 @@ interface HeroFace {
   playHref?: string
   playLabel?: string
   detail?: string
+  eyebrow?: string
 }
 
 export function Hero({
@@ -24,6 +25,7 @@ export function Hero({
   playHref,
   playLabel,
   detail,
+  eyebrow,
   focused = false,
 }: {
   item: Item
@@ -33,9 +35,11 @@ export function Hero({
   playHref?: string
   playLabel?: string
   detail?: string
+  /** What the line above the title says, when the caller knows better than the item's own type. */
+  eyebrow?: string
   focused?: boolean
 }) {
-  const face: HeroFace = { item, presentation, playHref, playLabel, detail }
+  const face: HeroFace = { item, presentation, playHref, playLabel, detail, eyebrow }
 
   return (
     <section
@@ -61,7 +65,7 @@ export function Hero({
 function HeroCopy({ face, onTrailer }: { face: HeroFace; onTrailer: (open: boolean) => void }) {
   const { prefs } = usePrefs()
   const { userId } = useSession()
-  const { item, presentation, playHref, playLabel, detail } = face
+  const { item, presentation, playHref, playLabel, detail, eyebrow: givenEyebrow } = face
   // The favorite is the copy's own state, the way the trailer button's is: this block is
   // keyed on the item, so a hero that moves to the next title starts from whatever the
   // server says about that title, and a press that fails puts the button back where it was.
@@ -81,13 +85,15 @@ function HeroCopy({ face, onTrailer }: { face: HeroFace; onTrailer: (open: boole
   // What the three lines under the title say. Each is always drawn, even when the server sent
   // nothing for it: Home's hero reserves their height, so the copy cannot change size between one
   // featured title and the next. See `.home .hero` in the stylesheet.
-  const eyebrow = episode
-    ? freshEpisode
-      ? ""
-      : [item.SeriesName, episodeCode(item)].filter(Boolean).join(" · ")
-    : item.Type && item.Type !== "Movie"
-      ? labelFor(item.Type)
-      : ""
+  const eyebrow =
+    givenEyebrow ??
+    (episode
+      ? freshEpisode
+        ? ""
+        : [item.SeriesName, episodeCode(item)].filter(Boolean).join(" · ")
+      : item.Type && item.Type !== "Movie"
+        ? labelFor(item.Type)
+        : "")
   const under = detail || (episode ? (freshEpisode ? episodeLine : item.Name) : "")
   const kicker = [metaLine(item, prefs.ratings), item.Genres?.slice(0, 3).join(", ")].filter(Boolean).join("   ·   ")
 
@@ -122,8 +128,11 @@ function HeroCopy({ face, onTrailer }: { face: HeroFace; onTrailer: (open: boole
           <PlayIcon />
           {label}
         </Link>
-        {(!series || playHref) && (
-          <Link className="btn" to={series ? `/item/${item.Id}` : detailsTo}>
+        {/* Details is offered unless the primary action already opens it: a series' own button
+            opens the series, so a second one saying the same thing is one stop too many for the
+            remote. */}
+        {href !== detailsTo && (
+          <Link className="btn" to={detailsTo}>
             <InfoIcon size={16} />
             Details
           </Link>

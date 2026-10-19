@@ -1,7 +1,7 @@
 {
   "name": "mirufin",
   "private": true,
-  "version": "0.1.58",
+  "version": "0.1.59",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,6 +14,7 @@
     "personcheck": "esbuild tools/personCheck.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.mirufin/personCheck.mjs && node node_modules/.mirufin/personCheck.mjs",
     "discoverycheck": "esbuild tools/discoveryCheck.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.mirufin/discoveryCheck.mjs && node node_modules/.mirufin/discoveryCheck.mjs",
     "homecheck": "esbuild tools/homeCheck.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.mirufin/homeCheck.mjs && node node_modules/.mirufin/homeCheck.mjs",
+    "herocheck": "esbuild tools/heroCheck.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.mirufin/heroCheck.mjs && node node_modules/.mirufin/heroCheck.mjs",
     "playbackcheck": "esbuild tools/playbackCheck.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.mirufin/playbackCheck.mjs && node node_modules/.mirufin/playbackCheck.mjs",
     "sessioncheck": "esbuild tools/sessionCheck.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.mirufin/sessionCheck.mjs && node node_modules/.mirufin/sessionCheck.mjs",
     "foldcheck": "esbuild tools/foldCheck.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.mirufin/foldCheck.mjs && node node_modules/.mirufin/foldCheck.mjs",

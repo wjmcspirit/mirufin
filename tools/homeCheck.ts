@@ -543,7 +543,7 @@ check(
   /if \(ownBackdropSrc\(entry\)\) framed\.push\(entry\)/.test(libraryPage) &&
     /return ownBackdropSrc\(item\) \|\| primarySrc\(item, 1600\)/.test(libraryPage) &&
     /const spotlight = items\.find\(\(entry\) => ownBackdropSrc\(entry\)\) \|\| null/.test(libraryPage) &&
-    /const heroPosterArt = Boolean\(movies && !letter && pinned && !ownBackdropSrc\(pinned\)\)/.test(libraryPage),
+    /const heroPosterArt = Boolean\(\(movies \|\| shows \|\| collections\) && !letter && pinned && !ownBackdropSrc\(pinned\)\)/.test(libraryPage),
   "Library.tsx",
 )
 check(

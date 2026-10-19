@@ -1680,11 +1680,18 @@ html:not(.remote) .nav:hover .nav-label {
    page's own edge: `--strip-pad` to the left of the hero title above them, of the first card in
    the grid and of the header's logo. */
 .library-head,
+.library-page .row-head,
 .library-page .grid,
 .library-page .card-board,
-.library-page .letter-row {
+.library-page .letter-row,
+.favorites-head,
+.favorites-page .card-board {
   padding-inline: var(--strip-pad);
 }
+/* The heading, its count and its filters sit close to the grid under them: the page has a hero, a
+   heading and a row of posters to fit on one screen, so the space between them is what it needs
+   and no more. */
+.favorites-head { align-items: center; margin: 0 0 12px; }
 .count-line { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
 .library-icons { display: flex; gap: 6px; }
 .tool { position: relative; }
@@ -1765,6 +1772,41 @@ html:not(.remote) .nav:hover .nav-label {
   border-radius: 14px;
   background: rgba(9, 9, 11, 0.62);
 }
+/* A row of filters is the same pill bar a letter row is, with room for a word rather than a
+   letter. It sits under the heading it narrows, on the same content edge, and the chosen one is
+   marked the way every pressed control in the app is - so the remote can see which filter is on
+   from the couch. */
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin: 0;
+  padding: 6px;
+  border-radius: 14px;
+  background: rgba(9, 9, 11, 0.62);
+}
+.filter-row button {
+  border: 0;
+  background: transparent;
+  color: #f2f5fb;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 8px;
+}
+.filter-row button:hover,
+.filter-row button:focus,
+.filter-row button:focus-visible,
+.filter-row button.dpad-focus {
+  color: #fff;
+  background: rgba(62, 200, 255, 0.34);
+  outline: none;
+  transform: none;
+  box-shadow: inset 0 0 0 1px rgba(234, 248, 255, 0.7);
+}
+.filter-row button[aria-pressed="true"] { color: var(--accent); background: rgba(62, 200, 255, 0.12); }
 .letter-row button {
   border: 0;
   background: transparent;

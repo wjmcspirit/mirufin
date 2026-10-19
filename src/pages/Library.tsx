@@ -3,13 +3,16 @@ import { createPortal } from "react-dom"
 import { useParams, useSearchParams } from "react-router-dom"
 import { PosterCard } from "../components/Cards"
 import { Hero } from "../components/Hero"
+import { useHeroRotation } from "../components/HeroDeck"
 import { Row } from "../components/Row"
 import { FilterIcon, SortIcon, ViewIcon } from "../components/Icons"
 import { Loading, Problem } from "../components/Status"
 import { usePinnedArt, useArtMotion, useHeroStage, useStage } from "../components/Stage"
 import * as api from "../lib/api"
+import { collectionSizeLabel } from "../lib/collections"
 import { episodeCode, heroPlayTarget, libraryItemTypes, mergeAddedSeries, recentlyAddedSeries, seriesFallback, seriesFromAddedEpisodes, addedSeriesNote, type AddedSeries, type RecentSeries } from "../lib/format"
 import { backdropSrc, loadImage, logoSrc, ownBackdropSrc, primarySrc, warmImage } from "../lib/images"
+import { collectionHeroDeck, recentlyAddedCollections, showHeroDeck } from "../lib/heroDeck"
 import { DEFAULT_LIBRARY_VIEW, EPISODE_SORT, LIBRARY_FILTERS, librarySorts, savedLibraryView } from "../lib/libraryView"
 import { isBackKey, noteBackKeydown, ownArrows, ownBack, placeFocus } from "../lib/remote"
 import { libraryToolNeighbor, placeToolMenu, type LibraryTool } from "../lib/toolMenu"
@@ -668,54 +671,40 @@ export function LibraryPage() {
   }, [heroCycling, heroNext])
 
   const addedMode = Boolean(shows && sort === "EpisodeAdded")
-  const showEntry = shows && !addedMode ? recent.find((entry) => entry.seriesId === heroId) || recent[0] || null : null
+  // A TV library's hero turns through the series the server reports as most recently added, and
+  // then the rest of the library, at the same beat and with the same crossfade as every other
+  // hero. It is not a rotating sample: what is new comes first, and a library with nothing new
+  // still has a hero rather than an empty one.
+  const showPool = useMemo(
+    () =>
+      shows && !addedMode
+        ? showHeroDeck(
+            recent.map((entry) => entry.series).filter((entry): entry is Item => Boolean(entry)),
+            items,
+          )
+        : [],
+    [addedMode, items, recent, shows],
+  )
+  // The same library sorted by recently added episodes features those episodes instead.
+  const addedPool = useMemo(() => (addedMode && !letter && settled ? items.slice(0, 8) : []), [addedMode, items, letter, settled])
+  const rotatingShow = useHeroRotation(showPool, heroPaused)
+  const rotatingAdded = useHeroRotation(addedPool, heroPaused)
+  // The episode the featured series was added with: its number and name, and the episode the Play
+  // button should start. A series that came from the library rather than the recent list has no
+  // such episode, and the hero simply offers the series itself.
+  const showEntry = shows && !addedMode && rotatingShow ? recent.find((entry) => entry.seriesId === rotatingShow.Id) || null : null
   const showSeries = showEntry?.series || null
   const showPlay = showEntry ? heroPlayTarget(showEntry.episode, upcoming) : null
   const showDetail = showEntry ? [episodeCode(showEntry.episode), showEntry.episode.Name].filter(Boolean).join(" · ") : ""
   const firstShow = shows && letter && settled ? items[0] || null : null
   if (shows && firstShow) shownShow.current = firstShow
-  else if (shows && !letter && settled && (showSeries || addedMode)) shownShow.current = showSeries || items[0] || shownShow.current
+  else if (shows && !letter && settled && (rotatingShow || addedMode)) shownShow.current = rotatingShow || items[0] || shownShow.current
   const showMiss = Boolean(shows && letter && settled && items.length === 0)
-  const addedHero = addedMode && !letter && settled ? items.find((item) => item.Id === heroId) || items[0] || null : null
-  const showHeroItem = !shows ? null : showMiss ? null : addedHero ? addedHero : letter || !settled ? shownShow.current : showSeries
+  const addedHero = addedMode && !letter && settled ? rotatingAdded : null
+  const showHeroItem = !shows ? null : showMiss ? null : addedHero ? addedHero : letter || !settled ? shownShow.current : rotatingShow
   const showRotating = Boolean(shows && !letter && settled && (addedHero || showPlay))
   const addedPlay = addedHero ? addedInfo[addedHero.Id] : null
   const heroDetail = (showHeroItem && addedInfo[showHeroItem.Id]?.note) || (!letter && showDetail ? showDetail : undefined)
-
-  useEffect(() => {
-    if (!shows || letter || !settled || addedMode) return
-    if (recent.some((entry) => entry.seriesId === heroId)) return
-    setHeroId(recent[0]?.seriesId || "")
-  }, [addedMode, heroId, letter, recent, settled, shows])
-
-  useEffect(() => {
-    if (!shows || letter || !settled || addedMode || recent.length < 2 || heroPaused) return
-    const timer = window.setInterval(() => {
-      setHeroId((current) => {
-        const index = recent.findIndex((entry) => entry.seriesId === current)
-        return recent[(index + 1) % recent.length]?.seriesId || current
-      })
-    }, 5000)
-    return () => window.clearInterval(timer)
-  }, [addedMode, heroPaused, letter, recent, settled, shows])
-
-  useEffect(() => {
-    if (!addedMode || letter || !settled) return
-    if (items.some((item) => item.Id === heroId)) return
-    setHeroId(items[0]?.Id || "")
-  }, [addedMode, heroId, items, letter, settled])
-
-  useEffect(() => {
-    if (!addedMode || letter || !settled || items.length < 2 || heroPaused) return
-    const pool = items.slice(0, 8)
-    const timer = window.setInterval(() => {
-      setHeroId((current) => {
-        const index = pool.findIndex((item) => item.Id === current)
-        return pool[(index + 1) % pool.length]?.Id || current
-      })
-    }, 5000)
-    return () => window.clearInterval(timer)
-  }, [addedMode, heroPaused, items, letter, settled])
 
   useEffect(() => {
     const holding = Boolean((shows && !letter && (showSeries || addedHero)) || ((movies || shows) && letter))
@@ -724,14 +713,23 @@ export function LibraryPage() {
   }, [addedHero, holdPin, letter, movies, showSeries, shows])
 
   const collections = library?.CollectionType === "boxsets"
+  /* A Collections page turns through the collections themselves - the ones the server dated, newest
+     first, and then the rest - and lists the dated ones under the hero as "Recently added". A
+     collection the server gave no creation date for is not dated and is not invented into the row. */
+  const collectionPool = useMemo(
+    () => (collections ? collectionHeroDeck(items.filter((item) => item.Type === "BoxSet" || !item.Type)) : []),
+    [collections, items],
+  )
+  const rotatingCollection = useHeroRotation(collectionPool, heroPaused)
+  const addedCollections = useMemo(() => (collections ? recentlyAddedCollections(items) : []), [collections, items])
   const collectionArt = useCollectionBackdrop(
     userId,
-    Boolean(collections && settled),
+    Boolean(collections && settled && !rotatingCollection),
     collections && settled ? items.filter((item) => item.Type === "BoxSet").slice(0, PAGE) : [],
   )
-  /* The artwork the stage paints is the film on screen and nothing else. The library's own image is
-     not a film's artwork, so the fallback is the first film in the grid that owns a backdrop - and
-     when no film in the grid owns one, the stage keeps its atmosphere rather than borrowing the
+  /* The artwork the stage paints is the title on screen and nothing else. The library's own image is
+     not a title's artwork, so the fallback is the first title in the grid that owns a backdrop - and
+     when no title in the grid owns one, the stage keeps its atmosphere rather than borrowing the
      library's banner. */
   const spotlight = items.find((entry) => ownBackdropSrc(entry)) || null
   const pinned = movies
@@ -746,15 +744,14 @@ export function LibraryPage() {
         : !settled
           ? shownShow.current || showSeries || spotlight
           : addedHero || showSeries || spotlight
-      : collectionArt || spotlight
-  // The Movies hero uses Home's hero look: one controlled 900 ms backdrop-only
-  // crossfade per rotation instead of the cinematic dissolve. The TV library and
-  // every other collection keep the look they had.
-  useHeroStage(movies)
-  // A hero movie without a backdrop of its own borrows the stage's poster fallback,
-  // exactly as an A-Z selection already does.
-  const heroPosterArt = Boolean(movies && !letter && pinned && !ownBackdropSrc(pinned))
-  usePinnedArt(pinned, Boolean(letter && (movies || shows)) || heroPosterArt, Boolean(collectionArt))
+      : rotatingCollection || collectionArt || spotlight
+  // Every hero in the app - Home's, a library's, a collection's, a favorite's - is the one shared
+  // `Hero` with the one look: a single controlled backdrop crossfade per turn.
+  useHeroStage(Boolean(movies || shows || collections))
+  // A hero title without a backdrop of its own borrows the stage's poster fallback, exactly as an
+  // A-Z selection already does - its own poster, never another title's picture.
+  const heroPosterArt = Boolean((movies || shows || collections) && !letter && pinned && !ownBackdropSrc(pinned))
+  usePinnedArt(pinned, Boolean(letter && (movies || shows)) || heroPosterArt, Boolean(collectionArt && !rotatingCollection))
 
   const live = library?.CollectionType === "livetv"
   const hasMore = settled && status !== "error" && status !== "loading" && (addedMore || items.length < total) && !live
@@ -815,7 +812,7 @@ export function LibraryPage() {
           />
         </div>
       )}
-      {shows && showHeroItem && (letter || showPlay || addedHero) && (
+      {shows && showHeroItem && (
         <div className="library-hero">
           <Hero
             item={showHeroItem}
@@ -830,6 +827,21 @@ export function LibraryPage() {
             playLabel={
               addedPlay ? (addedPlay.resume ? "Resume" : "Play") : showRotating && showPlay ? (showPlay.resume ? "Resume" : "Play") : undefined
             }
+            onHold={setHeroHold}
+            onTrailer={setTrailerHold}
+          />
+        </div>
+      )}
+      {/* A collection is featured the way a title is: its own artwork, its name, how many titles it
+          holds, and one action that opens it. */}
+      {collections && rotatingCollection && (
+        <div className="library-hero">
+          <Hero
+            item={rotatingCollection}
+            eyebrow="Collection"
+            detail={collectionSizeLabel(rotatingCollection.ChildCount)}
+            playHref={`/item/${rotatingCollection.Id}`}
+            playLabel="View collection"
             onHold={setHeroHold}
             onTrailer={setTrailerHold}
           />
@@ -936,6 +948,22 @@ export function LibraryPage() {
           </div>
         )}
       </header>
+      {/* What the server dated, newest first. A collection it gave no creation date for is not
+          dated and is not put here on a date this app invented. */}
+      {collections && addedCollections.length > 0 && (
+        <Row title="Recently added collections" className={`size-${size}`}>
+          {addedCollections.map((entry) => (
+            <PosterCard
+              key={entry.Id}
+              item={entry}
+              layout="poster"
+              size={size}
+              href={`/item/${entry.Id}`}
+              note={collectionSizeLabel(entry.ChildCount)}
+            />
+          ))}
+        </Row>
+      )}
       {!live && byTitle && menu === "letters" && (
         <nav className="letter-row" ref={lettersRef} aria-label="Jump to letter">
           <button
