@@ -16,7 +16,7 @@
  * a suite: delete it when the project grows a real test runner.
  */
 import { readFileSync } from "node:fs"
-import { lastSeason, rememberSeason, resolveSeason, seasonLineText, seasonProgress, seasonProgressBySeason, seasonStart } from "../src/lib/seasons"
+import { episodePlayHref, lastSeason, rememberSeason, resolveSeason, seasonLineText, seasonProgress, seasonProgressBySeason, seasonStart } from "../src/lib/seasons"
 import type { Item } from "../src/lib/types"
 
 let failures = 0
@@ -257,6 +257,32 @@ same("an empty season does not replace a real one", lastSeason("series-a"), "s2"
 rememberSeason("", "s9")
 same("a season without a series is not remembered", lastSeason(""), "")
 
+// --------------------------------------------------------------------------- where an episode card leads
+
+/* An episode card in a season's row is a choice of what to watch, so pressing OK on it plays the
+   episode the remote was on. The destination is a pure decision, built here so it can be checked
+   without a DOM, and the row's own wiring is read below to prove the card uses it. The id has to
+   be the episode's own - not the season's, and not the first episode the server listed - and the
+   route has to be the app's player rather than the episode's own page. */
+same("an episode the viewer has not started plays from the beginning", episodePlayHref(episode("e3", 3)), "/play/e3?resume=0")
+same(
+  "an episode part way through is offered to carry on",
+  episodePlayHref(episode("e2", 2, { PlaybackPositionTicks: 5 * MINUTE })),
+  "/play/e2?resume=1",
+)
+same(
+  "an episode already finished plays from the beginning again",
+  episodePlayHref(episode("e1", 1, { Played: true, PlaybackPositionTicks: 45 * MINUTE })),
+  "/play/e1?resume=0",
+)
+same(
+  "the id in the address is the episode's own, never the season's or the first of the season",
+  [episodePlayHref(episode("e7", 7)), episodePlayHref(episode("e2", 2, { PlaybackPositionTicks: 5 * MINUTE }))],
+  ["/play/e7?resume=0", "/play/e2?resume=1"],
+)
+check("a card never sends the viewer to an episode's own page", !episodePlayHref(episode("e3", 3)).startsWith("/item/"))
+check("and it always goes through the app's player", episodePlayHref(episode("e3", 3)).startsWith("/play/"))
+
 /* The season page's action band, read from the page's own source - it is the wiring that decides
    this, and a wiring check is the only thing that can hold it. The band under the episode row is
    the title's own actions and nothing else: the control that played the whole season from there
@@ -276,6 +302,29 @@ check(
   "Item.tsx",
 )
 check("and a person's page no longer carries it", !page.includes("person-actions"), "Item.tsx")
+
+/* The wiring the checks above rest on, read from the page as it is written. A season's episode row
+   has to hand each card the destination built above, and nothing else may put an episode's own page
+   back in the middle of playing from that row. The navigation the change must not disturb is
+   checked beside it: a season card still opens that season's own page, and a title's own Play still
+   goes through the player. */
+check(
+  "a card in the season's episode row plays the episode the remote was on",
+  page.includes("to={episodePlayHref(episode)}"),
+  "Item.tsx",
+)
+check(
+  "and the row no longer opens an episode's own page as a step in playing",
+  !page.includes("to={`/item/${episode.Id}`}"),
+  "Item.tsx",
+)
+check(
+  "the card's seat is the episode itself, so Back finds it again once it has become a resume",
+  page.includes("data-nav-key={`episode:${episode.Id}`}"),
+  "Item.tsx",
+)
+check("a season card still opens that season's own page", page.includes("to={`/item/${season.Id}`}"), "Item.tsx")
+check("and a title's own Play still goes through the player", /to=\{`\/play\/\$\{item\.Id\}/.test(page), "Item.tsx")
 
 console.log(failures === 0 ? "\nAll season checks passed." : `\n${failures} check(s) failed.`)
 if (failures > 0) throw new Error(`${failures} check(s) failed`)

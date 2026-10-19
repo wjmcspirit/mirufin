@@ -24,6 +24,7 @@ import {
   takeBack,
   trackSeats,
 } from "../src/lib/remote"
+import { episodePlayHref } from "../src/lib/seasons"
 
 let failures = 0
 
@@ -523,8 +524,12 @@ function seasonBlock(main: El) {
   scroller.scrollWidth = 6000
   scroller.clientHeight = 268
   scroller.scrollHeight = 268
-  const cards = ["/item/EP1", "/item/EP2", "/item/EP3", "/item/EP4"].map((href, index) => {
-    const card = new El("a", "episode").attr("href", href)
+  // Each card carries the app's own destination for an episode in a season's row - OK on it plays
+  // that episode - and the episode's id beside it, the way the page keeps it.
+  const cards = ["EP1", "EP2", "EP3", "EP4"].map((id, index) => {
+    const card = new El("a", "episode")
+      .attr("href", episodePlayHref({ Id: id, Name: id, Type: "Episode" }))
+      .attr("data-episode", id)
     card.place(780, 400 + index * 300, 280, 232)
     scroller.add(card)
     return card
@@ -576,7 +581,13 @@ function episodeRow(main: El, count: number) {
     scroller.scrollLeft = Math.max(0, Math.min(scroller.scrollWidth - scroller.clientWidth, left))
   }
   const cards = Array.from({ length: count }, (_, index) => {
-    const card = new El("a", index === 1 ? "episode is-next" : "episode").attr("href", `/item/EP${index + 1}`)
+    // The destination is the app's own for a card in a season's row: OK on it plays the episode
+    // the remote was on rather than opening the episode's own page. The episode's id is kept on
+    // the card the way the page keeps it.
+    const id = `EP${index + 1}`
+    const card = new El("a", index === 1 ? "episode is-next" : "episode")
+      .attr("href", episodePlayHref({ Id: id, Name: `Episode ${index + 1}`, Type: "Episode" }))
+      .attr("data-episode", id)
     card.place(430, 400 + PADDING + index * (CARD + GAP), CARD, 268)
     card.offsetLeftOverride = PADDING + index * (CARD + GAP)
     scroller.add(card)
@@ -1081,8 +1092,49 @@ function testEpisodeRowScroll() {
 }
 
 /**
- * Back from an episode returns to that episode, in the episode row it was opened from and
- * with the season still being browsed - not to the season card the row belongs to.
+ * The season page's episode row with the remote on it: walking the row must play nothing, and OK on
+ * an episode must play the episode the remote was on - not the episode's own page, and not the
+ * first episode of the season.
+ *
+ * The cards carry the app's own destination for an episode in a season's row, so the route the
+ * remote's OK follows is the route the app renders, and the id on the card is the one the route
+ * names. A move only moves focus; nothing here is played until the viewer confirms a selection.
+ */
+function testEpisodeRowPlays() {
+  clearSeats()
+  resetFocusState()
+  const page = shell()
+  const block = episodeRow(page.main, 4)
+  noteRoute("/item/SEASON1")
+
+  // Walking the row: Right and Left move the ring and nothing else.
+  placeFocus(block.cards[0])
+  const before = activated.length
+  moveFocus("ArrowRight")
+  moveFocus("ArrowRight")
+  moveFocus("ArrowLeft")
+  check("walking the episode row plays nothing", activated.length === before, `${activated.length - before} played by a move`)
+  check("and the remote is still on an episode of that row", active !== null && block.cards.includes(active), label(active))
+
+  // OK on the third episode: the card the viewer was on is the one that is played.
+  const card = block.cards[2]
+  placeFocus(card)
+  activate(card)
+  const href = card.getAttribute("href") || ""
+  const id = card.getAttribute("data-episode") || ""
+  check("OK on an episode follows the play route", href.startsWith("/play/"), href)
+  check("and the route names the episode the remote was on", href.startsWith(`/play/${id}`), href)
+  check("so the episode's own page is not a step in playing", !href.startsWith("/item/"), href)
+  check(
+    "and it is never the first episode of the season",
+    href !== block.cards[0].getAttribute("href"),
+    `${href} vs ${block.cards[0].getAttribute("href")}`,
+  )
+}
+
+/**
+ * Back from the player returns to the episode that was played, in the episode row it was played
+ * from and with the season still being browsed - not to the season card the row belongs to.
  */
 function testSeasonBack() {
   clearSeats()
@@ -1095,8 +1147,8 @@ function testSeasonBack() {
   activate(opened.cards[2])
 
   shell()
-  noteRoute("/item/EP3")
-  restoreSeat("/item/EP3", true, () => {})
+  noteRoute("/play/EP3?resume=0")
+  restoreSeat("/play/EP3?resume=0", true, () => {})
 
   const back = shell()
   const seasons = row(back.main, "Seasons", ["/item/SERIES?season=S1", "/item/SERIES?season=S2"])
@@ -1556,6 +1608,7 @@ testMissingTarget()
 testRailIsNotASeat()
 testSeasonWalk()
 testEpisodeRowScroll()
+testEpisodeRowPlays()
 testSeasonBack()
 testCollectionGrid()
 testCollectionsRow()

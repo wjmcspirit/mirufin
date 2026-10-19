@@ -15,7 +15,7 @@ import { creditsOf, filmographyRows, type Credit } from "../lib/people"
 import { genreLinks, studioLinks } from "../lib/discovery"
 import { canFavorite, canPlayDirectly, episodeCode, formatRuntime, isInProgress, metaLine, personFacts, progressPct, techChips } from "../lib/format"
 import { hasMediaInfo } from "../lib/mediaInfo"
-import { lastSeason, rememberSeason, resolveSeason, seasonLineText, seasonProgress, seasonProgressBySeason, seasonStart, type SeasonProgress } from "../lib/seasons"
+import { episodePlayHref, lastSeason, rememberSeason, resolveSeason, seasonLineText, seasonProgress, seasonProgressBySeason, seasonStart, type SeasonProgress } from "../lib/seasons"
 import { knownFor, type KnownWork } from "../lib/knownFor"
 import { artWidth, backdropSrc, episodeStillSrc, episodeWideStill, imageUrl, loadImage, primarySrc, seasonArtSrc, thumbSrc, warmImage, wideBackdrop } from "../lib/images"
 import type { Item } from "../lib/types"
@@ -876,11 +876,18 @@ function EpisodeCard({
   const runtime = formatRuntime(episode.RunTimeTicks)
 
   return (
+    // The row is the season's browse surface, so OK on a card plays the episode the remote was
+    // resting on rather than opening the episode's own page: the still, the number and the watched
+    // mark above already say which episode this is, so a press here is a choice of what to watch.
+    // The destination is the app's own player route, so playback behaves exactly as it does from
+    // any other Play control. The seat filed on the way out is keyed by the episode rather than by
+    // the route, so Back still lands on this card once the episode has become something to resume.
     <Link
       className={next ? "episode is-next" : "episode"}
       data-stage=""
       data-episode={episode.Id}
-      to={`/item/${episode.Id}`}
+      data-nav-key={`episode:${episode.Id}`}
+      to={episodePlayHref(episode)}
       onMouseEnter={() => point(episode)}
       onMouseLeave={(event) => {
         if (event.currentTarget === document.activeElement) return

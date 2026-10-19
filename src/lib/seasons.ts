@@ -35,6 +35,25 @@ export function seasonStart(episodes: Item[]) {
   return first ? { episode: first, resume: false } : null
 }
 
+/**
+ * Where an episode card in a season's own row leads: straight into playback of that episode.
+ *
+ * The row is the season's browse surface rather than a list of links to read about: a card on it
+ * already carries the episode's artwork, its number, its name and its watched state, so pressing
+ * OK on one is the viewer saying which episode to watch. The card therefore plays the episode the
+ * remote was resting on - the id in the address is that episode's own, so what plays is never the
+ * first episode of the season or anything else that happened to be queued - and the episode's own
+ * page is not a step in between. Playback itself is the app's one player, reached the way every
+ * other Play control reaches it, so resume, audio and subtitle choice, error handling and session
+ * cleanup are unchanged.
+ *
+ * An episode the viewer is part way through is offered to carry on from, which is the same rule
+ * the episode's own Play button follows; anything else starts from the beginning.
+ */
+export function episodePlayHref(episode: Item) {
+  return `/play/${episode.Id}?resume=${isInProgress(episode) ? "1" : "0"}`
+}
+
 /** How much of one season the viewer has watched. */
 export interface SeasonProgress {
   /** Episodes of this season the viewer has finished. */
