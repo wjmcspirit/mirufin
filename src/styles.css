@@ -16,9 +16,17 @@
      content and a row's heading begin at `--page-pad` plus `--strip-pad`, and the header - the
      logo on the left and the group on the right - is inset by that same sum, so the top of the
      screen and the page below it share one pair of edges instead of each floating at an inset of
-     its own. Both are raised together by the breakpoints below. */
-  --page-pad: 44px;
-  --strip-pad: 40px;
+     its own. Both are raised together by the breakpoints below.
+
+     The television layout is drawn on a fixed 1500-unit canvas (see index.html), so the sum of
+     the two is what the viewer sees as a margin, and it is a share of the screen: the two used
+     to add up to 84 units, 5.6% of the width at every panel size, and 9% at 4K - the picture sat
+     in the middle of the screen with a band of nothing either side. They now add up to about
+     3-4% of the canvas at every panel size, which is what a television needs to keep the type
+     and the artwork off the very edge without wasting the width. `tools/foldCheck.ts` measures
+     the rendered edges at 1080p, 1440p and 4K; `tools/homeCheck.ts` holds the proportion. */
+  --page-pad: 18px;
+  --strip-pad: 32px;
   --shadow: 0 30px 70px rgba(0, 0, 0, 0.38);
   color-scheme: dark;
   font-family: Outfit, "Segoe UI", sans-serif;
@@ -2937,7 +2945,7 @@ input[type="range"]::-webkit-slider-thumb {
 
 @media (min-width: 2200px) {
   .main { padding: 40px var(--page-pad) 96px; }
-  :root { --page-pad: 56px; --strip-pad: 52px; }
+  :root { --page-pad: 22px; --strip-pad: 34px; }
   .scroller { padding: 40px var(--strip-pad) 56px; scroll-padding-inline: var(--strip-pad); }
   /* Home's fold. On a wider viewport the page's top padding and the row's own padding grow, and
      the first row of posters still has to clear the bottom edge with its caption under it - the
@@ -3029,7 +3037,7 @@ input[type="range"]::-webkit-slider-thumb {
 
 @media (min-width: 3200px) {
   .main { padding: 48px var(--page-pad) 112px; }
-  :root { --page-pad: 72px; --strip-pad: 64px; }
+  :root { --page-pad: 24px; --strip-pad: 36px; }
   .scroller { padding: 48px var(--strip-pad) 68px; scroll-padding-inline: var(--strip-pad); }
   /* Home's fold, as above: the two paddings stay where they are, and the rail keeps its height
      here too, so the hero's share of the screen is the same as it is at 1080p. */

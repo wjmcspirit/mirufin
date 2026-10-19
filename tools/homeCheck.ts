@@ -382,7 +382,7 @@ check(
 check("the app states one strip inset", rule(".scroller").includes("padding: 22px var(--strip-pad) 30px"), rule(".scroller").trim())
 check(
   "and it is stated once per panel size, so it can move with the page's own padding",
-  ["--strip-pad: 40px", "--strip-pad: 28px", "--strip-pad: 52px", "--strip-pad: 64px"].every((line) => css.includes(line)),
+  ["--strip-pad: 32px", "--strip-pad: 28px", "--strip-pad: 34px", "--strip-pad: 36px"].every((line) => css.includes(line)),
   "the :root declaration and the three breakpoints",
 )
 check(
@@ -405,8 +405,37 @@ check(
 )
 check(
   "and the page inset is stated once per panel size, so it can move with the page",
-  ["--page-pad: 44px", "--page-pad: 20px", "--page-pad: 56px", "--page-pad: 72px"].every((line) => css.includes(line)),
+  ["--page-pad: 18px", "--page-pad: 20px", "--page-pad: 22px", "--page-pad: 24px"].every((line) => css.includes(line)),
   "the :root declaration and the three breakpoints",
+)
+/* How much of the screen the two insets leave empty. The television layout is drawn on a fixed
+   1500-unit canvas that is scaled to fill the panel (see index.html), so a design unit is a fixed
+   share of the width and the two insets add up to the margin the viewer actually sees, at every
+   panel size. They used to add up to 84 units - 5.6% of the width - and to 108 and 136 units at
+   the two wider panels, so a 4K screen wasted 9% of itself either side. What has to hold instead
+   is that the sum is a small share of the canvas: 3-4%, which keeps the type and the artwork off
+   the very edge without turning the page into a letterbox. The narrow-window block is not part of
+   this - a browser window is not the canvas, and its insets are in real CSS pixels - so only the
+   three television panels are measured. */
+function declaredPads(name: string) {
+  return [...css.matchAll(new RegExp(`--${name}:\\s*([\\d.]+)px`, "g"))].map((match) => Number(match[1]))
+}
+const pagePads = declaredPads("page-pad")
+const stripPads = declaredPads("strip-pad")
+check(
+  "both insets are declared once for the base and once per wider panel",
+  pagePads.length === 4 && stripPads.length === 4,
+  `page ${pagePads.join(", ")}; strip ${stripPads.join(", ")}`,
+)
+const CANVAS = 1500
+const PANEL_NAMES = ["base", "1440p", "4K"]
+/** The base declaration and the two wider panels; the narrow-window block is not a television. */
+const TV_PANEL_INDEXES = [0, 2, 3]
+const sums = TV_PANEL_INDEXES.map((index) => pagePads[index] + stripPads[index])
+check(
+  "and the content margin is 3-4% of the screen at every television panel size",
+  sums.every((units) => units / CANVAS >= 0.03 && units / CANVAS <= 0.04),
+  TV_PANEL_INDEXES.map((index, slot) => `${PANEL_NAMES[slot]}: ${sums[slot]} units, ${((sums[slot] / CANVAS) * 100).toFixed(2)}%`).join("; "),
 )
 check(
   "and the logo carries no horizontal padding of its own, so its edge is the header's inset",
