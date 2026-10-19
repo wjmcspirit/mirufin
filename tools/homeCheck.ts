@@ -210,6 +210,23 @@ check(
   rule(".home .row .scroller").includes("padding-top: 16px"),
   rule(".home .row .scroller").trim(),
 )
+/* The home screen's one left edge. The hero's copy, the section headings and the strips under
+   them all take `--strip-pad`, so a heading cannot drift away from the title above it again. The
+   rendered edges are measured in `tools/foldCheck.ts`; what is checked here is that there is one
+   inset rather than three offsets, and that it is the same one the strips are drawn with. */
+check("the app states one strip inset", rule(".scroller").includes("padding: 22px var(--strip-pad) 30px"), rule(".scroller").trim())
+check(
+  "and it is stated once per panel size, so it can move with the page's own padding",
+  ["--strip-pad: 40px", "--strip-pad: 28px", "--strip-pad: 52px", "--strip-pad: 64px"].every((line) => css.includes(line)),
+  "the :root declaration and the three breakpoints",
+)
+check(
+  "the hero's copy begins at it",
+  rule(".home .hero .hero-copy").includes("padding: 16px var(--strip-pad)"),
+  rule(".home .hero .hero-copy").trim(),
+)
+check("and so does a section heading", rule(".home .row-head").includes("padding-inline: var(--strip-pad)"), rule(".home .row-head").trim())
+check("and the strip under that heading", rule(".home .row .scroller").includes("padding-inline: var(--strip-pad)"), rule(".home .row .scroller").trim())
 
 /** One media query's block, as it is written. */
 function mediaBlock(query: string) {

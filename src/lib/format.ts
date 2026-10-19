@@ -395,3 +395,17 @@ export function libraryItemTypes(collectionType?: string) {
 export function canPlayDirectly(item: Item) {
   return ["Movie", "Episode", "Video", "Audio", "TvChannel", "MusicVideo", "Trailer"].includes(item.Type || "")
 }
+
+/**
+ * Whether a title's own page offers the Favorite action.
+ *
+ * Favorite marks a title the viewer keeps, so it belongs to the two pages that are a title in
+ * their own right: a film, and a series. A season and an episode are parts of a series rather
+ * than titles the viewer collects, and the pages around them - a person, a collection, a
+ * channel - are not titles at all, so none of them carry the button. The rule lives here, beside
+ * the other decisions a page makes about what it offers, rather than in the markup, where the
+ * next detail page to be written would pick the button up by accident.
+ */
+export function canFavorite(item: Item) {
+  return item.Type === "Movie" || item.Type === "Series"
+}

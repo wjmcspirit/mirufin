@@ -134,7 +134,12 @@
         var rectScale = shell.getBoundingClientRect().height / appHeight
         function units(node) {
           var rect = node.getBoundingClientRect()
-          return { top: rect.top / rectScale, bottom: rect.bottom / rectScale, height: rect.height / rectScale }
+          return {
+            left: rect.left / rectScale,
+            top: rect.top / rectScale,
+            bottom: rect.bottom / rectScale,
+            height: rect.height / rectScale,
+          }
         }
         function round(value) {
           return Math.round(value * 10) / 10
@@ -164,6 +169,15 @@
           },
           rowTop: round(units(asked).top),
           headingBottom: round(units(asked.querySelector(".row-head")).bottom),
+          // The home screen's one left edge: the hero's copy, the heading over the row and the
+          // first card in it are three different boxes, and they have to begin in the same place.
+          // Measured on the copy's own first line, the heading's own text and the card itself,
+          // because those are what the viewer reads down the left of the screen.
+          lefts: {
+            hero: round(units(document.querySelector(".hero .eyebrow")).left),
+            heading: round(units(asked.querySelector(".row-head h2")).left),
+            card: round(units(asked.querySelector(".card")).left),
+          },
           art: { top: round(art.top), bottom: round(art.bottom), height: round(art.height) },
           caption: { top: round(caption.top), bottom: round(caption.bottom), height: round(caption.height) },
           copy: (function () {

@@ -15,6 +15,7 @@
  * Run it with `npm run seasoncheck`. Like the other harnesses here it is a check rather than
  * a suite: delete it when the project grows a real test runner.
  */
+import { readFileSync } from "node:fs"
 import { lastSeason, rememberSeason, resolveSeason, seasonLineText, seasonProgress, seasonProgressBySeason, seasonStart } from "../src/lib/seasons"
 import type { Item } from "../src/lib/types"
 
@@ -255,6 +256,26 @@ rememberSeason("series-a", "")
 same("an empty season does not replace a real one", lastSeason("series-a"), "s2")
 rememberSeason("", "s9")
 same("a season without a series is not remembered", lastSeason(""), "")
+
+/* The season page's action band, read from the page's own source - it is the wiring that decides
+   this, and a wiring check is the only thing that can hold it. The band under the episode row is
+   the title's own actions and nothing else: the control that played the whole season from there
+   is gone rather than hidden, so a later change cannot bring it back by accident. What an
+   episode's own page offers - a Play that carries on through the season - is a different page's
+   control, and is untouched. */
+const page = readFileSync("src/pages/Item.tsx", "utf8")
+check("the season page has no Play season control of its own", !page.includes("SeasonPlay"), "Item.tsx")
+check(
+  "and the band under its episode row is the title's own actions, with nothing appended",
+  page.includes('const band = actions && <div className="actions episode-actions">{actions}</div>'),
+  "Item.tsx",
+)
+check(
+  "Favorite is offered by the two pages that are a title in their own right",
+  page.includes("{canFavorite(item) && favoriteAction}"),
+  "Item.tsx",
+)
+check("and a person's page no longer carries it", !page.includes("person-actions"), "Item.tsx")
 
 console.log(failures === 0 ? "\nAll season checks passed." : `\n${failures} check(s) failed.`)
 if (failures > 0) throw new Error(`${failures} check(s) failed`)

@@ -20,7 +20,8 @@ import { DEFAULT_LIBRARY_VIEW, EPISODE_SORT, librarySorts, normalizeLibraryViews
 import { loadPrefs, savePrefs } from "../src/lib/storage"
 import { libraryToolNeighbor, libraryTools } from "../src/lib/toolMenu"
 import { moveFocus, ownArrows } from "../src/lib/remote"
-import type { LibraryView, Preferences } from "../src/lib/types"
+import { canFavorite } from "../src/lib/format"
+import type { Item, LibraryView, Preferences } from "../src/lib/types"
 
 const PREFS_KEY = "mirufin.prefs"
 
@@ -215,10 +216,30 @@ function checkMenuOwnsTheSidewaysPress() {
   same("a closed menu is offered nothing", asked, ["ArrowLeft"])
 }
 
+/**
+ * Which pages offer Favorite. It marks a title the viewer keeps, so it belongs to the two pages
+ * that are a title in their own right - a film and a series - and to no other page. This is the
+ * rule the detail page asks; the page itself is React, so what can be settled without a DOM is
+ * the decision, and that is what is settled here.
+ */
+function checkFavoritePages() {
+  const view = (Type: string): Item => ({ Id: "x", Name: "x", Type })
+  same("a film's page offers Favorite", canFavorite(view("Movie")), true)
+  same("and so does a series' page", canFavorite(view("Series")), true)
+  same("a season's page does not", canFavorite(view("Season")), false)
+  same("an episode's page does not", canFavorite(view("Episode")), false)
+  same("a person's page does not", canFavorite(view("Person")), false)
+  same("a collection's page does not", canFavorite(view("BoxSet")), false)
+  same("a playlist's page does not", canFavorite(view("Playlist")), false)
+  same("a channel's page does not", canFavorite(view("TvChannel")), false)
+  same("and a title the server did not type does not", canFavorite({ Id: "x" }), false)
+}
+
 installStore()
 checkToolbarWalk()
 checkPersistence()
 checkOpeningView()
 checkMenuOwnsTheSidewaysPress()
+checkFavoritePages()
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`)
 if (failures > 0) throw new Error(`${failures} check(s) failed`)

@@ -531,16 +531,16 @@ function seasonBlock(main: El) {
   })
   const actions = new El("div", "actions episode-actions")
   actions.place(1060, 400, 700, 48)
-  const playSeason = new El("button", "btn icon-btn")
-  playSeason.text = "Play season"
-  playSeason.place(1070, 400, 176, 48)
+  const play = new El("button", "btn icon-btn")
+  play.text = "Play"
+  play.place(1070, 400, 176, 48)
   const favorite = new El("button", "btn icon-btn")
   favorite.text = "Favorite"
   favorite.place(1070, 592, 148, 48)
-  actions.add(playSeason, favorite)
+  actions.add(play, favorite)
   section.add(head, spot, scroller, actions)
   main.add(section)
-  return { section, scroller, cards, playSeason, favorite }
+  return { section, scroller, cards, play, favorite }
 }
 
 /**
@@ -585,7 +585,7 @@ function episodeRow(main: El, count: number) {
   const actions = new El("div", "actions episode-actions")
   actions.place(720, 400, 700, 48)
   const play = new El("button", "btn btn-primary")
-  play.text = "Play season"
+  play.text = "Play"
   play.place(730, 440, 176, 48)
   actions.add(play)
   section.add(head, spot, scroller, actions)
@@ -984,9 +984,9 @@ function testSeasonWalk() {
   check("and keeps walking it", active === block.cards[2], label(active))
 
   moveFocus("ArrowDown")
-  check("Down leaves the episode row for the actions under it", active === block.playSeason || active === block.favorite, label(active))
+  check("Down leaves the episode row for the actions under it", active === block.play || active === block.favorite, label(active))
 
-  placeFocus(block.playSeason)
+  placeFocus(block.play)
   moveFocus("ArrowRight")
   check("Right walks the actions band", active === block.favorite, label(active))
 

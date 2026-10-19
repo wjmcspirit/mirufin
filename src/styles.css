@@ -12,6 +12,11 @@
   --neon: linear-gradient(105deg, #2ec6ff 0%, #5b78ff 48%, #e14dff 100%);
   --danger: #ffb4a8;
   --side: #0d0e12;
+  /* Where a strip's content begins - and so where the home screen's copy and headings begin with
+     it. It is the inset the whole app draws a strip with, at every panel size, and it is the one
+     number that keeps the hero's title, a row's heading and that row's first card on a single
+     left edge. The breakpoints below raise it with the page's own padding. */
+  --strip-pad: 40px;
   --shadow: 0 30px 70px rgba(0, 0, 0, 0.38);
   color-scheme: dark;
   font-family: Outfit, "Segoe UI", sans-serif;
@@ -912,14 +917,27 @@ html:not(.remote) .nav:hover .nav-label {
   min-height: 350px;
   margin-bottom: 8px;
 }
+/* The home screen's content inset. The hero's copy, the section headings and the strips under
+   them used to be three independent offsets - the copy's own 36, a heading with none, and the
+   strip's 40 - which put the "Continue watching" heading 36 units to the left of the title above
+   it and 40 to the left of the posters under it. All three take `--strip-pad` now, the inset the
+   rest of the app already draws a strip with, so they begin on one left edge at every panel size
+   and move together when it changes. Scoped to `.home`: every other page keeps its own offsets. */
 /* Home's own vertical rhythm is tighter than the rest of the app's. Under the hero there is a
    heading, a strip of posters and a caption of two lines of title and up to three of detail, and
    all of it has to clear the bottom edge of the screen without a scroll - so the space between
    those parts is what it needs to be and no more. It is scoped to Home: every other page keeps
    the rhythm it has. */
 .home .row { margin-top: 0; }
-.home .row-head { margin-bottom: 8px; }
-.home .row .scroller { padding-top: 16px; }
+.home .row-head {
+  margin-bottom: 8px;
+  /* The heading starts where the hero's copy and the first poster under it start. */
+  padding-inline: var(--strip-pad);
+}
+.home .row .scroller {
+  padding-top: 16px;
+  padding-inline: var(--strip-pad);
+}
 /* The copy fills the hero and stacks up from its bottom edge, so what a title does not use is
    empty artwork above it rather than a shorter hero. Its own gap and padding are what make it fit
    inside that share: they are the two things that can give without touching the size of the type. */
@@ -928,7 +946,9 @@ html:not(.remote) .nav:hover .nav-label {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  padding: 16px 36px;
+  /* The copy's left edge is the home screen's content inset, so the title, the facts and the
+     actions begin where the heading and the first poster below them begin. */
+  padding: 16px var(--strip-pad);
   gap: 6px;
   max-width: 720px;
 }
@@ -1448,8 +1468,8 @@ html:not(.remote) .nav:hover .nav-label {
   /* The strip clips on both axes, so this padding is what a focused card's ring and its
      lift are drawn into: enough to clear them, no more, so the heading above sits close to
      the posters it names. */
-  padding: 22px 40px 30px;
-  scroll-padding-inline: 40px;
+  padding: 22px var(--strip-pad) 30px;
+  scroll-padding-inline: var(--strip-pad);
 }
 .main {
   scroll-padding-top: 28px;
@@ -1804,15 +1824,11 @@ select {
 .detail-layout.episode-layout { grid-template-columns: minmax(0, 1.15fr) minmax(420px, 1fr); }
 .still-lg { box-shadow: var(--shadow); }
 .person-page .poster-lg { position: relative; z-index: 1; }
-/* The person page reads as one column: the Favorite action sits with the
-   biography in the copy column, so the filmography is given its own air before
-   the first heading. Only the space above the rows changes; the shared
-   `.detail-body` gap keeps "Known for", "Movies in Library" and "TV Shows In
-   Library" evenly spaced, and the poster rows keep their own padding. */
+/* The person page reads as one column: the filmography is given its own air before the first
+   heading. Only the space above the rows changes; the shared `.detail-body` gap keeps "Known
+   for", "Movies in Library" and "TV Shows In Library" evenly spaced, and the poster rows keep
+   their own padding. */
 .person-page .detail-body { margin-top: 16px; }
-/* The Favorite button is the person's only action, so it sits at the head of the
-   copy column rather than stretching across it. */
-.person-page .person-actions { justify-content: flex-start; }
 .detail-body {
   display: grid;
   /* The page's own column: one track, stated rather than left to the engine. An `auto` track
@@ -2873,7 +2889,8 @@ input[type="range"]::-webkit-slider-thumb {
   .side-nav { overflow-x: auto; scrollbar-width: none; }
   .account-name { display: none; }
   .main { height: auto; overflow: visible; padding: 20px 20px 48px; }
-  .scroller { padding: 24px 28px 36px; scroll-padding-inline: 28px; }
+  :root { --strip-pad: 28px; }
+  .scroller { padding: 24px var(--strip-pad) 36px; scroll-padding-inline: var(--strip-pad); }
   .settings-row { grid-template-columns: 1fr; justify-items: start; gap: 10px; }
   .detail-layout, .detail-layout.episode-layout, .episode { grid-template-columns: 1fr; }
   .detail-actions { flex-wrap: wrap; }
@@ -2912,7 +2929,8 @@ input[type="range"]::-webkit-slider-thumb {
 
 @media (min-width: 2200px) {
   .main { padding: 40px 56px 96px; }
-  .scroller { padding: 40px 52px 56px; scroll-padding-inline: 52px; }
+  :root { --strip-pad: 52px; }
+  .scroller { padding: 40px var(--strip-pad) 56px; scroll-padding-inline: var(--strip-pad); }
   /* Home's fold. On a wider viewport the page's top padding and the row's own padding grow, and
      the first row of posters still has to clear the bottom edge with its caption under it - the
      artwork alone is 252 units of a 844-unit canvas. Both keep the sizes they have at 1080p,
@@ -3002,7 +3020,8 @@ input[type="range"]::-webkit-slider-thumb {
 
 @media (min-width: 3200px) {
   .main { padding: 48px 72px 112px; }
-  .scroller { padding: 48px 64px 68px; scroll-padding-inline: 64px; }
+  :root { --strip-pad: 64px; }
+  .scroller { padding: 48px var(--strip-pad) 68px; scroll-padding-inline: var(--strip-pad); }
   /* Home's fold, as above: the two paddings stay where they are, and the rail keeps its height
      here too, so the hero's share of the screen is the same as it is at 1080p. */
   .main { padding-top: 32px; }

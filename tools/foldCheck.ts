@@ -82,6 +82,8 @@ interface FoldReport {
   hero: { top: number; bottom: number }
   rowTop: number
   headingBottom: number
+  /** The home screen's one left edge, in design units: the hero's copy, the heading, the card. */
+  lefts: { hero: number; heading: number; card: number }
   art: { top: number; bottom: number; height: number }
   caption: { top: number; bottom: number; height: number }
   copy: { top: number; bottom: number; height: number; actionsBottom: number }
@@ -361,6 +363,15 @@ for (const { panel, report } of await measureAll(browser, probe, PANELS)) {
     `${panel.name} (${report.row}): the row follows the hero rather than overlapping it`,
     report.rowTop >= report.hero.bottom,
     `row starts at ${report.rowTop}, hero ends at ${report.hero.bottom}`,
+  )
+  /* The home screen's one left edge. The hero's copy, the heading over the row and the first card
+     in it are three different boxes, and the viewer reads down the left of the screen: a heading
+     that begins somewhere else is the complaint this answers. Measured rather than asserted of
+     the stylesheet, because it is the rendered edge that has to agree. */
+  check(
+    `${panel.name} (${report.row}): the hero's copy, the heading and the first card share a left edge`,
+    Math.abs(report.lefts.hero - report.lefts.heading) <= 1 && Math.abs(report.lefts.heading - report.lefts.card) <= 1,
+    `hero ${report.lefts.hero}, heading ${report.lefts.heading}, card ${report.lefts.card}`,
   )
   check(
     `${panel.name} (${report.row}): the hero is a fixed share of the screen, not a floor of its own`,

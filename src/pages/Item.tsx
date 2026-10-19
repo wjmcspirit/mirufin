@@ -13,7 +13,7 @@ import * as api from "../lib/api"
 import { collectionSizeLabel, collectionStageItem, collectionsLibrary, loadCollections } from "../lib/collections"
 import { creditsOf, filmographyRows, type Credit } from "../lib/people"
 import { genreLinks, studioLinks } from "../lib/discovery"
-import { canPlayDirectly, episodeCode, formatRuntime, isInProgress, metaLine, personFacts, progressPct, techChips } from "../lib/format"
+import { canFavorite, canPlayDirectly, episodeCode, formatRuntime, isInProgress, metaLine, personFacts, progressPct, techChips } from "../lib/format"
 import { hasMediaInfo } from "../lib/mediaInfo"
 import { lastSeason, rememberSeason, resolveSeason, seasonLineText, seasonProgress, seasonProgressBySeason, seasonStart, type SeasonProgress } from "../lib/seasons"
 import { knownFor, type KnownWork } from "../lib/knownFor"
@@ -122,9 +122,9 @@ export function ItemPage() {
   const chips = techChips(item)
   const facts = item.Type === "Person" ? personFacts(item) : metaLine(item, prefs.ratings)
   const layout = ["detail-layout", episode ? "episode-layout" : "", item.Type === "Person" ? "align-start" : ""].filter(Boolean).join(" ")
-  // A person has one action, and it belongs with the person: the button is drawn
-  // in the copy column under the biography rather than in the action band under
-  // the portrait, so the name, birth details and biography stay together with it.
+  // The title's own Favorite. It is offered by the pages that are a title in their own right - a
+  // film and a series - and by no other page: a season and an episode are parts of a series, and
+  // the pages around them are not titles at all. See `canFavorite`.
   const favoriteAction = (
     <button
       className={`btn icon-btn ${item.UserData?.IsFavorite ? "on" : ""}`}
@@ -147,7 +147,7 @@ export function ItemPage() {
       {(item.Type === "Movie" || item.Type === "Series" || episode) && (
         <TrailerButton item={item} onlyWhenAvailable={episode} />
       )}
-      {!personPage && favoriteAction}
+      {canFavorite(item) && favoriteAction}
       {canPlayDirectly(item) && (
         <button className={`btn icon-btn ${item.UserData?.Played ? "on" : ""}`} type="button" onClick={() => void togglePlayed()} disabled={busy === "played"}>
           <CheckIcon size={16} />
@@ -197,7 +197,6 @@ export function ItemPage() {
             )}
             {item.Taglines?.[0] && <p className="tagline">{item.Taglines[0]}</p>}
             {item.Overview && (item.Type === "Person" ? <Bio text={item.Overview} /> : <p className="overview">{item.Overview}</p>)}
-            {personPage && <div className="actions person-actions">{favoriteAction}</div>}
             {/* A season's genre and studio links sit under its episode row instead of here: the
                 head of a season page is identity, the row is the page, and the first control in
                 the head is the control the page lands on. */}
@@ -314,39 +313,6 @@ function SeriesPlay({ series }: { series: Item }) {
     <button className="btn btn-primary" type="button" onClick={() => void play()} disabled={pending}>
       <PlayIcon />
       {pending ? "Finding episode…" : nextEpisode ? "Resume" : "Play"}
-    </button>
-  )
-}
-
-/**
- * Plays one season, in order, and keeps the player inside it (`rest=season`).
- *
- * The action belongs to the season the viewer is browsing, and it sits in the band under the
- * episode row, beside the title's own actions: a series with several seasons never has to
- * guess which one a play button meant, and the band it is in is a band the remote walks, so
- * the button is reachable - a row heading on its own is not one.
- */
-function SeasonPlay({ seriesId, season }: { seriesId: string; season: Item }) {
-  const { userId } = useSession()
-  const navigate = useNavigate()
-  const [pending, setPending] = useState(false)
-
-  async function play() {
-    setPending(true)
-    try {
-      // The episode row above already read this list, so it comes from cache.
-      const list = await api.episodes(userId, seriesId, season.Id)
-      const start = seasonStart(list.Items || [])
-      if (start) navigate(`/play/${start.episode.Id}?resume=${start.resume ? "1" : "0"}&rest=season`)
-    } finally {
-      setPending(false)
-    }
-  }
-
-  return (
-    <button className="btn icon-btn" type="button" onClick={() => void play()} disabled={pending}>
-      <SeasonIcon size={16} />
-      {pending ? "Finding episode…" : "Play season"}
     </button>
   )
 }
@@ -593,7 +559,6 @@ function SeasonBody({
           seriesId={seriesId}
           seasonId={season.Id}
           series={series}
-          season={season}
           actions={actions}
           onLoaded={(episodes) => onProgress?.(episodes.length > 0 ? seasonProgress(episodes) : null)}
         />
@@ -704,7 +669,6 @@ function SeriesBody({ series, actions }: { series: Item; actions?: ReactNode }) 
             seasonId={selected}
             nextId={nextEpisode?.Id || ""}
             series={series}
-            season={current}
             actions={actions}
           />
         </section>
@@ -739,7 +703,6 @@ function EpisodeList({
   seasonId,
   nextId = "",
   series = null,
-  season = null,
   actions = null,
   onLoaded,
 }: {
@@ -747,7 +710,6 @@ function EpisodeList({
   seasonId: string
   nextId?: string
   series?: Item | null
-  season?: Item | null
   actions?: ReactNode
   /** Told what this season's episode list came to, for the count above the row. */
   onLoaded?: (episodes: Item[]) => void
@@ -791,12 +753,11 @@ function EpisodeList({
   // page and keep the remote somewhere to land. While the episodes are still on their way the
   // page waits for its own content rather than putting a button in front of the row the viewer
   // is about to browse: a button rendered first is the control a page lands on.
-  const band = (actions || season) && (
-    <div className="actions episode-actions">
-      {actions}
-      {season && Boolean(episodes?.length) && <SeasonPlay seriesId={seriesId} season={season} />}
-    </div>
-  )
+  //
+  // The band is the title's own actions and nothing else. It used to carry a second button that
+  // played the whole season from here; that button is gone, and the band is one row of controls
+  // rather than a row with a gap in it.
+  const band = actions && <div className="actions episode-actions">{actions}</div>
 
   if (!episodes) return <Loading label="Loading episodes" />
 
