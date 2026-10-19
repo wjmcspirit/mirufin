@@ -136,6 +136,7 @@
           var rect = node.getBoundingClientRect()
           return {
             left: rect.left / rectScale,
+            right: rect.right / rectScale,
             top: rect.top / rectScale,
             bottom: rect.bottom / rectScale,
             height: rect.height / rectScale,
@@ -178,6 +179,21 @@
             heading: round(units(asked.querySelector(".row-head h2")).left),
             card: round(units(asked.querySelector(".card")).left),
           },
+          // The header's own outer edges, in the same units: the logo's visible left edge, and
+          // the right-hand group's outer edge. They have to land on the content boundary the copy
+          // and the strips land on - the logo where they begin, the group where the strip's
+          // content ends.
+          edges: (function () {
+            var logo = units(document.querySelector(".brand-logo"))
+            var group = units(document.querySelector(".side-end"))
+            var strip = asked.querySelector(".scroller")
+            var pad = parseFloat(getComputedStyle(strip).paddingRight)
+            return {
+              logo: round(logo.left),
+              group: round(group.right),
+              strip: round(units(strip).right - pad),
+            }
+          })(),
           art: { top: round(art.top), bottom: round(art.bottom), height: round(art.height) },
           caption: { top: round(caption.top), bottom: round(caption.bottom), height: round(caption.height) },
           copy: (function () {

@@ -12,10 +12,12 @@
   --neon: linear-gradient(105deg, #2ec6ff 0%, #5b78ff 48%, #e14dff 100%);
   --danger: #ffb4a8;
   --side: #0d0e12;
-  /* Where a strip's content begins - and so where the home screen's copy and headings begin with
-     it. It is the inset the whole app draws a strip with, at every panel size, and it is the one
-     number that keeps the hero's title, a row's heading and that row's first card on a single
-     left edge. The breakpoints below raise it with the page's own padding. */
+  /* The content boundary the whole app lines up on. `.main` begins at `--page-pad`, a strip's
+     content and a row's heading begin at `--page-pad` plus `--strip-pad`, and the header - the
+     logo on the left and the group on the right - is inset by that same sum, so the top of the
+     screen and the page below it share one pair of edges instead of each floating at an inset of
+     its own. Both are raised together by the breakpoints below. */
+  --page-pad: 44px;
   --strip-pad: 40px;
   --shadow: 0 30px 70px rgba(0, 0, 0, 0.38);
   color-scheme: dark;
@@ -151,7 +153,9 @@ h1, h2, h3 {
   flex: 0 0 auto;
   align-items: center;
   margin: 0;
-  padding: 4px 2px;
+  /* No horizontal padding of its own: the logo's visible left edge is the header's own inset, so
+     it begins on the content boundary the page below it begins on. */
+  padding: 4px 0;
 }
 .brand-logo {
   height: 34px;
@@ -710,7 +714,11 @@ h1, h2, h3 {
   gap: 22px;
   min-width: 0;
   overflow: visible;
-  padding: 10px 28px;
+  /* The header is inset by the page's own padding plus the strip's, which is where the content
+     below it begins: the logo's left edge and the right-hand group's outer edge line up with the
+     hero's copy and with the first and last poster of a row. Stated as the sum rather than as a
+     number so it follows the breakpoints with the page. */
+  padding: 10px calc(var(--page-pad) + var(--strip-pad));
   background: none;
   border: 0;
   box-shadow: none;
@@ -844,7 +852,7 @@ html:not(.remote) .nav:hover .nav-label {
   overflow-anchor: none;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 32px 44px 80px;
+  padding: 32px var(--page-pad) 80px;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -2885,11 +2893,11 @@ input[type="range"]::-webkit-slider-thumb {
 
 @media (max-width: 860px) {
   .shell { height: auto; max-height: none; min-height: 100vh; overflow: visible; }
-  .side { position: sticky; top: 0; padding: 10px 14px; }
+  .side { position: sticky; top: 0; padding: 10px calc(var(--page-pad) + var(--strip-pad)); }
   .side-nav { overflow-x: auto; scrollbar-width: none; }
   .account-name { display: none; }
-  .main { height: auto; overflow: visible; padding: 20px 20px 48px; }
-  :root { --strip-pad: 28px; }
+  .main { height: auto; overflow: visible; padding: 20px var(--page-pad) 48px; }
+  :root { --page-pad: 20px; --strip-pad: 28px; }
   .scroller { padding: 24px var(--strip-pad) 36px; scroll-padding-inline: var(--strip-pad); }
   .settings-row { grid-template-columns: 1fr; justify-items: start; gap: 10px; }
   .detail-layout, .detail-layout.episode-layout, .episode { grid-template-columns: 1fr; }
@@ -2928,8 +2936,8 @@ input[type="range"]::-webkit-slider-thumb {
 .field.compact select, .field.compact input { max-width: 220px; }
 
 @media (min-width: 2200px) {
-  .main { padding: 40px 56px 96px; }
-  :root { --strip-pad: 52px; }
+  .main { padding: 40px var(--page-pad) 96px; }
+  :root { --page-pad: 56px; --strip-pad: 52px; }
   .scroller { padding: 40px var(--strip-pad) 56px; scroll-padding-inline: var(--strip-pad); }
   /* Home's fold. On a wider viewport the page's top padding and the row's own padding grow, and
      the first row of posters still has to clear the bottom edge with its caption under it - the
@@ -2944,8 +2952,9 @@ input[type="range"]::-webkit-slider-thumb {
   /* The rail keeps the height it has at 1080p. Its mark, its icons and its clock are already
      scaled to the screen by the canvas the layout is drawn on (see index.html), so growing them
      here grew them twice over - and on a canvas 844 units tall the top bar sits above every
-     page's fold. Only the room they sit in, across, grows. */
-  .side { padding: 10px 48px; gap: 28px; }
+     page's fold. Only the room they sit in, across, grows - and it grows with the content
+     boundary the page below uses, so the mark and the group keep lining up with it. */
+  .side { padding: 10px calc(var(--page-pad) + var(--strip-pad)); gap: 28px; }
   .settings { width: min(1100px, 100%); font-size: 22px; }
   .settings > h1 { font-size: 56px; }
   .settings .hint { font-size: 22px; }
@@ -3019,19 +3028,20 @@ input[type="range"]::-webkit-slider-thumb {
 .profile-lock .field input { min-height: 44px; padding: 11px 14px; }
 
 @media (min-width: 3200px) {
-  .main { padding: 48px 72px 112px; }
-  :root { --strip-pad: 64px; }
+  .main { padding: 48px var(--page-pad) 112px; }
+  :root { --page-pad: 72px; --strip-pad: 64px; }
   .scroller { padding: 48px var(--strip-pad) 68px; scroll-padding-inline: var(--strip-pad); }
   /* Home's fold, as above: the two paddings stay where they are, and the rail keeps its height
      here too, so the hero's share of the screen is the same as it is at 1080p. */
   .main { padding-top: 32px; }
   .home .row .scroller { padding-top: 16px; }
-  .side { padding: 10px 64px; gap: 36px; }
+  .side { padding: 10px calc(var(--page-pad) + var(--strip-pad)); gap: 36px; }
   /* A 4K panel gives the console less height (the navigation bar is taller there), so it
      takes a little more of the page padding back to keep the poster row fully on screen. */
   .search-screen { margin-top: -40px; margin-bottom: -96px; }
-  /* The rail keeps its 1080p height here as well; only its horizontal room grows. */
-  .side { padding: 10px 64px; gap: 36px; }
+  /* The rail keeps its 1080p height here as well; only its horizontal room grows - and it grows
+     with the content boundary, so the mark and the group stay lined up with the page. */
+  .side { padding: 10px calc(var(--page-pad) + var(--strip-pad)); gap: 36px; }
   .settings { width: min(1400px, 100%); font-size: 30px; }
   .settings > h1 { font-size: 72px; }
   .settings .hint { font-size: 26px; }

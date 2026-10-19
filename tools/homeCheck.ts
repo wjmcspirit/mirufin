@@ -227,6 +227,27 @@ check(
 )
 check("and so does a section heading", rule(".home .row-head").includes("padding-inline: var(--strip-pad)"), rule(".home .row-head").trim())
 check("and the strip under that heading", rule(".home .row .scroller").includes("padding-inline: var(--strip-pad)"), rule(".home .row .scroller").trim())
+/* The header and the page below it share one pair of boundaries: the page's own inset plus the
+   strip's. The logo's left edge begins where the copy and the first card begin, and the
+   right-hand group's outer edge ends where the strip's content ends. The rendered edges are
+   measured in `tools/foldCheck.ts`; what is checked here is that both are stated as the same sum
+   rather than as two insets of their own, and that the sum follows the breakpoints. */
+check("the page begins at the shared page inset", rule(".main").includes("padding: 32px var(--page-pad) 80px"), rule(".main").trim())
+check(
+  "and the header is inset by that plus the strip's, so it lines up with the content below it",
+  rule(".side").includes("padding: 10px calc(var(--page-pad) + var(--strip-pad))"),
+  rule(".side").trim(),
+)
+check(
+  "and the page inset is stated once per panel size, so it can move with the page",
+  ["--page-pad: 44px", "--page-pad: 20px", "--page-pad: 56px", "--page-pad: 72px"].every((line) => css.includes(line)),
+  "the :root declaration and the three breakpoints",
+)
+check(
+  "and the logo carries no horizontal padding of its own, so its edge is the header's inset",
+  rule(".brand").includes("padding: 4px 0"),
+  rule(".brand").trim(),
+)
 
 /** One media query's block, as it is written. */
 function mediaBlock(query: string) {

@@ -84,6 +84,8 @@ interface FoldReport {
   headingBottom: number
   /** The home screen's one left edge, in design units: the hero's copy, the heading, the card. */
   lefts: { hero: number; heading: number; card: number }
+  /** The header's outer edges in design units: the logo's left, the group's right, the strip's. */
+  edges: { logo: number; group: number; strip: number }
   art: { top: number; bottom: number; height: number }
   caption: { top: number; bottom: number; height: number }
   copy: { top: number; bottom: number; height: number; actionsBottom: number }
@@ -372,6 +374,20 @@ for (const { panel, report } of await measureAll(browser, probe, PANELS)) {
     `${panel.name} (${report.row}): the hero's copy, the heading and the first card share a left edge`,
     Math.abs(report.lefts.hero - report.lefts.heading) <= 1 && Math.abs(report.lefts.heading - report.lefts.card) <= 1,
     `hero ${report.lefts.hero}, heading ${report.lefts.heading}, card ${report.lefts.card}`,
+  )
+  /* The header sits on the same pair of boundaries the page below it does. Its left edge is the
+     logo's own visible edge, and its right edge is the outer edge of the group on the right of it,
+     so a header inset that does not match the content's is a logo floating to the left of the
+     title and controls hanging past the last poster. Measured, at every panel size. */
+  check(
+    `${panel.name} (${report.row}): the logo begins where the copy and the first card begin`,
+    Math.abs(report.edges.logo - report.lefts.hero) <= 1 && Math.abs(report.edges.logo - report.lefts.card) <= 1,
+    `logo ${report.edges.logo}, hero ${report.lefts.hero}, card ${report.lefts.card}`,
+  )
+  check(
+    `${panel.name} (${report.row}): the right-hand group ends where the strip's content ends`,
+    Math.abs(report.edges.group - report.edges.strip) <= 1,
+    `group ends at ${report.edges.group}, the strip's content at ${report.edges.strip}`,
   )
   check(
     `${panel.name} (${report.row}): the hero is a fixed share of the screen, not a floor of its own`,
