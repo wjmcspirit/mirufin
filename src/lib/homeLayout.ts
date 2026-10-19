@@ -55,29 +55,17 @@ export function latestTitle(view: Item) {
 }
 
 /**
- * Which of the library kinds Mirufin names itself a view is. A server may identify a view by
- * its CollectionType, by its name, or by both, so both are folded the same way the icon picker
- * and the row titles already fold them.
- */
-function libraryKind(view: Item): "movies" | "shows" | "collections" | "other" {
-  const type = (view.CollectionType || "").toLowerCase()
-  const name = (view.Name || "").toLowerCase()
-  if (type === "movies" || name === "movies") return "movies"
-  if (isShowLibrary(view)) return "shows"
-  if (type === "boxsets" || name === "collections" || name === "collection") return "collections"
-  return "other"
-}
-
-/**
- * Where a library belongs in a list of libraries: Movies, then TV shows, then Collections,
- * then everything else. Views of the same rank fall back to their name, so the order is
- * identical on every launch, and a library kind this app has never seen still lands last.
+ * Where a library belongs in the navigation rail: Movies, then TV shows, then
+ * Collections, then everything else. A server may identify a view by its
+ * CollectionType, by its name, or by both, so both are folded the same way the
+ * icon picker and the row titles above already fold them.
  */
 export function libraryRank(view: Item) {
-  const kind = libraryKind(view)
-  if (kind === "movies") return 0
-  if (kind === "shows") return 1
-  if (kind === "collections") return 2
+  const type = (view.CollectionType || "").toLowerCase()
+  const name = (view.Name || "").toLowerCase()
+  if (type === "movies" || name === "movies") return 0
+  if (isShowLibrary(view)) return 1
+  if (type === "boxsets" || name === "collections" || name === "collection") return 2
   return 3
 }
 
@@ -132,44 +120,15 @@ export function mergeNavItems(saved: NavItemSetting[], libraries: Item[]) {
   return items
 }
 
-/** One stop on the rail's menu: a library, and the route that opens it. */
-export interface MenuDestination {
-  /** The library's id on the server. Also what identifies the stop. */
-  id: string
-  /** What the menu calls it. Mirufin's own word for the kind, not the server's name. */
-  label: string
-  /** Where the stop goes. */
-  to: string
-}
-
-/**
- * The rail's menu: the three library kinds Mirufin names itself, in the order it draws them -
- * TV Shows, then Movies, then Collections.
- *
- * The order is Mirufin's rather than the server's, so the rail reads the same everywhere and a
- * kind is always in the same third of the menu: shows first, because a series is what gets
- * browsed longest, then the films, then the collections that gather both. A kind the server does
- * not report is simply not drawn - the menu holds what is actually there and never a stop that
- * would open nothing - and the label is Mirufin's own, so a server whose show library is called
- * "Shows" still reads "TV Shows" here.
- *
- * These are the destinations the rail has always offered, folded the same way: the id is the
- * server's, and the route is the library route the rest of the app uses.
- */
-export function menuDestinations(libraries: Item[]): MenuDestination[] {
-  const order: { kind: "shows" | "movies" | "collections"; label: string }[] = [
-    { kind: "shows", label: "TV Shows" },
-    { kind: "movies", label: "Movies" },
-    { kind: "collections", label: "Collections" },
-  ]
-  const known = sortLibraries(libraries)
-  const stops: MenuDestination[] = []
-  for (const stop of order) {
-    const library = known.find((entry) => libraryKind(entry) === stop.kind)
-    if (!library?.Id) continue
-    stops.push({ id: library.Id, label: stop.label, to: `/library/${library.Id}` })
+/** The libraries the rail draws, in the viewer's order. A hidden library is left out here. */
+export function railLibraries(libraries: Item[], saved: NavItemSetting[]) {
+  const byId = new Map(libraries.map((library) => [library.Id, library]))
+  const list: Item[] = []
+  for (const entry of mergeNavItems(saved, libraries)) {
+    const library = byId.get(entry.id)
+    if (library && entry.visible) list.push(library)
   }
-  return stops
+  return list
 }
 
 function freshRow(id: string): HomeRowSetting {

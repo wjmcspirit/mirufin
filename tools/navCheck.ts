@@ -367,15 +367,15 @@ function drain() {
   }
 }
 
-/** A fresh screen: the rail across the top, an empty scrolling column under it. */
+/** A fresh screen: the rail on the left, an empty scrolling column on the right. */
 function shell() {
   root.children = []
   bodyNode = new El("body")
   active = null
   const side = new El("header", "side")
-  const nav = new El("nav", "glass-menu")
-  const rail = new El("a", "glass-item active").attr("href", "/library/shows")
-  rail.text = "TV Shows"
+  const nav = new El("nav", "side-nav")
+  const rail = new El("a", "nav active").attr("href", "/")
+  rail.text = "Home"
   rail.place(60, 24, 48, 48)
   nav.add(rail)
   side.add(nav)
