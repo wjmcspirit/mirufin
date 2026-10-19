@@ -216,11 +216,7 @@ function reveal(node: HTMLElement) {
 
 function placeReveal(node: HTMLElement) {
   const scroller = node.closest(".scroller")
-  if (scroller instanceof HTMLElement) {
-    const left = node.offsetLeft - (scroller.clientWidth - node.offsetWidth) / 2
-    const next = Math.max(0, left)
-    if (Math.abs(scroller.scrollLeft - next) > 2) scroller.scrollTo({ left: next, behavior: "auto" })
-  }
+  if (scroller instanceof HTMLElement) scrollRow(scroller, node)
   const main = node.closest(".main")
   if (!(main instanceof HTMLElement)) return
   const view = () => main.getBoundingClientRect()
@@ -256,19 +252,62 @@ function placeReveal(node: HTMLElement) {
   main.scrollTop += rect.top - slot
 }
 
+/**
+ * Park a block at the top of the page column.
+ *
+ * The distance here is a rect measurement and the offset it moves is a layout measurement, so
+ * the two are converted before they are added: on the television build the app is scaled with a
+ * root zoom, and adding them directly over-scrolls the page by the zoom factor every time the
+ * remote moves along a row - which is the whole page lurching under the viewer.
+ */
 function park(main: HTMLElement, target: HTMLElement, pad: number) {
-  const delta = target.getBoundingClientRect().top - (main.getBoundingClientRect().top + pad)
+  const delta = (target.getBoundingClientRect().top - main.getBoundingClientRect().top) / scrollScale(main) - pad
   if (Math.abs(delta) < 3) return
   const max = main.scrollHeight - main.clientHeight
   main.scrollTop = Math.max(0, Math.min(max, main.scrollTop + delta))
 }
 
+/**
+ * Screen pixels per layout pixel for a control the app's root zoom has scaled.
+ *
+ * The television build draws its layout on a 1500-wide canvas and scales the whole thing to the
+ * screen, so a rect is measured in screen pixels while `scrollLeft`, `scrollTop`, `clientWidth`
+ * and `offsetWidth` are all in layout pixels. Adding a rect distance to a scroll offset, or
+ * subtracting a rect width from a client width, overshoots by the zoom factor - and an overshoot
+ * in a row is a card that is still not on screen, and in a menu an option that has been pushed
+ * out of its own box.
+ */
+function scrollScale(node: HTMLElement) {
+  const box = node.getBoundingClientRect()
+  if (node.offsetWidth <= 0 || box.width <= 0) return 1
+  return box.width / node.offsetWidth
+}
+
+/**
+ * Bring a control inside a sideways row into view, by the row's own offset rather than by
+ * `scrollIntoView`: the row is the only thing that may move, and how far it moves is the
+ * viewer's own sideways press rather than the browser's idea of the whole page.
+ *
+ * Every number here is a layout measurement - `offsetLeft`, `offsetWidth`, `clientWidth`,
+ * `scrollWidth`, `scrollLeft` - so the row is moved in the units it is measured in and the
+ * television build's root zoom cannot change the answer. The distance is read from the row's own
+ * layout rather than from where the row happens to be scrolled, so the reveal running again a
+ * frame later computes the same place and the row cannot creep. The control is centred, and
+ * clamped to the row's own ends, so the first still needs no scrolling and the last cannot run
+ * past the row.
+ */
+function scrollRow(scroller: HTMLElement, node: HTMLElement) {
+  const middle = (scroller.clientWidth - node.offsetWidth) / 2
+  const most = Math.max(0, scroller.scrollWidth - scroller.clientWidth)
+  const next = Math.max(0, Math.min(most, node.offsetLeft - middle))
+  if (Math.abs(scroller.scrollLeft - next) > 1) scroller.scrollLeft = next
+}
+
 function scrollInside(scroller: HTMLElement, node: HTMLElement) {
   const box = scroller.getBoundingClientRect()
-  // A rect is measured in screen pixels while a scroll offset is in layout pixels: on the
-  // television build the app is scaled with a root zoom, and mixing the two overshoots far
-  // enough to push the focused option out of sight of its own menu.
-  const scale = scroller.offsetWidth > 0 ? box.width / scroller.offsetWidth : 1
+  // The same correction the rows need: a rect is measured in screen pixels while a scroll
+  // offset is in layout pixels, and mixing the two pushes the focused option out of its own box.
+  const scale = scrollScale(scroller)
   const rect = node.getBoundingClientRect()
   if (scroller.scrollWidth > scroller.clientWidth + 8) {
     if (rect.left >= box.left + 8 * scale && rect.right <= box.right - 8 * scale) return

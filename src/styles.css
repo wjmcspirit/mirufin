@@ -1813,7 +1813,17 @@ select {
 /* The Favorite button is the person's only action, so it sits at the head of the
    copy column rather than stretching across it. */
 .person-page .person-actions { justify-content: flex-start; }
-.detail-body { display: grid; gap: 22px; }
+.detail-body {
+  display: grid;
+  /* The page's own column: one track, stated rather than left to the engine. An `auto` track
+     takes its width from what it holds, and the episode row below lives in that width, so the
+     track is stated as the page's own (`minmax(0, 1fr)`) rather than derived - on every engine
+     and at every panel size. A row whose width an engine derives from the stills instead is a
+     row as wide as the whole season: it runs past the screen and has nothing of its own to
+     scroll, which is the defect this page was reported for. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 22px;
+}
 /* A page that browses a season gives the browsing area the room: the portrait steps down a
    size, the synopsis is held to two lines and the copy sits a little tighter, because the
    episode the viewer is on is described in its own block under the season row. Nothing else
@@ -1888,23 +1898,33 @@ select {
 /* The season the page is browsing is already marked on its own artwork, so a focused season
    takes the same cyan ring every other card in the app takes rather than a second, louder
    one on top of it: the viewer can see where the remote is and which season is showing. */
-.episode-block { display: grid; }
+/* The block's own column, stated for the same reason the page's is: the details above the row
+   carry an episode name and a line of facts, and the row must not take its width from either. */
+.episode-block {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
 /* The episode row: a strip of landscape stills, sized so five are on screen with a sixth at the
-   edge, and the rest a sideways press away. The design canvas is 1500 wide; the page's own
-   padding and the strip's leave 1332 for the row at 1080p, 1284 at 1440p and 1228 at 4K, and
-   five stills with their gaps come to 1256 - so five are on screen at 1080p and 1440p, and four
-   with most of a fifth at 4K, where the row is read from further away anyway. Each card is the
-   still with the episode's number and name beneath it, and the marks the row has always carried
-   - watched, and how far in. */
+   edge, and the rest a sideways press away. The design canvas is 1500 wide, and the page's own
+   padding leaves the row 1412 at 1080p, 1388 at 1440p and 1356 at 4K - 1332, 1308 and 1276 of it
+   inside the strip's own 40. Five stills with their gaps come to 1256, so five are on screen at
+   every panel size. Each card is the still with the episode's number and name beneath it, and the
+   marks the row has always carried - watched, and how far in. */
 .episode-scroller {
   align-items: start;
-  /* The row is a grid item of the block above it, and a grid item is as wide as its contents
-     unless it is told otherwise: without this the strip would be as wide as all of the season's
-     stills together, `scrollWidth` and `clientWidth` would be the same number, the row would
-     have nothing to scroll, and the page would clip the stills past its right edge - the remote
-     would land on an episode that is not on screen with the row never following it. Stating the
-     minimum is what makes the strip the scroll container its own width, at every panel size and
-     whatever an engine makes of the track. */
+  /* The row is not a snap container. `.scroller` snaps for the strips whose cards say where they
+     want to rest, but a still in this row carries no `scroll-snap-align`, so a snap container
+     here is one the engine can never satisfy - and what an engine does with a programmatic
+     scroll inside a snap container it cannot satisfy is not the same on every WebView. This row
+     is scrolled by the focus engine, which is the only thing that knows where the remote is. */
+  scroll-snap-type: none;
+  /* The row's width, stated rather than derived: it is the block's column and nothing else, so
+     what overflows is the stills and what scrolls is the row. A row that took its width from its
+     contents would be as wide as the whole season, `scrollWidth` and `clientWidth` would be the
+     same number, and the page would clip the stills past its right edge - the remote would land
+     on an episode that is not on screen with the row never following it. */
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
 }
 .episode {

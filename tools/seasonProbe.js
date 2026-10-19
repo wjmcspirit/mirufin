@@ -98,8 +98,11 @@
     // Walk the row the way a remote does: to the far end, then all the way back. Each press is
     // given the couple of frames the engine reveals a card over before the row is measured, so
     // what is measured is what the viewer ends up looking at.
+    var pageMain = document.getElementById("main")
+    var pageTopBefore = pageMain.scrollTop
     remote.placeFocus(cards[0])
     await nextFrame()
+    var pageTopAtStart = pageMain.scrollTop
 
     var right = []
     for (var out = 1; out < cards.length; out += 1) {
@@ -109,6 +112,7 @@
       right.push(look(episodes, document.activeElement, was))
     }
     var atEnd = look(episodes, document.activeElement, episodes.scrollLeft)
+    var pageTopAtEnd = pageMain.scrollTop
 
     var left = []
     for (var back = cards.length - 2; back >= 0; back -= 1) {
@@ -118,6 +122,7 @@
       left.push(look(episodes, document.activeElement, wasBack))
     }
     var atStart = look(episodes, document.activeElement, episodes.scrollLeft)
+    var pageTopBack = pageMain.scrollTop
 
     // The season row above it is walked the same way, so both rows are measured doing the thing
     // the viewer complained about rather than one of them sitting at offset zero.
@@ -148,6 +153,17 @@
       left: left,
       railScrollLeft: rail ? Math.round(rail.scrollLeft) : 0,
       pageScrollLeft: Math.round(document.getElementById("main").scrollLeft),
+      /* The row must not be a snap container: a still carries no `scroll-snap-align`, so an
+         engine asked to snap here is being asked something it can never satisfy. */
+      snapType: getComputedStyle(episodes).scrollSnapType,
+      /* Where the page column was while the remote walked the row. Walking a row sideways must
+         not move the page up or down: the row is the only thing that may move. */
+      pageScrollTop: {
+        before: Math.round(pageTopBefore),
+        atStart: Math.round(pageTopAtStart),
+        atEnd: Math.round(pageTopAtEnd),
+        back: Math.round(pageTopBack),
+      },
       seasonStrip: {
         clientWidth: Math.round(seasons.clientWidth),
         scrollWidth: Math.round(seasons.scrollWidth),

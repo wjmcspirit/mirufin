@@ -250,6 +250,10 @@ interface SeasonReport {
   left: SeasonStrip[]
   railScrollLeft: number
   pageScrollLeft: number
+  /** The row's own `scroll-snap-type`: it must not be a snap container. */
+  snapType: string
+  /** Where the page column sat while the remote walked the row, top edge. */
+  pageScrollTop: { before: number; atStart: number; atEnd: number; back: number }
   seasonStrip: { clientWidth: number; scrollWidth: number; scrollLeft: number; left: number; right: number; cardIndex: number; cardInside: boolean }
 }
 
@@ -419,6 +423,34 @@ for (const { panel, report } of await measureSeason(browser, seasonProbe, PANELS
     `${panel.name}: the row stays inside the page, whatever else the block carries`,
     report.strip.left >= report.page.left - 0.5 && report.strip.right <= report.page.right + 0.5,
     `strip ${report.strip.left}..${report.strip.right} against the page's ${report.page.left}..${report.page.right}`,
+  )
+  /* The measurement that tells a stated width from a derived one. The row's viewport is the
+     page's column and nothing else, so the page's own padding is what sits either side of it. A
+     row narrower than that has had its width derived by the engine from something else - and an
+     engine that derives it from the stills instead makes the row as wide as the whole season,
+     which is a row that runs past the screen and has nothing of its own to scroll. This is the
+     defect, stated as a measurement rather than as a rule. */
+  check(
+    `${panel.name}: the row fills the page's column, rather than a width an engine derived`,
+    Math.abs(report.strip.left - report.page.left - (report.page.right - report.strip.right)) <= 1,
+    `margins ${report.strip.left - report.page.left} left and ${report.page.right - report.strip.right} right`,
+  )
+  /* The row is scrolled by the focus engine, never by the engine's own snapping: a still in this
+     row carries no `scroll-snap-align`, so a snap container here is one the engine can never
+     satisfy - and what an engine does with a programmatic scroll inside one it cannot satisfy is
+     not the same on every WebView. */
+  check(
+    `${panel.name}: the row is not a snap container the engine can fight`,
+    report.snapType === "none",
+    `scroll-snap-type is ${report.snapType}`,
+  )
+  /* Walking a row sideways must not move the page up or down either: the row is the only thing
+     that may move, and a page that shifts under the viewer is the same defect seen from the other
+     axis. Measured across the walk rather than at its ends. */
+  check(
+    `${panel.name}: and walking the row never moved the page up or down`,
+    report.pageScrollTop.atStart === report.pageScrollTop.atEnd && report.pageScrollTop.atEnd === report.pageScrollTop.back,
+    `page top ${report.pageScrollTop.before} -> ${report.pageScrollTop.atStart} -> ${report.pageScrollTop.atEnd} -> ${report.pageScrollTop.back}`,
   )
   check(
     `${panel.name}: the row scrolled to follow the remote to the last episode`,
