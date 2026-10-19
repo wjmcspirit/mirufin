@@ -6,3 +6,6 @@ android/keystore.properties
 android/*.jks
 android/app/release
 *.apk
+# Screenshots and logs captured from a television by tools/tv.ps1. They are test output, not
+# source: they are large, they are machine-specific, and they are never worth committing.
+test-results/
