@@ -271,8 +271,80 @@ export function remainingLabel(item: Item) {
   return `${formatRuntime(runtime - position)} left`
 }
 
+/**
+ * When the viewer last touched this item, in milliseconds, or NaN when the server did not say.
+ *
+ * Jellyfin's `UserData` carries `LastPlayedDate` for every item it has a playback record for, and
+ * the resume list is already requested with `UserData`, so this needs no further request.
+ */
+function lastActiveAt(item: Item) {
+  const raw = item.UserData?.LastPlayedDate
+  if (!raw) return Number.NaN
+  const at = Date.parse(raw)
+  return Number.isNaN(at) ? Number.NaN : at
+}
+
+/**
+ * Is `candidate` the more recently active of two episodes of the same series?
+ *
+ * The newer `LastPlayedDate` wins. An episode the server gave no date for never displaces one it
+ * did, and two episodes the server dated the same - or dated neither - keep the order it returned
+ * them in, which is Jellyfin's own resume order. That is what makes the choice deterministic even
+ * for a server that sends no dates at all: with no dates anywhere, the first episode of the series
+ * the server listed is the one drawn, and the row reads exactly as it did before it was grouped.
+ */
+function moreRecentlyActive(candidate: Item, current: Item) {
+  const candidateAt = lastActiveAt(candidate)
+  if (Number.isNaN(candidateAt)) return false
+  const currentAt = lastActiveAt(current)
+  if (Number.isNaN(currentAt)) return true
+  return candidateAt > currentAt
+}
+
+/**
+ * The series an episode is filed under: its own parent series, by id.
+ *
+ * Never by name: two shows can share a title, and Jellyfin's ids are the only thing that tells
+ * them apart. An episode the server gave no `SeriesId` for is filed under itself, so it is never
+ * merged into another show's card - it simply has nothing to be merged with.
+ */
+function seriesKey(item: Item) {
+  return item.SeriesId || `episode:${item.Id}`
+}
+
+/**
+ * What Continue watching holds: one card per title, with a series counted once.
+ *
+ * Jellyfin's resume list is one entry per resumable *item*, so a series the viewer has left
+ * part-way through in several places arrives as several entries - the same show drawn three or
+ * four times, which is what this row must never do. A series is therefore filed under its own
+ * `SeriesId` and represented by the one episode the viewer was most recently part-way through
+ * (`moreRecentlyActive`); every other episode of that series is dropped, and a series with nothing
+ * resumable left in the list simply does not appear. An episode that has been finished, or is
+ * within seconds of its end, is not resumable and so can never displace one that is - which is
+ * `isInProgress`'s rule, applied to the whole list before any grouping.
+ *
+ * Films are not grouped at all: each one is a title in its own right and keeps its own card, and
+ * nothing is ever merged across two ids.
+ *
+ * The row keeps the order Jellyfin returned, so a card sits where its own episode sat and the most
+ * recently watched thing is still first. The item handed back is the chosen episode itself, so the
+ * card's title, episode number, progress bar, remaining time and resume position are all that
+ * episode's own - and its id is the id that is played.
+ */
 export function continueWatching(items: Item[]) {
-  return items.filter((item) => (item.Type === "Movie" || item.Type === "Episode") && isInProgress(item))
+  const resumable = items.filter((item) => (item.Type === "Movie" || item.Type === "Episode") && isInProgress(item))
+
+  // Which entry of each series is the one to draw, as an index into `resumable`.
+  const chosen = new Map<string, number>()
+  resumable.forEach((item, index) => {
+    if (item.Type !== "Episode") return
+    const key = seriesKey(item)
+    const best = chosen.get(key)
+    if (best == null || moreRecentlyActive(item, resumable[best])) chosen.set(key, index)
+  })
+
+  return resumable.filter((item, index) => item.Type !== "Episode" || chosen.get(seriesKey(item)) === index)
 }
 
 export function resumeCardTitle(item: Item) {

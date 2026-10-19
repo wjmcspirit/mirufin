@@ -12,7 +12,7 @@
  * suite: delete it when the project grows a real test runner.
  */
 import { readFileSync } from "node:fs"
-import { comingUpEpisodes, continueWatching } from "../src/lib/format"
+import { comingUpEpisodes, continueWatching, resumeCardDetail, resumeCardTitle } from "../src/lib/format"
 import { heroDeck, mergeHomeRows, sectionTitle } from "../src/lib/homeLayout"
 import type { Item } from "../src/lib/types"
 
@@ -117,9 +117,174 @@ same(
 )
 same("a series is not something to resume", continueWatching([title("s1", "A Show", { Type: "Series", RunTimeTicks: 45 * MINUTE, UserData: { PlaybackPositionTicks: 10 * MINUTE } })]), [])
 
+// --------------------------------------------------------------------------- one card per show
+
+/* The resume list is one entry per resumable *item*, so a series the viewer left part-way through
+   in several places arrives several times - the same show drawn four times, which is the complaint
+   this section exists for. Continue watching has to draw it once, and the card has to be the
+   episode the viewer was last part-way through. Everything below is that rule: the grouping, the
+   choice inside a group, and what is deliberately left alone. */
+
+/** An episode the viewer left part-way through, at a time the server reported. */
+function watching(id: string, seriesId: string, index: number, at: string) {
+  return episode(id, seriesId, index, {
+    SeriesName: "A Show",
+    UserData: { PlaybackPositionTicks: 10 * MINUTE, LastPlayedDate: at },
+  })
+}
+
+/** An episode the viewer left part-way through, with no date from the server at all. */
+function partWay(id: string, seriesId: string, index: number) {
+  return episode(id, seriesId, index, { SeriesName: "A Show", UserData: { PlaybackPositionTicks: 10 * MINUTE } })
+}
+
+/** A film the viewer left part-way through. A film is a title of its own, so it carries no series. */
+function film(id: string, name: string) {
+  return title(id, name, { RunTimeTicks: 120 * MINUTE, UserData: { PlaybackPositionTicks: 20 * MINUTE } })
+}
+
+// The screenshot: one show, four episodes left part-way through, drawn four times.
+const brokeGirls = [1, 2, 3, 4].map((index) =>
+  episode(`bg${index}`, "2bg", index, {
+    SeriesName: "2 Broke Girls",
+    UserData: { PlaybackPositionTicks: 10 * MINUTE, LastPlayedDate: `2026-05-0${index}T10:00:00Z` },
+  }),
+)
+const brokeCards = continueWatching(brokeGirls)
+same("2 Broke Girls is drawn exactly once, however many of its episodes are part-way through", brokeCards.length, 1)
+same("and the one card is the episode the viewer was last part-way through", brokeCards.map((item) => item.Id), ["bg4"])
+same("so the row states the show's name once", brokeCards.map((item) => resumeCardTitle(item)), ["2 Broke Girls"])
+
+// The choice inside a group: the newest playback record wins, wherever it sits in the list.
+const shuffled = [
+  watching("a1", "series-a", 1, "2026-05-01T10:00:00Z"),
+  watching("a2", "series-a", 2, "2026-05-05T10:00:00Z"),
+  watching("a3", "series-a", 3, "2026-05-02T10:00:00Z"),
+]
+same("the newest playback record wins, not the first the server listed", continueWatching(shuffled).map((item) => item.Id), ["a2"])
+same("and not the highest episode number either", continueWatching(shuffled).map((item) => item.IndexNumber), [2])
+
+same(
+  "with no dates from the server, the episode it listed first is the one drawn",
+  continueWatching([partWay("g1", "series-g", 1), partWay("g2", "series-g", 2), partWay("g3", "series-g", 3)]).map((item) => item.Id),
+  ["g1"],
+)
+same(
+  "an episode with no date does not displace one the server dated",
+  continueWatching([partWay("h1", "series-h", 1), watching("h2", "series-h", 2, "2026-05-01T10:00:00Z")]).map((item) => item.Id),
+  ["h2"],
+)
+same(
+  "and a dated episode keeps its place over an undated one listed after it",
+  continueWatching([watching("i1", "series-i", 1, "2026-05-01T10:00:00Z"), partWay("i2", "series-i", 2)]).map((item) => item.Id),
+  ["i1"],
+)
+same(
+  "two episodes the server dated the same keep the server's order",
+  continueWatching([watching("j1", "series-j", 1, "2026-05-01T10:00:00Z"), watching("j2", "series-j", 2, "2026-05-01T10:00:00Z")]).map(
+    (item) => item.Id,
+  ),
+  ["j1"],
+)
+same(
+  "and a date the server sent that is not a date counts as no date",
+  continueWatching([partWay("k1", "series-k", 1), watching("k2", "series-k", 2, "not-a-date")]).map((item) => item.Id),
+  ["k1"],
+)
+
+// Two shows, two films, three episodes of the first show: four cards, each show drawn once, in the
+// order Jellyfin returned them.
+const mixed = [
+  watching("x1", "series-x", 1, "2026-05-01T10:00:00Z"),
+  film("m1", "A Film"),
+  watching("x2", "series-x", 2, "2026-05-05T10:00:00Z"),
+  watching("y1", "series-y", 1, "2026-05-03T10:00:00Z"),
+  film("m2", "Another Film"),
+  watching("x3", "series-x", 3, "2026-05-02T10:00:00Z"),
+  watching("y2", "series-y", 2, "2026-05-04T10:00:00Z"),
+]
+same(
+  "two shows and two films are four cards, each show drawn once, in the server's order",
+  continueWatching(mixed).map((item) => item.Id),
+  ["m1", "x2", "m2", "y2"],
+)
+same("and the films are still both there, one card each", continueWatching(mixed).filter((item) => item.Type === "Movie").map((item) => item.Id), ["m1", "m2"])
+
+same(
+  "two shows that share a name are still two cards",
+  continueWatching([
+    watching("t1", "series-twin-1", 1, "2026-05-01T10:00:00Z"),
+    watching("t2", "series-twin-2", 1, "2026-05-02T10:00:00Z"),
+  ]).map((item) => item.Id),
+  ["t1", "t2"],
+)
+same(
+  "a film whose id matches a show's id is never merged into that show",
+  continueWatching([film("shared", "A Film"), watching("o1", "shared", 1, "2026-05-01T10:00:00Z")]).map((item) => item.Id),
+  ["shared", "o1"],
+)
+same(
+  "and two films that share a name are two cards, not one",
+  continueWatching([film("m3", "A Film"), film("m4", "A Film")]).map((item) => item.Id),
+  ["m3", "m4"],
+)
+same(
+  "an episode the server gave no series for is not merged into another show's card",
+  continueWatching([partWay("p1", "", 1), partWay("p2", "", 2)]).map((item) => item.Id),
+  ["p1", "p2"],
+)
+
+same(
+  "an episode that has been finished does not displace one that is resumable",
+  continueWatching([
+    watching("q1", "series-q", 1, "2026-05-01T10:00:00Z"),
+    episode("q2", "series-q", 2, { UserData: { Played: true, PlaybackPositionTicks: 45 * MINUTE, LastPlayedDate: "2026-06-01T10:00:00Z" } }),
+  ]).map((item) => item.Id),
+  ["q1"],
+)
+same(
+  "and a show with nothing left to resume is not in the row at all",
+  continueWatching([
+    episode("r1", "series-r", 1, { UserData: { Played: true, PlaybackPositionTicks: 45 * MINUTE, LastPlayedDate: "2026-06-01T10:00:00Z" } }),
+    episode("r2", "series-r", 2, { UserData: { PlaybackPositionTicks: 45 * MINUTE - 5_000_000, LastPlayedDate: "2026-06-02T10:00:00Z" } }),
+  ]),
+  [],
+)
+same(
+  "a show whose only episode was never started is not in the row either",
+  continueWatching([episode("s2", "series-s", 1, { LastPlayedDate: "2026-06-01T10:00:00Z" })]),
+  [],
+)
+
+// The card the row draws is the chosen episode itself, so everything it states is that episode's.
+const chosen = continueWatching([
+  watching("z1", "series-z", 1, "2026-05-01T10:00:00Z"),
+  episode("z2", "series-z", 2, {
+    SeriesName: "A Show",
+    RunTimeTicks: 45 * MINUTE,
+    UserData: { PlaybackPositionTicks: 15 * MINUTE, LastPlayedDate: "2026-05-09T10:00:00Z" },
+  }),
+])[0]
+same("the card names the show and keeps the episode's number and name", resumeCardTitle(chosen), "A Show")
+same("and its own remaining time", resumeCardDetail(chosen), "S1:E2  ·  Episode 2  ·  30m left")
+same("and the resume position it was left at, which is what the player is handed", chosen.UserData?.PlaybackPositionTicks, 15 * MINUTE)
+same("and the id that is played is the chosen episode's", chosen.Id, "z2")
+
+/* The grouping is the model's, not the screen's: Home draws the list `continueWatching` returns, so
+   the duplicate never reaches the row in the first place. What is checked here is that wiring, and
+   that the card the row draws is still a resume of the item it names. */
+const home = readFileSync("src/pages/Home.tsx", "utf8")
+check(
+  "Home draws Continue watching from the grouped list, not from the raw response",
+  /const inProgress = useMemo\(\(\) => continueWatching\(resumeItems\)/.test(home),
+  "Home.tsx",
+)
+check("and the row renders that list directly, with no filtering of its own", /inProgress\.map\(\(item\) => \(/.test(home), "Home.tsx")
+check("and each card still resumes the item it names", /href=\{`\/play\/\$\{item\.Id\}\?resume=1`\}/.test(home), "Home.tsx")
+
 // --------------------------------------------------------------------------- what is coming up
 
-const watching = episode("n1", "series-a", 2, { UserData: { PlaybackPositionTicks: 10 * MINUTE } })
+const inProgressEpisode = episode("n1", "series-a", 2, { UserData: { PlaybackPositionTicks: 10 * MINUTE } })
 const nextUp = [
   episode("n1", "series-a", 2),
   episode("n2", "series-b", 1),
@@ -141,7 +306,7 @@ same(
 )
 same(
   "an episode the viewer is part-way through is Continue watching's, not Coming up's",
-  comingUpEpisodes(nextUp, [watching]).map((item) => item.Id),
+  comingUpEpisodes(nextUp, [inProgressEpisode]).map((item) => item.Id),
   ["n2", "n3", "n4", "n5"],
 )
 same(
