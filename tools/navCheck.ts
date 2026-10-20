@@ -1136,6 +1136,158 @@ function testRailEntry() {
 }
 
 /**
+ * A library page as the app draws it: the head with the library's own count, the toolbar at the
+ * right of it - View, Sort, Filter and A-Z, the controls a viewer presses Down from - and the
+ * grid of posters under them, in rows.
+ *
+ * The geometry is the one that produced the reported defect: the toolbar is at the right of the
+ * header, so the poster nearest it is the last of the first row and the first poster is the
+ * furthest from it. A press of Down answered with the nearest item therefore lands on the
+ * right-hand end of the row, which is what the checks below are written against.
+ */
+function libraryPage(main: El, columns = 6, rows = 4, cardWidth = 168) {
+  const cardHeight = Math.round(cardWidth * 1.5)
+  const head = new El("header", "page-head library-head")
+  head.place(60, 0, 1920, 220)
+  const icons = new El("div", "library-icons")
+  icons.place(140, 1400, 250, 44)
+  const labels = ["View", "Sort", "Filter", "A to Z"]
+  const tools = labels.map((label, index) => {
+    const holder = new El("div", "tool")
+    holder.place(140, 1400 + index * 50, 44, 44)
+    const button = new El("button", index === labels.length - 1 ? "tool-btn tool-az" : "tool-btn").attr("aria-label", label)
+    button.text = label
+    button.place(140, 1400 + index * 50, 44, 44)
+    holder.add(button)
+    icons.add(holder)
+    return button
+  })
+  head.add(icons)
+  main.add(head)
+  const board = new El("div", "grid poster size-medium")
+  board.place(300, 0, 1920, rows * (cardHeight + 28))
+  const cards = Array.from({ length: columns * rows }, (_, index) => {
+    const column = index % columns
+    const row = Math.floor(index / columns)
+    const card = new El("a", "card poster").attr("href", `/item/M${index + 1}`)
+    card.place(300 + row * (cardHeight + 28), 64 + column * (cardWidth + 14), cardWidth, cardHeight)
+    board.add(card)
+    return card
+  })
+  main.add(board)
+  return { head, icons, tools, board, cards }
+}
+
+/** Where a control's own centre is, as the engine measures it. */
+function centre(node: El) {
+  return node.rect.left + node.rect.width / 2
+}
+
+/**
+ * The library toolbar and the grid under it: Down from any of the toolbar's controls enters the
+ * grid at its first poster, and Up comes back to the control the viewer left.
+ *
+ * The viewer's complaint was that Down from the toolbar - the poster-size control, the sort
+ * control, the filter control or A-Z - put the remote on a title at the far right of the first
+ * row instead of the first title on the left, which is what happens when the press is answered
+ * by the item nearest the control it left rather than by the beginning of the grid.
+ */
+function testLibraryToolbar() {
+  clearSeats()
+  resetFocusState()
+  const page = shell()
+  const library = libraryPage(page.main)
+  noteRoute("/library/movies")
+  const first = library.cards[0]
+  const lastOfRow = library.cards[5]
+  const az = library.tools[library.tools.length - 1]
+  check(
+    "the check is set up the way the bug appeared: the last poster of the first row is the one nearest the toolbar",
+    Math.abs(centre(lastOfRow) - centre(az)) < Math.abs(centre(first) - centre(az)),
+    `toolbar centre ${centre(az)}, first poster ${centre(first)}, last of the row ${centre(lastOfRow)}`,
+  )
+
+  for (const tool of library.tools) {
+    const control = tool.getAttribute("aria-label") || ""
+    placeFocus(tool)
+    moveFocus("ArrowDown")
+    check(`Down from the ${control} control lands on the first poster of the first row`, active === first, label(active))
+    moveFocus("ArrowUp")
+    check(`Up from that poster returns to the ${control} control`, active === tool, label(active))
+  }
+
+  // The grid is still walked the way it always was: sideways along a row, and a row at a time.
+  placeFocus(first)
+  moveFocus("ArrowRight")
+  check("Right walks the first row", active === library.cards[1], label(active))
+  moveFocus("ArrowRight")
+  check("and keeps walking it", active === library.cards[2], label(active))
+  moveFocus("ArrowLeft")
+  moveFocus("ArrowLeft")
+  check("Left walks it back to its first poster", active === first, label(active))
+  moveFocus("ArrowDown")
+  check("Down moves to the same column of the next row", active === library.cards[6], label(active))
+  moveFocus("ArrowDown")
+  check("and on to the row under it", active === library.cards[12], label(active))
+  moveFocus("ArrowUp")
+  check("Up comes back a row", active === library.cards[6], label(active))
+  moveFocus("ArrowUp")
+  check("and back to the first row", active === first, label(active))
+
+  // Up from the first row, from a column the viewer walked to, still returns to the toolbar.
+  placeFocus(library.cards[7])
+  moveFocus("ArrowUp")
+  moveFocus("ArrowUp")
+  check(
+    "Up from the first row returns to a toolbar control, whichever column the viewer is in",
+    active !== null && library.tools.includes(active),
+    label(active),
+  )
+}
+
+/**
+ * The same press on the shapes a library takes: a different poster size, a different number of
+ * columns - which is what sorting or filtering to a shorter list leaves - a grid the viewer has
+ * scrolled down, and the other grid band the app shares this navigation with.
+ */
+function testLibraryToolbarShapes() {
+  const cases: { name: string; columns: number; rows: number; width: number; scroll: number }[] = [
+    { name: "a large-poster grid", columns: 5, rows: 4, width: 220, scroll: 0 },
+    { name: "a small-poster grid", columns: 8, rows: 4, width: 132, scroll: 0 },
+    { name: "a grid narrowed to a handful of titles", columns: 3, rows: 2, width: 168, scroll: 0 },
+    { name: "a grid the viewer has scrolled down", columns: 6, rows: 6, width: 168, scroll: 620 },
+  ]
+  for (const entry of cases) {
+    clearSeats()
+    resetFocusState()
+    const page = shell()
+    const library = libraryPage(page.main, entry.columns, entry.rows, entry.width)
+    noteRoute("/library/tvshows")
+    if (entry.scroll) scrollPage(page.main, entry.scroll)
+    // The first poster the viewer can see: the first card of the first row that is on screen,
+    // which is where a press of Down into a grid the viewer has scrolled starts.
+    const expected = library.cards.find((card) => card.rect.bottom > 8 && card.rect.top < 1080 - 8)
+    for (const tool of library.tools) {
+      const control = tool.getAttribute("aria-label") || ""
+      placeFocus(tool)
+      moveFocus("ArrowDown")
+      check(`${entry.name}: Down from the ${control} control lands on the first poster of the first visible row`, active === expected, label(active))
+    }
+  }
+
+  // A collection's own page draws the other grid band, and it is entered the same way.
+  clearSeats()
+  resetFocusState()
+  const page = shell()
+  const library = libraryPage(page.main, 4, 3)
+  library.board.className = "card-board"
+  noteRoute("/item/BOXSET")
+  placeFocus(library.tools[0])
+  moveFocus("ArrowDown")
+  check("a collection's board is entered at its own first card as well", active === library.cards[0], label(active))
+}
+
+/**
  * The season page's episode row with the remote walking it: the row itself is what has to
  * scroll, and the episode the remote lands on has to be inside what the row is showing.
  *
@@ -1763,6 +1915,8 @@ testRailIsNotASeat()
 testSeasonWalk()
 testSeasonPageWalk()
 testRailEntry()
+testLibraryToolbar()
+testLibraryToolbarShapes()
 testEpisodeRowScroll()
 testEpisodeRowPlays()
 testSeasonBack()

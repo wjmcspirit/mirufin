@@ -431,25 +431,58 @@ function rememberLane(node: FocusItem, items: FocusItem[]) {
   if (index >= 0) lane = index
 }
 
+/**
+ * The rows a wrapping grid is laid out in, top to bottom, each in its own visual order.
+ *
+ * A grid's own geometry is its rows: items sharing a top line are one row, and the order inside
+ * a row is left to right. Grouping them is what lets a vertical press into a grid be answered by
+ * a row rather than by whichever card happens to share a coordinate.
+ */
+function gridRows(items: FocusItem[]) {
+  const rows: FocusItem[][] = []
+  for (const item of [...items].sort((a, b) => a.rect.top - b.rect.top || a.rect.left - b.rect.left)) {
+    const row = rows[rows.length - 1]
+    const slack = Math.max(12, item.rect.height * 0.4)
+    if (row && Math.abs(item.rect.top - row[0].rect.top) <= slack) row.push(item)
+    else rows.push([item])
+  }
+  return rows
+}
+
+/** The rows of a grid the viewer can see, in the order the grid lays them out. */
+function shownRows(rows: FocusItem[][]) {
+  const box = (mainColumn() || document.documentElement).getBoundingClientRect()
+  return rows.filter((row) => row[row.length - 1].rect.bottom > box.top + 8 && row[0].rect.top < box.bottom - 8)
+}
+
 function landing(band: HTMLElement, items: FocusItem[], from: FocusItem, dir: number) {
   const list = ordered(items)
   if (list.length === 0) return null
   if (kind(band) === "list") return dir < 0 ? list[list.length - 1] : list[0]
   if (kind(band) === "strip") return list[Math.min(lane, list.length - 1)]
-  const fromX = from.cx
-  const top = list[0].rect.top
-  const firstRow = list.filter((item) => Math.abs(item.rect.top - top) < 28)
-  const pool = dir < 0 ? list.filter((item) => Math.abs(item.rect.top - list[list.length - 1].rect.top) < 28) : firstRow
-  let best = pool[0] || list[0]
-  let bestDx = Number.POSITIVE_INFINITY
-  for (const item of pool.length ? pool : list) {
-    const dx = Math.abs(item.cx - fromX)
-    if (dx < bestDx) {
-      best = item
-      bestDx = dx
+  /* A grid is read from its own beginning. A press of Down from a band above it - a heading, the
+     library toolbar, the top of a page - lands on the first item of the first row the viewer can
+     see, which is where the grid starts. Answering with the item nearest the control they left
+     instead put the remote at the right-hand end of the first row: the library's toolbar sits at
+     the right of the header, so the card nearest it is the last one, and a viewer pressing Down
+     for the first title landed on the one furthest from it. A press of Up into a grid comes back
+     to the row at the bottom of the screen, at the column the viewer is in. */
+  const rows = gridRows(list)
+  const shown = shownRows(rows)
+  if (dir < 0) {
+    const row = shown[shown.length - 1] || rows[rows.length - 1]
+    let best = row[0]
+    let bestDx = Number.POSITIVE_INFINITY
+    for (const item of row) {
+      const dx = Math.abs(item.cx - from.cx)
+      if (dx < bestDx) {
+        best = item
+        bestDx = dx
+      }
     }
+    return best
   }
-  return best
+  return (shown[0] || rows[0])[0]
 }
 
 /**

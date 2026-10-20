@@ -292,6 +292,37 @@ interface SeasonWalkReport {
   rowArt: { width: number; height: number }
 }
 
+/** Where one press of the library walk left the remote, and which group of the page that is. */
+interface LibraryStep {
+  name: string
+  group: "toolbar" | "grid" | "rail" | "other" | "none"
+  /** Which poster of the grid, when the press landed in the grid. */
+  index: number
+  left: number
+}
+
+/** The library toolbar and grid walked with the remote: where each press of the walk landed. */
+interface LibraryWalkReport {
+  size: "small" | "medium" | "large"
+  scroll: number
+  fromToolbar: LibraryStep[]
+  backToToolbar: LibraryStep[]
+  across: LibraryStep[]
+  backAcross: LibraryStep[]
+  downRow: LibraryStep[]
+  upRow: LibraryStep[]
+  scrolled: LibraryStep
+  page: { top: number; left: number }
+  /** The toolbar's controls, and the first row of posters, in the design units the page is drawn in. */
+  tools: { label: string; left: number; centre: number }[]
+  firstRow: { index: number; left: number; centre: number; width: number; height: number }[]
+  grid: { left: number; right: number }
+  cardWidth: number
+  art: { width: number; height: number }
+  rows: number
+  columns: number
+}
+
 interface SeasonReport {
   strip: { clientWidth: number; scrollWidth: number; left: number; right: number }
   page: { left: number; right: number }
@@ -697,6 +728,93 @@ for (const { panel, report } of await measureSeason(browser, seasonProbe, PANELS
     `${report.right[0]?.artWidth ?? 0} design units`,
   )
   console.log("")
+}
+
+/**
+ * The library toolbar walked with the remote, measured in the same browser.
+ *
+ * The viewer's complaint was that a press of Down from the toolbar - the poster-size control, the
+ * sort control, the filter control or A-Z - put the remote on a title at the far right of the
+ * first poster row instead of the first title on the left. Both are measured here at every panel
+ * size, from a real layout and the app's own navigation engine: the toolbar sits at the right of
+ * the header and the poster nearest it is the last of the row, and every press of Down still has
+ * to land on the first poster, at the grid's own left edge.
+ *
+ * The same walk is measured at each poster size, because a size change must not change where the
+ * remote lands, and the artwork inside the card is measured with it so a bigger or smaller card
+ * is still the same 2:3 poster rather than a stretched one.
+ */
+const libraryWalkProbe = pathToFileURL(resolve("tools/libraryWalkProbe.html")).href
+console.log("\nThe library toolbar, with the remote pressing Down from each of its controls\n")
+
+const LIBRARY_SIZES: ("small" | "medium" | "large")[] = ["small", "medium", "large"]
+
+for (const { panel, report } of await measurePage<LibraryWalkReport>(browser, libraryWalkProbe, PANELS)) {
+  const step = (entry: LibraryStep) => `${entry.name}${entry.index >= 0 ? ` (#${entry.index})` : ""}`
+  const first = report.firstRow[0]
+  const lastOfRow = report.firstRow[report.firstRow.length - 1]
+  const az = report.tools[report.tools.length - 1]
+  console.log(`${panel.name} - ${panel.width}x${panel.height}`)
+  console.log(
+    `     toolbar ${report.tools.map((tool) => `${tool.label} at ${tool.left}`).join(", ")}\n` +
+      `     first row ${report.firstRow.map((card) => `${card.index} at ${card.left}`).join(", ")}\n` +
+      `     down: ${report.fromToolbar.map(step).join(", ")}   up: ${report.backToToolbar.map(step).join(", ")}\n` +
+      `     across ${report.across.map(step).join(", ")}   back ${report.backAcross.map(step).join(", ")}   ` +
+      `rows down ${report.downRow.map(step).join(", ")}   rows up ${report.upRow.map(step).join(", ")}`,
+  )
+  check(
+    `${panel.name}: the check is set up the way the bug appeared - the last poster of the row is nearest the toolbar`,
+    Math.abs(lastOfRow.centre - az.centre) < Math.abs(first.centre - az.centre),
+    `toolbar ${az.label} at ${az.centre}, first poster ${first.centre}, last of the row ${lastOfRow.centre}`,
+  )
+  check(
+    `${panel.name}: Down from every toolbar control lands on the first poster of the row`,
+    report.fromToolbar.length === report.tools.length && report.fromToolbar.every((entry) => entry.group === "grid" && entry.index === 0),
+    report.fromToolbar.map(step).join(", "),
+  )
+  check(
+    `${panel.name}: and that poster begins at the grid's own left edge`,
+    first.left > report.grid.left && first.left < report.grid.left + report.cardWidth,
+    `poster ${first.left}, grid ${report.grid.left}..${report.grid.right}, card ${report.cardWidth}`,
+  )
+  check(
+    `${panel.name}: Up from it returns to the control the viewer left`,
+    report.backToToolbar.length === report.tools.length &&
+      report.backToToolbar.every((entry, index) => entry.group === "toolbar" && entry.name === report.tools[index].label),
+    report.backToToolbar.map(step).join(", "),
+  )
+  check(
+    `${panel.name}: Right and Left still walk the row`,
+    report.across.map((entry) => entry.index).join(",") === "1,2" && report.backAcross.map((entry) => entry.index).join(",") === "1,0",
+    `${report.across.map(step).join(", ")} / ${report.backAcross.map(step).join(", ")}`,
+  )
+  check(
+    `${panel.name}: Down and Up still move a row at a time, in the same column`,
+    report.downRow.map((entry) => entry.index).join(",") === `${report.columns},${report.columns * 2}` &&
+      report.upRow.map((entry) => entry.index).join(",") === `${report.columns},0`,
+    `${report.downRow.map(step).join(", ")} / ${report.upRow.map(step).join(", ")}`,
+  )
+  check(
+    `${panel.name}: and none of it scrolled the page sideways`,
+    report.page.left === 0,
+    `page scrolled ${report.page.left}`,
+  )
+  console.log("")
+}
+
+for (const size of LIBRARY_SIZES) {
+  for (const { panel, report } of await measurePage<LibraryWalkReport>(browser, libraryWalkProbe, PANELS, `?size=${size}`)) {
+    check(
+      `${panel.name} (${size} posters): Down from every toolbar control lands on the first poster`,
+      report.size === size && report.fromToolbar.every((entry) => entry.group === "grid" && entry.index === 0),
+      report.fromToolbar.map((entry) => `${entry.name}${entry.index >= 0 ? ` (#${entry.index})` : ""}`).join(", "),
+    )
+    check(
+      `${panel.name} (${size} posters): and the artwork keeps its 2:3 poster shape`,
+      Math.abs(report.art.width / report.art.height - 2 / 3) < 0.01,
+      `${report.art.width}x${report.art.height}, card ${report.cardWidth}`,
+    )
+  }
 }
 
 /**
