@@ -92,7 +92,7 @@ export function skipMode(skip: Partial<Record<SegmentType, SkipMode>> | undefine
 }
 
 /** What the player should do about the segment the viewer is inside. */
-export type SkipAction = "off" | "skip" | "prompt" | "none"
+export type SkipAction = "off" | "skip" | "prompt" | "none" | "wait"
 
 /**
  * Decide what a segment deserves right now.
@@ -103,14 +103,26 @@ export type SkipAction = "off" | "skip" | "prompt" | "none"
  * skipping therefore happens once for a segment however often it is asked about, and an offer the
  * viewer has declined is not made again - which is also what keeps an automatic skip and the
  * next-episode transition from both acting on the same credits.
+ *
+ * `ready` is whether the player can take a seek at all, and it is the difference between a skip and
+ * a wait. The segment the playhead is already inside when the segments arrive is the one that
+ * matters: intro detection puts an intro at the head of an episode, so the viewer is inside it
+ * before playback has begun, and the native player does not exist until the play call that follows
+ * - a seek sent then is dropped on the floor. Answering "skip" and recording it would spend the
+ * segment on a seek nobody made and leave the intro playing; "wait" records nothing, and the
+ * question is asked again as soon as the player can answer it.
  */
 export function skipAction(
   mode: SkipMode,
   key: string,
   seen: ReadonlySet<string>,
   dismissed: ReadonlySet<string>,
+  ready = true,
 ): SkipAction {
   if (mode === "off") return "off"
-  if (mode === "auto") return seen.has(key) ? "none" : "skip"
+  if (mode === "auto") {
+    if (seen.has(key)) return "none"
+    return ready ? "skip" : "wait"
+  }
   return dismissed.has(key) ? "none" : "prompt"
 }

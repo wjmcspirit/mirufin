@@ -10,9 +10,11 @@
  * suite: delete it when the project grows a real test runner.
  */
 import { readFileSync } from "node:fs"
+import { secondsToTicks, ticksToSeconds } from "../src/lib/format"
 import { playbackStep, skipAction, skipMode, startTicks, type PlaybackMark } from "../src/lib/playback"
+import { segmentAt, segmentEnd, segmentKey } from "../src/lib/segments"
 import { DEFAULT_PREFS } from "../src/lib/storage"
-import type { Item, SegmentType } from "../src/lib/types"
+import type { Item, MediaSegment, SegmentType } from "../src/lib/types"
 
 let failures = 0
 
@@ -158,6 +160,110 @@ same("an offer to skip is made once", skipAction("ask", "intro", new Set(), new 
 same("and is not made again once the viewer has turned it down", skipAction("ask", "intro", new Set(), new Set(["intro"])), "none")
 same("playing through is playing through, whatever has been seen", skipAction("off", "intro", skipped, new Set(["intro"])), "off")
 
+// --------------------------------------------------------------------------- the segments themselves
+
+/**
+ * An intro as intro detection writes it: at the head of the episode, which is where the playhead
+ * already is when the segments arrive.
+ */
+const INTRO: MediaSegment = { Id: "seg-intro", Type: "Intro", StartTicks: 0, EndTicks: 45 * SECOND }
+const OUTRO: MediaSegment = { Id: "seg-outro", Type: "Outro", StartTicks: 43 * MINUTE, EndTicks: 45 * MINUTE }
+
+same("an intro at the head of an episode is where the playhead is", segmentAt([INTRO, OUTRO], 0)?.Id, "seg-intro")
+same("and it is still the one the playhead is inside halfway through it", segmentAt([INTRO, OUTRO], 20)?.Id, "seg-intro")
+same("past its end the playhead is inside nothing", segmentAt([INTRO, OUTRO], 46), null)
+same("and the credits are found where the credits are", segmentAt([INTRO, OUTRO], ticksToSeconds(44 * MINUTE))?.Id, "seg-outro")
+same("a skip lands past the end of the segment, in seconds", segmentEnd(INTRO), 45)
+same("which is the unit the player reports its own position in", ticksToSeconds(secondsToTicks(45)), 45)
+
+// Malformed or missing markers are not markers. Jellyfin's types are a closed set and its ticks are
+// 10,000,000 to the second, but a server, a plugin or a proxy can still hand over a segment with no
+// end, an end before its start, a length of nothing, or nothing at all - and none of them may move
+// the playhead, and none of them may throw.
+const MALFORMED: MediaSegment[] = [
+  { Id: "no-ticks", Type: "Intro" },
+  { Id: "backwards", Type: "Intro", StartTicks: 60 * SECOND, EndTicks: 30 * SECOND },
+  { Id: "zero-length", Type: "Intro", StartTicks: 30 * SECOND, EndTicks: 30 * SECOND },
+  { Id: "not-a-number", Type: "Intro", StartTicks: Number.NaN, EndTicks: Number.NaN },
+]
+for (const segment of MALFORMED) {
+  same(`a ${segment.Id} segment is not somewhere to skip from`, segmentAt([segment], 30), null)
+  same(`and it is not somewhere to skip to either`, segmentAt([segment], 45), null)
+}
+same("no segments at all is no segments at all", segmentAt([], 30), null)
+same("a segment with no id is still keyed by what it is", segmentKey({ Type: "Intro", StartTicks: 0 }), "Intro-0")
+same("and a segment that has one is keyed by it", segmentKey(INTRO), "seg-intro")
+
+// --------------------------------------------------------------------------- the skip that has nowhere to go
+
+/**
+ * The segment the playhead is already inside when the segments arrive.
+ *
+ * This is an episode's intro, and it is the ordinary case rather than the edge one: intro detection
+ * puts an intro at the head of the episode, the player asks about it as soon as the segments are in
+ * hand, and the native player is built by the `play` call that follows. A seek sent before it exists
+ * is dropped by the plugin, so recording "skip" then spends the segment on a seek nobody made and
+ * leaves the intro playing to its end - which is what the viewer sees when automatic skipping does
+ * nothing at all.
+ */
+same("a skip with a player to carry it out is a skip", skipAction("auto", "seg-intro", new Set(), new Set(), true), "skip")
+same("and the same skip with no player yet is a wait", skipAction("auto", "seg-intro", new Set(), new Set(), false), "wait")
+same(
+  "an offer to skip is still made with no player, because a button can wait",
+  skipAction("ask", "seg-intro", new Set(), new Set(), false),
+  "prompt",
+)
+same("and playing through is playing through whatever the player is doing", skipAction("off", "seg-intro", new Set(), new Set(), false), "off")
+
+/**
+ * The loop the player runs, over the positions it reports: ask about the segment the playhead is
+ * inside, and record a skip only when one was carried out. `readyFrom` is the position at which the
+ * player finally reports, which on a television is a fraction of a second after playback starts.
+ */
+function sweep(segments: MediaSegment[], positions: number[], readyFrom: number) {
+  const seen = new Set<string>()
+  const seeks: string[] = []
+  positions.forEach((position, index) => {
+    const active = segmentAt(segments, position)
+    if (!active) return
+    const key = segmentKey(active)
+    if (skipAction("auto", key, seen, new Set(), index >= readyFrom) !== "skip") return
+    seeks.push(`${key}@${segmentEnd(active) + 0.2}`)
+    seen.add(key)
+  })
+  return seeks
+}
+
+const FIRST_SECONDS = [0, 0.4, 0.8, 1.2, 20, 44, 45.2, 60]
+same(
+  "an intro under the playhead is skipped once, as soon as there is a player to take it",
+  sweep([INTRO, OUTRO], FIRST_SECONDS, 3),
+  ["seg-intro@45.2"],
+)
+same("and a player that is never there skips nothing rather than spending the segment", sweep([INTRO], [0, 1, 2, 3], 99), [])
+same("the same position reported over and over is still one skip", sweep([INTRO], [0, 0, 0, 0, 0, 0], 0), ["seg-intro@45.2"])
+same(
+  "walking back into the intro afterwards does not skip it a second time",
+  sweep([INTRO], [0, 1, 20, 2, 3, 20, 44], 0),
+  ["seg-intro@45.2"],
+)
+same(
+  "and the credits later in the same playback are skipped once, and only once",
+  sweep(
+    [INTRO, OUTRO],
+    [
+      ...FIRST_SECONDS,
+      ticksToSeconds(43.5 * MINUTE),
+      ticksToSeconds(44 * MINUTE),
+      ticksToSeconds(44.5 * MINUTE),
+      ticksToSeconds(45 * MINUTE),
+    ],
+    3,
+  ),
+  ["seg-intro@45.2", "seg-outro@2700.2"],
+)
+same("a malformed segment never asks for a skip at all", sweep(MALFORMED, [0, 30, 45, 60], 0), [])
+
 // --------------------------------------------------------------------------- the ended panel, as written
 
 /** The declarations the checks above rest on, read as they are written. */
@@ -202,6 +308,57 @@ check(
 check(
   "what has already been skipped is forgotten when a new item is played",
   /autoSkipped\.current = new Set\(\)/.test(player),
+  "Player.tsx",
+)
+check(
+  "and so is the player the last one was skipped on, so the new one is waited for",
+  /setSegments\(\[\]\)[\s\S]{0,600}?setPlayerLive\(false\)/.test(player),
+  "Player.tsx",
+)
+
+// The one thing that made automatic skipping do nothing at all.
+//
+// The segment the playhead is already inside when the segments arrive is the ordinary case - an
+// intro at the head of an episode - and the native player does not exist yet: it is built by the
+// `play` call that follows, and the plugin answers a seek made before then by resolving without
+// seeking. A skip recorded at that moment is a skip that never happened, and because the segment was
+// recorded the player never asks about it again: the intro plays on to its end, every episode.
+const plugin = readFileSync("android/app/src/main/java/app/mirufin/tv/NativePlayerPlugin.java", "utf8")
+check(
+  "the plugin really does drop a seek that arrives before its player exists",
+  /private void runPlayer\(PluginCall call, Runnable action\)[\s\S]{0,260}?if \(activity == null \|\| player == null\) \{\s*call\.resolve\(\);\s*return;\s*\}/.test(
+    plugin,
+  ),
+  "NativePlayerPlugin.java",
+)
+check(
+  "a skip is recorded only once it has been carried out",
+  /if \(seekTo\(segmentEnd\(activeSegment\) \+ 0\.2\)\) autoSkipped\.current\.add\(key\)/.test(player),
+  "Player.tsx",
+)
+check(
+  "and the decision is told whether there is a player to carry it out",
+  /skipAction\(activeMode, key, autoSkipped\.current, dismissed\.current, canSeek\(\)\)/.test(player),
+  "Player.tsx",
+)
+check(
+  "which the native engine answers for itself rather than dropping the seek silently",
+  /function canSeek\(\) \{\s*return !nativeEngine\(\) \|\| playerLive\s*\}/.test(player) && /if \(!canSeek\(\)\) return false/.test(player),
+  "Player.tsx",
+)
+check(
+  "so a segment that was waited on is asked about again the moment the player reports",
+  /\}, \[activeMode, activeSegment, ended, playerLive, prefs\.nextUp, prelude\]\)/.test(player),
+  "Player.tsx",
+)
+check(
+  "the viewer's own press of the offer waits for the same moment",
+  /if \(!seekTo\(segmentEnd\(segment\) \+ 0\.15\)\) return/.test(player),
+  "Player.tsx",
+)
+check(
+  "a seek a skip makes is still measured from the stream's own start on a transcode",
+  /const base = plan\?\.mode === "hls" \? ticksToSeconds\(plan\.offsetTicks\) : 0/.test(player),
   "Player.tsx",
 )
 check(

@@ -81,6 +81,11 @@ export function PlayerPage() {
   const positionRef = useRef(0)
   const dismissed = useRef(new Set<string>())
   const autoSkipped = useRef(new Set<string>())
+  /* Whether the engine that is actually playing can take a seek yet. The native player is built by
+     the `play` call and reports for the first time a fraction of a second later; the browser's
+     `<video>` takes a seek before its source loads and remembers it as where to start. So this is
+     what tells an automatic skip whether it is talking to something. */
+  const [playerLive, setPlayerLive] = useState(false)
 
   useEffect(() => {
     let cancel = false
@@ -100,6 +105,7 @@ export function PlayerPage() {
     dismissed.current = new Set()
     autoSkipped.current = new Set()
     fallback.current = false
+    setPlayerLive(false)
     api
       .item(userId, id)
       .then(async (loaded) => {
@@ -316,6 +322,7 @@ export function PlayerPage() {
           }
           const base = playback.mode === "hls" ? ticksToSeconds(playback.offsetTicks) : 0
           const seconds = base + event.seconds
+          setPlayerLive(true)
           positionRef.current = seconds
           setPosition(seconds)
           if (event.duration > 0) setDuration(base + event.duration)
@@ -503,6 +510,16 @@ export function PlayerPage() {
   const activeSegment = prelude ? null : segmentAt(segments, position)
   const activeMode = activeSegment?.Type ? skipMode(prefs.skip, activeSegment.Type as SegmentType) : "off"
 
+  /* What the playhead is inside, and what to do about it. The player reports its position several
+     times a second, so the answer has to settle: a segment is skipped once, and only when the skip
+     can actually be carried out.
+     That last part is the whole of this effect. An intro that begins at the head of an episode -
+     which is where intro detection puts it - is already under the playhead when the segments
+     arrive, and there is nothing to seek yet: the native player is built by the `play` call that
+     follows, so a seek sent now is dropped by the plugin and the intro plays on. The answer is
+     "wait" until the player reports for the first time, nothing is recorded, and the same segment
+     is asked about again the moment there is something to move. A segment the playhead reaches
+     later - the credits, an intro after a cold open - is already skippable when it is entered. */
   useEffect(() => {
     if (prelude || !activeSegment) {
       setPromptId(null)
@@ -511,17 +528,18 @@ export function PlayerPage() {
     }
     if (activeSegment.Type === "Outro" && prefs.nextUp === "credits") setCreditsOpen(true)
     const key = segmentKey(activeSegment)
-    const action = skipAction(activeMode, key, autoSkipped.current, dismissed.current)
+    const action = skipAction(activeMode, key, autoSkipped.current, dismissed.current, canSeek())
     if (action === "skip") {
-      autoSkipped.current.add(key)
-      seekTo(segmentEnd(activeSegment) + 0.2)
+      // A skip that never reached a player is not a skip: the segment stays unseen, so the next
+      // position the player reports asks the question again rather than the intro playing on.
+      if (seekTo(segmentEnd(activeSegment) + 0.2)) autoSkipped.current.add(key)
       setPromptId(null)
       return
     }
     setPromptId(action === "prompt" ? key : null)
-    // seekTo is recreated each render; the skipped-id set keeps this from looping.
+    // seekTo and canSeek are recreated each render; the skipped-id set keeps this from looping.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeMode, activeSegment, ended, prefs.nextUp, prelude])
+  }, [activeMode, activeSegment, ended, playerLive, prefs.nextUp, prelude])
 
   useEffect(() => {
     if (!promptId) return
@@ -608,33 +626,56 @@ export function PlayerPage() {
     else navigate("/", { replace: true })
   }
 
-  function seekTo(seconds: number) {
+  /**
+   * Whether the engine playing this item can take a seek.
+   *
+   * The browser's `<video>` takes one before its source has loaded - the element keeps it as where
+   * to start - so only the native engine has to wait, and only until it reports for the first time.
+   * That first report is proof the player exists: the plugin's `seek` and its `play` are both
+   * handed to the same player, and the plugin answers a call made before it is built by resolving
+   * without doing anything at all.
+   */
+  function canSeek() {
+    return !nativeEngine() || playerLive
+  }
+
+  /**
+   * Move the playhead, and say whether the seek reached a player.
+   *
+   * The answer is what the callers that must not lose a seek key off - an automatic skip of the
+   * segment the viewer is already inside, and the viewer's own press of the offer to skip. A seek
+   * the native plugin drops because no player exists yet is not a seek: the caller leaves its
+   * record of the segment alone and asks again.
+   */
+  function seekTo(seconds: number): boolean {
     const video = videoRef.current
-    if (!request) return
+    if (!request) return false
     touchUser()
     wake()
     setEnded(false)
     const next = Math.max(0, seconds)
     if (nativeEngine()) {
+      if (!canSeek()) return false
       const base = plan?.mode === "hls" ? ticksToSeconds(plan.offsetTicks) : 0
       positionRef.current = next
       setPosition(next)
       ignoreNativeFailure(nativePlayer.seek({ seconds: Math.max(0, next - base) }))
-      return
+      return true
     }
-    if (!video) return
+    if (!video) return false
     if (Number.isFinite(video.duration) && video.duration > 0) {
       video.currentTime = Math.min(next, video.duration)
       setPosition(video.currentTime)
-      return
+      return true
     }
     const ticks = secondsToTicks(next)
     if (plan?.mode === "hls") {
       setRequest({ ...request, startTicks: ticks, forceTranscode: true, nonce: request.nonce + 1 })
-      return
+      return true
     }
     video.currentTime = next
     setPosition(next)
+    return true
   }
 
   function chooseSubtitle(index: number | null, burn: boolean) {
@@ -925,10 +966,12 @@ export function PlayerPage() {
 
   function skipSegment(segment: MediaSegment) {
     const key = segmentKey(segment)
+    // A press that lands before the player can take it is not a skip either: the offer stays up and
+    // the viewer's next press takes it, which is the same rule the automatic skip waits on.
+    if (!seekTo(segmentEnd(segment) + 0.15)) return
     dismissed.current.add(key)
     autoSkipped.current.add(key)
     setPromptId(null)
-    seekTo(segmentEnd(segment) + 0.15)
   }
 
   function playNextNow() {
