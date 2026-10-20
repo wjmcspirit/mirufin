@@ -146,9 +146,31 @@ export function showHeroDeck(recent: Item[], grid: Item[], limit = HERO_DECK_LIM
   return deckFrom([...recent, ...rest], limit)
 }
 
-/** The collections a Collections page turns through: the newest the server dated, then the rest. */
-export function collectionHeroDeck(collections: Item[], limit = HERO_DECK_LIMIT) {
-  return deckFrom(newestFirst(collections), limit)
+/**
+ * The collections a Collections page's hero turns through: a random sample of the eligible ones,
+ * one of each, capped at the same ten every other hero turns through.
+ *
+ * The pool is drawn by id and shuffled, so the hero is never the grid's own order. The grid is
+ * sorted the way the viewer asked - alphabetically, by date added, by whatever - and a hero that
+ * took its first slide from that list would feature the first collection of the sort on every
+ * visit and change under the viewer whenever they changed the sort. What a collection is is the
+ * same rule the page uses for the grid: a `BoxSet`, or an item the server did not type.
+ *
+ * `avoid` is the collection the page was showing when the viewer last left it, so coming back does
+ * not open on the one they were just looking at. The deck's own order is what keeps a collection
+ * from coming round again before the others have had their turn: `nextSlide` walks the deck, so a
+ * deck of ten shows ten different collections before the first one is seen again.
+ */
+export function collectionHeroDeck(collections: Item[], avoid = "", limit = HERO_DECK_LIMIT) {
+  const eligible = oneOfEach(collections).filter((item) => item.Type === "BoxSet" || !item.Type)
+  const shuffled = shuffle(eligible)
+  if (avoid && shuffled.length > 1 && shuffled[0].Id === avoid) {
+    const swap = 1 + Math.floor(Math.random() * (shuffled.length - 1))
+    const first = shuffled[0]
+    shuffled[0] = shuffled[swap]
+    shuffled[swap] = first
+  }
+  return shuffled.slice(0, limit)
 }
 
 /** The collections worth a card in "Recently added": only the ones the server dated. */

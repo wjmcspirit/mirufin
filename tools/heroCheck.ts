@@ -183,7 +183,15 @@ same(
 
 // --------------------------------------------------------------------------- a collections page
 
-same("collections turn through the newest the server dated first", collectionHeroDeck(dated).map((i) => i.Id), ["new", "middle", "old", "undated"])
+/* A collection's hero is a random sample of the eligible collections, not the order the grid is
+   sorted in and not the order the server dated them: the deck holds all four of a four-collection
+   library whatever order they arrive in, and a library with more than ten turns through ten
+   different ones. The rules themselves are checked further down, beside the page's wiring. */
+same(
+  "a collection library smaller than a deck turns through all of it",
+  [...collectionHeroDeck(dated).map((i) => i.Id)].sort(),
+  ["middle", "new", "old", "undated"],
+)
 same("a collection is one slide however many times it is listed", collectionHeroDeck([boxset("a", "A"), boxset("a", "A")]).map((i) => i.Id), ["a"])
 same("and the deck is capped", collectionHeroDeck(Array.from({ length: 30 }, (_, index) => boxset(`c${index}`, `C${index}`))).length, HERO_DECK_LIMIT)
 same("Recently added lists only what the server dated, newest first", recentlyAddedCollections(dated).map((i) => i.Id), ["new", "middle", "old"])
@@ -438,6 +446,116 @@ check(
   "Library.tsx",
 )
 
+/* The Collections hero is drawn at random from the library's collections, and never from the grid.
+   The viewer's complaint was that the featured collection appeared to be chosen alphabetically,
+   which is what taking the first slide from the grid's own order does: a library whose collections
+   the server gave no dates for listed them in the sort the viewer had chosen, and the hero featured
+   the first of that order on every visit. These checks state what has to be true instead. */
+const collectionGrid = [...BOXSETS].sort((a, b) => (a.Name || "").localeCompare(b.Name || ""))
+const openings = new Set<string>()
+for (let pass = 0; pass < 40; pass += 1) openings.add(collectionHeroDeck(collectionGrid)[0]?.Id || "")
+check(
+  "the featured collection is not simply the first of the grid's own order",
+  openings.size > 1,
+  `${openings.size} different openings in 40 builds`,
+)
+check(
+  "and its deck is a sample of the eligible collections, deduplicated by the id the server gave",
+  new Set(collectionHeroDeck([...BOXSETS, ...BOXSETS]).map((item) => item.Id)).size === HERO_DECK_LIMIT,
+)
+check(
+  "ten distinct collections when the library holds ten or more",
+  new Set(collectionHeroDeck(BOXSETS).map((item) => item.Id)).size === HERO_DECK_LIMIT,
+  String(new Set(collectionHeroDeck(BOXSETS).map((item) => item.Id)).size),
+)
+check("all of them when it holds fewer than ten", collectionHeroDeck(BOXSETS.slice(0, 4)).length === 4)
+check(
+  "and nothing is invented to reach ten",
+  collectionHeroDeck(BOXSETS.slice(0, 4)).every((item) => BOXSETS.slice(0, 4).some((entry) => entry.Id === item.Id)),
+)
+check(
+  "only collections are eligible: a film or a show is never featured",
+  collectionHeroDeck([...BOXSETS, movie("m1", "Film"), series("s1", "Show")]).every((item) => item.Type === "BoxSet" || !item.Type),
+)
+check(
+  "and a collection the server gave no id for is never featured",
+  collectionHeroDeck([{ Name: "No id", Type: "BoxSet" }, ...BOXSETS]).every((item) => Boolean(item.Id)),
+)
+const deckOfTen = collectionHeroDeck(BOXSETS)
+const turned = new Set<string>()
+let slide = 0
+for (let step = 0; step < deckOfTen.length; step += 1) {
+  turned.add(deckOfTen[slide].Id)
+  slide = nextSlide(slide, deckOfTen.length)
+}
+check(
+  "a deck of ten shows ten different collections before one comes round again",
+  turned.size === deckOfTen.length,
+  `${turned.size} of ${deckOfTen.length}`,
+)
+check(
+  "and then starts again at its first slide",
+  deckOfTen[nextSlide(deckOfTen.length - 1, deckOfTen.length)].Id === deckOfTen[0].Id,
+)
+const justLeft = collectionHeroDeck(BOXSETS)[0].Id
+const onReturn = Array.from({ length: 30 }, () => collectionHeroDeck(BOXSETS, justLeft))
+check(
+  "coming back to the page does not open on the collection the viewer just left",
+  onReturn.every((deck) => deck[0].Id !== justLeft),
+)
+check(
+  "and a library holding one collection still features it",
+  collectionHeroDeck([BOXSETS[0]], BOXSETS[0].Id).map((item) => item.Id).join(",") === BOXSETS[0].Id,
+)
+check(
+  "the page asks the server for a random sample of the library's collections",
+  /randomLibraryCollections\(userId, id, COLLECTION_HERO_POOL/.test(library) &&
+    /SortBy: "Random"/.test(api) &&
+    /IncludeItemTypes: "BoxSet"/.test(api),
+  "Library.tsx and api.ts",
+)
+check(
+  "and shuffles it into a deck of the same ten every hero turns through",
+  /collectionHeroDeck\(result\.Items \|\| \[\], lastCollection\.current\)/.test(library) &&
+    /export function collectionHeroDeck\(collections: Item\[\], avoid = "", limit = HERO_DECK_LIMIT\)/.test(deck),
+  "Library.tsx and heroDeck.ts",
+)
+check(
+  "the grid's own list is not what the hero turns through",
+  !/collectionHeroDeck\(items/.test(library) && !/collectionHeroDeck\(heldItems\.current\)/.test(library),
+  "Library.tsx",
+)
+check(
+  "and its deck is not rebuilt by the grid's sort, its filters or its paging",
+  /}, \[collections, genreId, id, studioId, userId\]\)/.test(library) && !/useMemo\(\(\) => \(collections \? collectionHeroDeck/.test(library),
+  "Library.tsx",
+)
+check(
+  "the collections hero turns with the shared rotation and the shared interval",
+  /useHeroRotation\(collectionPool, heroEngaged\)/.test(library) &&
+    /export const HERO_DWELL_MS = 15000/.test(deck) &&
+    /export const HERO_QUIET_MS = 20000/.test(deck),
+  "Library.tsx and heroDeck.ts",
+)
+check(
+  "and stands still while the viewer is using the screen, starting again after the quiet window",
+  /useHeroQuiet\(engaged\)/.test(hook) && /window\.setTimeout\(\(\) => setRested\(true\), quietMs\)/.test(hook),
+  "HeroDeck.ts",
+)
+check(
+  "the featured collection still draws its own count and one action that opens it",
+  /detail=\{collectionSizeLabel\(rotatingCollection\.ChildCount\)\}/.test(library) &&
+    /playHref=\{`\/item\/\$\{rotatingCollection\.Id\}`\}/.test(library),
+  "Library.tsx",
+)
+check(
+  "and the grid below keeps its own sorting, filters and poster size",
+  /ToolMenu label="Sort"/.test(library) &&
+    /ToolMenu label="Filter"/.test(library) &&
+    /className=\{`grid \$\{style\} size-\$\{size\}`\}/.test(library),
+  "Library.tsx",
+)
+
 /* Favorites: the filters narrow the grid, the grid draws what the filter chose, and an empty shelf
    is a line of its own rather than a broken hero. */
 check(
@@ -509,7 +627,7 @@ const INVENTORY = [
   },
   {
     hero: "Collections",
-    source: "the collections, newest dated first",
+    source: "a random sample of the library's collections",
     eligible: BOXSETS.length,
     deck: collectionHeroDeck(BOXSETS).length,
     wired: /useHeroRotation\(collectionPool, heroEngaged\)/.test(library),

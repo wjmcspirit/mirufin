@@ -489,6 +489,34 @@ export function randomLibraryMovies(userId: string, parentId: string, limit = 40
   return jf<ItemList>(`/Users/${userId}/Items?${params}`)
 }
 
+/**
+ * A random handful of the collections in a library, for a Collections page's own hero.
+ *
+ * A collection's hero is not the grid's first card. The grid is sorted the way the viewer asked -
+ * alphabetically, by date added, by whatever - so a hero taken from that list would feature the
+ * first collection of the sort every time, and would change when the viewer changed the sort. The
+ * server is asked for a random sample of the library's collections instead, from the library at
+ * large rather than from the page of results the grid happens to hold, and the page shuffles what
+ * comes back. The same narrowing as the grid, so a page opened on a genre still features a
+ * collection of that genre.
+ */
+export function randomLibraryCollections(userId: string, parentId: string, limit = 30, filter?: LibraryFilter) {
+  const params = narrowedBy(
+    new URLSearchParams({
+      ParentId: parentId,
+      Recursive: "true",
+      IncludeItemTypes: "BoxSet",
+      SortBy: "Random",
+      Limit: String(limit),
+      Fields: `${CARD_FIELDS},Genres,OfficialRating,CommunityRating,BackdropImageTags`,
+      EnableImageTypes: CARD_IMAGES,
+      ImageTypeLimit: "1",
+    }),
+    filter,
+  )
+  return jf<ItemList>(`/Users/${userId}/Items?${params}`)
+}
+
 export function childBackdrops(userId: string, parentId: string) {
   const params = new URLSearchParams({
     ParentId: parentId,

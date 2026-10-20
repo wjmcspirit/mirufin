@@ -27,6 +27,8 @@ const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")
 /** The movie hero samples this many films and turns through ten of them, one every MOVIE_HERO_DWELL. */
 const MOVIE_HERO_POOL = 30
 const MOVIE_HERO_DWELL = 15000
+/** The collections hero samples this many collections per visit, and turns through ten of them. */
+const COLLECTION_HERO_POOL = 30
 
 /** The artwork the stage paints for a hero movie: its own backdrop, then its own poster. */
 function movieHeroArt(item: Item) {
@@ -141,6 +143,7 @@ export function LibraryPage() {
   const [error, setError] = useState("")
   const [heroId, setHeroId] = useState("")
   const [movieDeck, setMovieDeck] = useState<Item[] | null>(null)
+  const [collectionDeck, setCollectionDeck] = useState<Item[] | null>(null)
   const [heroHold, setHeroHold] = useState(false)
   const [trailerHold, setTrailerHold] = useState(false)
   const [quiet, setQuiet] = useState<Record<string, true>>({})
@@ -158,6 +161,14 @@ export function LibraryPage() {
   const shownShow = useRef<Item | null>(null)
   const addedScan = useRef(0)
   const addedGroups = useRef<AddedSeries[]>([])
+  // The items the page is holding, read by effects that must not be re-run by them: the
+  // collections hero's fallback deck is built from what the grid has when the server will not
+  // answer the random question, and a page that re-sorted its grid is not a page that asks again.
+  const heldItems = useRef<Item[]>([])
+  heldItems.current = items
+  // The collection the Collections hero was showing when the viewer last left the page, so the
+  // next visit does not open on the same one.
+  const lastCollection = useRef("")
 
   // The A-Z row only exists for a title sort: a letter is a place in the alphabet, and no
   // other sort is in that order.
@@ -531,6 +542,9 @@ export function LibraryPage() {
   }
 
   const movies = library?.CollectionType === "movies"
+  // A library of collections: the one kind whose hero is drawn at random from the library itself
+  // rather than from the page of results the grid holds.
+  const collections = library?.CollectionType === "boxsets"
   const { hovered, hover, holdPin } = useStage()
   const settled = appliedKey === listKey
 
@@ -568,6 +582,34 @@ export function LibraryPage() {
       cancel = true
     }
   }, [genreId, id, movies, studioId, userId])
+
+  // The Collections hero's own deck: one random sample of the library's collections per visit,
+  // taken from Jellyfin's own random order and shuffled here. It is deliberately not the grid's
+  // own list - the grid is sorted the way the viewer asked, and a hero that took its first slide
+  // from that list would feature the first collection of the sort every time - and it is not
+  // rebuilt when the viewer changes that sort, filters the grid, or the page pages in more of it.
+  // A narrowed page draws its hero from what it is showing, as the film hero does.
+  useEffect(() => {
+    if (!collections || !id) {
+      setCollectionDeck(null)
+      return
+    }
+    let cancel = false
+    setCollectionDeck(null)
+    api
+      .randomLibraryCollections(userId, id, COLLECTION_HERO_POOL, { genreId, studioId })
+      .then((result) => {
+        if (!cancel) setCollectionDeck(collectionHeroDeck(result.Items || [], lastCollection.current))
+      })
+      .catch(() => {
+        // A server that will not answer the random question is not a page without a hero: the
+        // collections the grid already holds are shuffled here instead, once for this visit.
+        if (!cancel) setCollectionDeck(collectionHeroDeck(heldItems.current, lastCollection.current))
+      })
+    return () => {
+      cancel = true
+    }
+  }, [collections, genreId, id, studioId, userId])
 
   const heroPool = useMemo(() => {
     if (!movies) return []
@@ -685,15 +727,17 @@ export function LibraryPage() {
     return () => holdPin(false)
   }, [addedHero, holdPin, letter, movies, showSeries, shows])
 
-  const collections = library?.CollectionType === "boxsets"
-  /* A Collections page turns through the collections themselves - the ones the server dated, newest
-     first, and then the rest - and lists the dated ones under the hero as "Recently added". A
-     collection the server gave no creation date for is not dated and is not invented into the row. */
-  const collectionPool = useMemo(
-    () => (collections ? collectionHeroDeck(items.filter((item) => item.Type === "BoxSet" || !item.Type)) : []),
-    [collections, items],
-  )
+  /* A Collections page turns through the collections themselves, and it draws them from the
+     library at large rather than from the grid: the grid is sorted the way the viewer asked, so
+     taking the hero from it would feature the first collection of that sort on every visit and
+     move it whenever the viewer changed the sort. The server is asked once per visit for a random
+     sample, which is shuffled into a deck here; the collections the grid already holds are the
+     fallback for a server that will not answer, and neither the grid's order nor its paging is
+     touched. `lastCollection` is what the hero was showing when the viewer last left, so coming
+     back does not open on the same collection twice in a row. */
+  const collectionPool = useMemo(() => (collections ? collectionDeck || [] : []), [collectionDeck, collections])
   const rotatingCollection = useHeroRotation(collectionPool, heroEngaged)
+  if (collections && rotatingCollection) lastCollection.current = rotatingCollection.Id
   const addedCollections = useMemo(() => (collections ? recentlyAddedCollections(items) : []), [collections, items])
   const collectionArt = useCollectionBackdrop(
     userId,
