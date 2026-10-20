@@ -4,6 +4,7 @@ import { MediaImage, PosterCard } from "../components/Cards"
 import { CheckIcon, HeartIcon, InfoIcon, PlayIcon, SeasonIcon } from "../components/Icons"
 import { TrailerButton } from "../components/TrailerButton"
 import { MediaInfo } from "../components/MediaInfo"
+import { MetaText } from "../components/Meta"
 import { Row } from "../components/Row"
 import { Loading, Problem } from "../components/Status"
 import { useCollectionStage, useEpisodeStage, useFilmographyStage, usePinnedArt, useStage, useStageActions } from "../components/Stage"
@@ -187,7 +188,11 @@ export function ItemPage() {
             {seasonPage && <SeasonLine season={item} progress={seasonWatch} />}
             {collectionLine ? <p className="count-line">{collectionLine}</p> : null}
             {episode && <p className="hero-episode">{item.Name}</p>}
-            {facts && <p className="kicker">{facts}</p>}
+            {facts && (
+              <p className="kicker">
+                <MetaText text={facts} />
+              </p>
+            )}
             {chips.length > 0 && (
               <p className="chips">
                 {chips.map((chip) => (
@@ -828,7 +833,11 @@ function EpisodeSpot({ episode, upNext }: { episode: Item; upNext: boolean }) {
         {resume ? <span className="episode-flag watching">Resume</span> : null}
         {watched ? <span className="episode-flag watched">Watched</span> : null}
       </h2>
-      {facts && <p className="kicker">{facts}</p>}
+      {facts && (
+        <p className="kicker">
+          <MetaText text={facts} />
+        </p>
+      )}
       {episode.Overview && <p className="overview clamp">{episode.Overview}</p>}
     </div>
   )

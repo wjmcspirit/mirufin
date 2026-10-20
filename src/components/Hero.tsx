@@ -5,6 +5,7 @@ import { episodeCode, metaLine, progressPct } from "../lib/format"
 import { usePrefs, useSession } from "../session"
 import type { Item } from "../lib/types"
 import { HeartIcon, InfoIcon, PlayIcon } from "./Icons"
+import { MetaText } from "./Meta"
 import { TitleLogo } from "./Title"
 import { TrailerButton } from "./TrailerButton"
 
@@ -154,7 +155,9 @@ function HeroCopy({ face, onTrailer }: { face: HeroFace; onTrailer: (open: boole
         <TitleLogo item={item} />
       </div>
       <p className="hero-episode">{under}</p>
-      <p className="kicker">{kicker}</p>
+      <p className="kicker">
+        <MetaText text={kicker} />
+      </p>
       <p className="overview clamp">{item.Overview || ""}</p>
       <div className="actions">
         <Link className="btn btn-primary" to={href}>

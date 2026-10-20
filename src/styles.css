@@ -11,6 +11,12 @@
   --accent-ink: #f7fbff;
   --neon: linear-gradient(105deg, #2ec6ff 0%, #5b78ff 48%, #e14dff 100%);
   --danger: #ffb4a8;
+  /* The one colour a star is drawn in, wherever a star appears: the rating beside a title's name
+     on a hero, a card's subtitle, a title's own page and an episode's details. Gold rather than
+     the app's cyan or the text colour, because a star is a rating and not decoration - and warm
+     enough to read on the dark cinematic backgrounds and on the artwork behind a hero. Nothing
+     else in the app is tinted with it: hearts, buttons and focus rings keep their own colours. */
+  --star: #ffd54a;
   --side: #0d0e12;
   /* The content boundary the whole app lines up on. `.main` begins at `--page-pad`, a strip's
      content and a row's heading begin at `--page-pad` plus `--strip-pad`, and the header - the
@@ -438,6 +444,13 @@ h1, h2, h3 {
 .search-hits.size-small .card.wide { width: 240px; }
 .search-hits.size-medium .card.wide { width: 300px; }
 .search-hits.size-large .card.wide { width: 420px; }
+
+/* The one star. A rating's star is gold wherever it is drawn, and nothing else in the app uses
+   this colour: the heart beside it keeps the crimson of a favorite, a button the accent of its
+   own state, and a focus ring its cyan. No glow, no shadow - a star is read, not lit. */
+.star {
+  color: var(--star);
+}
 .search-body > .status { justify-content: center; }
 .search-body > .problem { justify-items: center; text-align: center; }
 

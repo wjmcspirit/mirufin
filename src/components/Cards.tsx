@@ -4,6 +4,7 @@ import { criticLabel, episodeCode, progressPct, remainingLabel } from "../lib/fo
 import { artWidth, ownPrimarySrc, primarySrc, seriesPosterSrc, thumbSrc } from "../lib/images"
 import type { HomeCardSize, Item } from "../lib/types"
 import { CheckIcon } from "./Icons"
+import { MetaText } from "./Meta"
 import { usePrefs } from "../session"
 import { useStageActions } from "./Stage"
 
@@ -177,7 +178,11 @@ export const PosterCard = memo(function PosterCard({
       {showTitle && (
         <span className="card-copy">
           <span className="card-title">{title}</span>
-          {subtitle && <span className="card-sub">{subtitle}</span>}
+          {subtitle && (
+            <span className="card-sub">
+              <MetaText text={subtitle} />
+            </span>
+          )}
         </span>
       )}
     </Link>

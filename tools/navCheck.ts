@@ -1899,6 +1899,41 @@ function testFocusDeclarations() {
     /window\.addEventListener\("keydown", takenOver, true\)/.test(nav) && /current !== held/.test(nav),
     "RemoteNav.tsx",
   )
+
+  // A rating's star is one colour on every screen that draws a rating: the app's own gold, taken
+  // from the one token. The glyph is wrapped by `MetaText`, so the text colour around it cannot
+  // reach it - a card's subtitle, a hero's facts line and a title's own page all draw it the same
+  // way - and nothing else is tinted with that gold: a favorite heart, a button's state and a focus
+  // ring keep the colours they had. There is no outlined star to keep distinct: the app draws one
+  // filled star beside the rating, and the rating's own value is the text beside it.
+  const meta = readFileSync("src/components/Meta.tsx", "utf8")
+  const cards = readFileSync("src/components/Cards.tsx", "utf8")
+  const hero = readFileSync("src/components/Hero.tsx", "utf8")
+  const itemPage = readFileSync("src/pages/Item.tsx", "utf8")
+  check("the star is drawn from one token, and that token is gold", css.includes("--star: #ffd54a;"), "styles.css")
+  check("and the star's class is that token and nothing else", /\.star\s*\{\s*color:\s*var\(--star\);\s*\}/.test(css), "styles.css")
+  check(
+    "nothing but a star is drawn in the star colour",
+    (css.match(/var\(--star\)/g) || []).length === 1,
+    `${(css.match(/var\(--star\)/g) || []).length} uses`,
+  )
+  check(
+    "every rating goes through the one star renderer",
+    cards.includes("MetaText text={subtitle}") &&
+      hero.includes("MetaText text={kicker}") &&
+      (itemPage.match(/MetaText text=\{facts\}/g) || []).length === 2,
+    "Cards.tsx, Hero.tsx and Item.tsx",
+  )
+  check(
+    "the star is one filled glyph, hidden from a screen reader, with the rating's text untouched",
+    meta.includes('STAR = "★"') && meta.includes('aria-hidden="true"') && !/☆/.test(meta),
+    "Meta.tsx",
+  )
+  check(
+    "and no screen states a star colour of its own",
+    !/\.star\s*\{[^}]*#[0-9a-f]{3,8}/i.test(css) && !/star[^\n]*color/i.test(cards) && !/star[^\n]*color/i.test(hero),
+    "styles.css, Cards.tsx and Hero.tsx",
+  )
 }
 
 installDom()
