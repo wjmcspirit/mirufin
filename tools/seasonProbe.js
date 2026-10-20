@@ -20,7 +20,7 @@
   root.style.setProperty("--app-scale", String(scale))
   root.style.setProperty("--app-height", Math.round(height / scale) + "px")
 
-  var ART = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='135'%3E%3C/svg%3E"
+  var ART = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='360' height='203'%3E%3C/svg%3E"
 
   function card(className, index, label) {
     var episode = className === "episode"

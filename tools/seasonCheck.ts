@@ -296,6 +296,17 @@ check(
   page.includes('const band = actions && <div className="actions episode-actions">{actions}</div>'),
   "Item.tsx",
 )
+/* The season's fact links belong in its head, with every other title's: the head is the page's
+   own controls and the episode row follows them. They used to be drawn under the row, between it
+   and the cast - which is what put a genre label where the remote expected the cast, and put a
+   label between the cast and the row on the way back up. The head is the only place they are
+   drawn, so no page can end up with them twice. */
+check(
+  "the season's own fact links are drawn in its head",
+  page.includes("<FactLinks item={item} />") && !page.includes("!seasonPage && <FactLinks"),
+  "Item.tsx",
+)
+check("and never again under its episode row", !page.includes("<FactLinks item={season} />"), "Item.tsx")
 check(
   "Favorite is offered by the two pages that are a title in their own right",
   page.includes("{canFavorite(item) && favoriteAction}"),

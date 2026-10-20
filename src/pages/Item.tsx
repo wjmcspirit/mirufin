@@ -197,10 +197,13 @@ export function ItemPage() {
             )}
             {item.Taglines?.[0] && <p className="tagline">{item.Taglines[0]}</p>}
             {item.Overview && (item.Type === "Person" ? <Bio text={item.Overview} /> : <p className="overview">{item.Overview}</p>)}
-            {/* A season's genre and studio links sit under its episode row instead of here: the
-                head of a season page is identity, the row is the page, and the first control in
-                the head is the control the page lands on. */}
-            {!seasonPage && <FactLinks item={item} />}
+            {/* A season's genre and studio links are drawn in its head, as they are on every other
+                title's page: the head is the page's own controls, and the episode row follows them.
+                They used to sit under the row, where they came between it and the cast - so a press
+                of Down from the row reached a genre label instead of the cast, Up from the cast
+                reached a label instead of the row, and a press from a label reached the cast with
+                the row the viewer had come for left above them. */}
+            <FactLinks item={item} />
           </div>
         </div>
         {/* The band under the portrait carries playback and title actions. A person
@@ -563,7 +566,8 @@ function SeasonBody({
           onLoaded={(episodes) => onProgress?.(episodes.length > 0 ? seasonProgress(episodes) : null)}
         />
       </section>
-      <FactLinks item={season} />
+      {/* The season's genre and studio links are not repeated here: they are drawn in the head,
+          where every other page keeps them, so nothing stands between this row and the cast. */}
       <Extras itemId={season.Id} />
       {series && <PeopleRows people={series.People} />}
       {series && <Similar item={series} />}

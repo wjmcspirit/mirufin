@@ -391,6 +391,18 @@ function shell() {
   return { main, side, rail }
 }
 
+/**
+ * Scroll the page column by `amount`, moving every rect inside it up with it - which is what a
+ * browser reports for a page that has been scrolled, and the state a check has to model before it
+ * can ask where the remote enters a page that is no longer at its own top.
+ */
+function scrollPage(main: El, amount: number) {
+  main.scrollTop = amount
+  visit(main, (node) => {
+    node.rect = { ...node.rect, top: node.rect.top - amount, bottom: node.rect.bottom - amount }
+  })
+}
+
 /** A home row: a heading, a sideways strip of posters. */
 function row(main: El, title: string, hrefs: string[]) {
   const section = new El("section", "row size-medium")
@@ -549,20 +561,21 @@ function seasonBlock(main: El) {
 }
 
 /**
- * One season's episode row as the page lays it out: a strip of twelve stills, each 240 wide with
- * a 14 gap, inside a scroller with the app's own 40 of padding either side. The strip is 1200
- * wide, so five stills are on screen and the rest are a sideways press away - and the strip
- * clips, exactly as `overflow-x: auto` does on the television.
+ * One season's episode row as the page lays it out: a strip of twelve stills, each 360 wide with
+ * a 14 gap, inside a scroller with the app's own 32 of padding either side. The strip is 1336
+ * wide, so four stills and part of the fifth are on screen and the rest are a sideways press away
+ * - and the strip clips, exactly as `overflow-x: auto` does on the television.
  *
  * The cards are laid out in the strip's own content coordinates, and each one is told what the
  * browser would report as its `offsetLeft`: its position inside the strip, which is what the
  * reveal measures a card with. The strip's own `scrollTo` clamps the way a browser does, so a
  * check cannot pass on a row that scrolled past its last still.
  */
-function episodeRow(main: El, count: number) {
-  const PADDING = 40
-  const CARD = 240
+function episodeRow(main: El, count: number, withActions = true) {
+  const PADDING = 32
+  const CARD = 360
   const GAP = 14
+  const HEIGHT = 275
   const section = new El("section", "episode-block")
   const head = new El("div", "row-head")
   const h2 = new El("h2")
@@ -571,11 +584,11 @@ function episodeRow(main: El, count: number) {
   const spot = new El("div", "episode-spot")
   spot.place(300, 400, 1000, 104)
   const scroller = new El("div", "scroller episode-scroller")
-  scroller.place(430, 400, 1200, 268)
-  scroller.clientWidth = 1200
-  scroller.clientHeight = 268
+  scroller.place(430, 400, 1336, HEIGHT)
+  scroller.clientWidth = 1336
+  scroller.clientHeight = HEIGHT
   scroller.scrollWidth = PADDING * 2 + count * CARD + (count - 1) * GAP
-  scroller.scrollHeight = 268
+  scroller.scrollHeight = HEIGHT
   scroller.scrollTo = (options: { left?: number; top?: number } | number) => {
     const left = typeof options === "number" ? options : options.left ?? scroller.scrollLeft
     scroller.scrollLeft = Math.max(0, Math.min(scroller.scrollWidth - scroller.clientWidth, left))
@@ -588,7 +601,7 @@ function episodeRow(main: El, count: number) {
     const card = new El("a", index === 1 ? "episode is-next" : "episode")
       .attr("href", episodePlayHref({ Id: id, Name: `Episode ${index + 1}`, Type: "Episode" }))
       .attr("data-episode", id)
-    card.place(430, 400 + PADDING + index * (CARD + GAP), CARD, 268)
+    card.place(430, 400 + PADDING + index * (CARD + GAP), CARD, HEIGHT)
     card.offsetLeftOverride = PADDING + index * (CARD + GAP)
     scroller.add(card)
     return card
@@ -598,10 +611,45 @@ function episodeRow(main: El, count: number) {
   const play = new El("button", "btn btn-primary")
   play.text = "Play"
   play.place(730, 440, 176, 48)
-  actions.add(play)
+  if (withActions) actions.add(play)
   section.add(head, spot, scroller, actions)
   main.add(section)
-  return { section, scroller, cards, play }
+  return { section, scroller, cards, play, actions }
+}
+
+/**
+ * The season page's own shape, as the app renders it: a head whose controls are the season's fact
+ * links, then the episode block - the season heading, the episode the remote is on, the row of
+ * stills and the band under it, which for a season holds no controls at all - then the cast, and
+ * then what the viewer might watch next.
+ *
+ * A season is not a title in its own right: there is no Play, no Favorite and no Mark watched on
+ * it, so its action band is drawn with nothing in it. That is the shape the reported bug happened
+ * in: with the fact links under the row instead of in the head, Down from the row reached a genre
+ * label and Up from the cast reached a label rather than the row.
+ */
+function seasonPage(main: El) {
+  const hero = new El("header", "detail-hero stage-copy")
+  hero.place(60, 0, 1920, 420)
+  const links = new El("p", "meta-links genre-pills")
+  const pills = ["/library/L1?genre=Drama", "/library/L1?genre=Crime"].map((href, index) => {
+    const pill = new El("a", "").attr("href", href)
+    pill.text = index === 0 ? "Drama" : "Crime"
+    pill.place(320 + index * 120, 50, 110, 40)
+    links.add(pill)
+    return pill
+  })
+  hero.add(links)
+  main.add(hero)
+
+  // The row and the band under it. A season's own band holds no controls, so it is drawn empty -
+  // which is why the row's next step down the page is the cast.
+  const block = episodeRow(main, 12, false)
+  const cast = people(main, ["P1", "P2", "P3", "P4", "P5", "P6"], "Cast", 1200)
+  const similar = row(main, "If you liked this", ["/item/S1", "/item/S2", "/item/S3"])
+  similar.scroller.place(1500, 0, 1600, 300)
+  similar.cards.forEach((card, index) => card.place(1500, index * 200, 168, 252))
+  return { hero, links, pills, block, cast, similar }
 }
 
 /** The part of the row's own contents the strip is showing, in the coordinates it lays out in. */
@@ -1005,6 +1053,86 @@ function testSeasonWalk() {
   check("Up comes back into the episode row", active !== null && block.cards.includes(active), label(active))
   moveFocus("ArrowUp")
   check("Up again leaves it for the seasons, not for the rail", active !== null && seasons.cards.includes(active), label(active))
+}
+
+/**
+ * The season page with the remote: the moves the viewer reported broken.
+ *
+ * Down from the head enters the episode row, Right and Left walk it, Down from the row reaches
+ * the cast, Up from the cast comes back to the row, and Up from the row returns to the head. None
+ * of it may fall back to the navigation rail while the page has a step of its own in that
+ * direction.
+ */
+function testSeasonPageWalk() {
+  clearSeats()
+  resetFocusState()
+  const page = shell()
+  const season = seasonPage(page.main)
+  noteRoute("/item/SEASON1")
+
+  placeFocus(season.pills[0])
+  moveFocus("ArrowDown")
+  check("Down from the head enters the episode row", active !== null && season.block.cards.includes(active), label(active))
+
+  placeFocus(season.block.cards[0])
+  moveFocus("ArrowRight")
+  check("Right walks the episode row sideways", active === season.block.cards[1], label(active))
+  moveFocus("ArrowLeft")
+  check("and Left walks it back", active === season.block.cards[0], label(active))
+
+  moveFocus("ArrowDown")
+  check("Down from the episode row reaches the cast", active !== null && season.cast.links.includes(active), label(active))
+
+  moveFocus("ArrowUp")
+  check("Up from the cast returns to the episode row", active !== null && season.block.cards.includes(active), label(active))
+
+  moveFocus("ArrowUp")
+  check("Up from the episode row returns to the head", active !== null && season.pills.includes(active), label(active))
+  check("and not to the navigation rail", !(active instanceof El) || !active.closest(".side"), label(active))
+
+  // The season's own band under the row holds no controls, so it is not a stop on the way: the
+  // viewer never lands in an empty band, and the row's next step down is the cast.
+  placeFocus(season.block.cards[0])
+  moveFocus("ArrowDown")
+  check("the empty band under the row is never a stop", active !== null && season.cast.links.includes(active), label(active))
+}
+
+/**
+ * A press of Down from the navigation rail enters the page's own content.
+ *
+ * The rail sits above the page, so Down from it is the viewer asking for what the page holds -
+ * and the answer is the band they were last in, or the first one on screen. A page scrolled down
+ * its own length used to answer with whichever band happened to sit nearest the top of the
+ * screen, which on a season page is the cast: the remote landed below the episode row the viewer
+ * had been browsing, and the row they came for was left above them, unvisited.
+ */
+function testRailEntry() {
+  clearSeats()
+  resetFocusState()
+  const page = shell()
+  const season = seasonPage(page.main)
+  noteRoute("/item/SEASON1")
+
+  // The viewer browses the row, and the page is left scrolled down it - the state the remote
+  // returns to the rail from. The cast is what is on screen, and the row is above the top.
+  placeFocus(season.block.cards[4])
+  scrollPage(page.main, 900)
+  placeFocus(page.rail)
+  const cast = season.cast.links[0]
+  const row = season.block.cards[4]
+  check(
+    "the check is set up the way the bug appeared: the cast is nearer the rail than the row",
+    Math.abs(cast.rect.top - page.rail.rect.top) < Math.abs(row.rect.top - page.rail.rect.top) && row.rect.bottom < 0,
+    `cast ${cast.rect.top}, row ${row.rect.top}, rail ${page.rail.rect.top}`,
+  )
+
+  moveFocus("ArrowDown")
+  check(
+    "Down from the rail returns to the row the viewer was in, not to the cast below it",
+    active !== null && season.block.cards.includes(active),
+    label(active),
+  )
+  check("and the cast is not what it lands on", active !== null && !season.cast.links.includes(active), label(active))
 }
 
 /**
@@ -1569,7 +1697,33 @@ function testFocusDeclarations() {
   )
   check(
     "and its stills keep the width they are designed at",
-    /\.episode\s*\{[^}]*width:\s*240px/.test(css) && /\.episode\s*\{[^}]*flex:\s*0 0 auto/.test(css),
+    /\.episode\s*\{[^}]*width:\s*360px/.test(css) && /\.episode\s*\{[^}]*flex:\s*0 0 auto/.test(css),
+    "styles.css",
+  )
+  // The still inside the card is 16:9 artwork, drawn by the one shared rule: a card that grew
+  // without it would stretch a picture into the frame instead of showing it.
+  check(
+    "and the still keeps the 16:9 shape the artwork is drawn in",
+    /\.card\.wide \.card-art,\s*\.episode-art,[\s\S]{0,80}?aspect-ratio:\s*16\s*\/\s*9/.test(css),
+    "styles.css",
+  )
+  // The page's own content boundary, taken once. The season's episode block and the actions under
+  // the row used to state insets of their own - 0 and 40 - which left the episode's synopsis 32
+  // design units to the left of the heading above it and the Play button 8 to the right of the
+  // still below it, and moved again at 1440p and 4K, where the boundary grows with the panel.
+  check(
+    "the season's episode block takes the page's own content boundary",
+    /\.episode-spot,\s*[\s\S]{0,400}?padding-inline:\s*var\(--strip-pad\)/.test(css),
+    "styles.css",
+  )
+  check(
+    "and states no inset of its own",
+    /\.episode-spot\s*\{[^}]*\}/.test(css) && !/\.episode-spot\s*\{[^}]*padding/.test(css),
+    "styles.css",
+  )
+  check(
+    "the actions under the row begin on that same boundary",
+    /\.episode-actions\s*\{[^}]*padding-inline:\s*var\(--strip-pad\)/.test(css),
     "styles.css",
   )
   // A title page has nothing of its own to focus while the server answers, and the navigation
@@ -1607,6 +1761,8 @@ testDelayedList()
 testMissingTarget()
 testRailIsNotASeat()
 testSeasonWalk()
+testSeasonPageWalk()
+testRailEntry()
 testEpisodeRowScroll()
 testEpisodeRowPlays()
 testSeasonBack()

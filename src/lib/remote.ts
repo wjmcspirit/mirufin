@@ -452,14 +452,37 @@ function landing(band: HTMLElement, items: FocusItem[], from: FocusItem, dir: nu
   return best
 }
 
+/**
+ * Where Down enters the page when the remote is on the navigation rail.
+ *
+ * The rail sits above the page, so a press of Down from it is the viewer asking for the page's
+ * own content - and the answer is the band they were last in, which is the row they were browsing
+ * or the head they landed on, and failing that the first band of the page that is on screen.
+ *
+ * Measuring the straight-line distance from the rail to every control instead answers with
+ * whichever band happens to sit nearest the top of the screen. On a page scrolled down its own
+ * length that is a band below the one the viewer came from - on a season page the cast, with the
+ * episode row left above them, unvisited - and a row scrolled sideways could even answer with a
+ * still that is off the left edge, which drags the row back to its beginning under the viewer.
+ */
 function enterRow(from: FocusItem, items: FocusItem[]) {
-  let best: FocusItem | null = null
-  let bestScore = Number.POSITIVE_INFINITY
-  for (const item of items) {
-    const score = Math.abs(item.cy - from.cy) * 8 + item.rect.left
-    if (score < bestScore) {
+  const bands = bandsOf(items)
+  if (bands.length === 0) return null
+  const box = (mainColumn() || document.documentElement).getBoundingClientRect()
+  const shown = bands.filter((band) => band.getBoundingClientRect().bottom > box.top + 8)
+  const remembered = alive(returnMain) ? bands.find((band) => band.contains(returnMain)) : undefined
+  const band = remembered || shown[0] || bands[bands.length - 1]
+  const inside = items.filter((item) => band.contains(item.node))
+  const pool = inside.length > 0 ? inside : items
+  const within = pool.filter((item) => item.rect.right > box.left + 4 && item.rect.left < box.right - 4)
+  const list = within.length > 0 ? within : pool
+  let best = list[0]
+  let bestDx = Number.POSITIVE_INFINITY
+  for (const item of list) {
+    const dx = Math.abs(item.cx - from.cx)
+    if (dx < bestDx) {
       best = item
-      bestScore = score
+      bestDx = dx
     }
   }
   return best

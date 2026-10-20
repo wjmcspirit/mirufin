@@ -262,6 +262,36 @@ interface SeasonStrip {
   artWidth: number
 }
 
+/** Where one press of the walk left the remote, and which group of the page that control is in. */
+interface WalkStep {
+  name: string
+  group: "hero" | "episodes" | "actions" | "cast" | "seasons" | "rail" | "other" | "none"
+  inRow: boolean
+}
+
+/** The season page walked with the remote: where each press of the walk landed. */
+interface SeasonWalkReport {
+  shape: "season" | "series"
+  fromRail: WalkStep[]
+  fromHero: WalkStep[]
+  across: WalkStep[]
+  rowDown: WalkStep[]
+  backUp: WalkStep[]
+  castUp: WalkStep[]
+  rowUp: WalkStep[]
+  railAgain: WalkStep[]
+  page: { top: number; left: number }
+  rowScrollLeft: number
+  /** The focused still and the row's box, in the design units the layout is drawn in. */
+  art: { width: number; height: number }
+  cardWidth: number
+  strip: { left: number; right: number }
+  /** The page's content boundary, as every block of the page begins on it. */
+  edges: { hero: number; heading: number; spot: number; row: number; actions: number; castHeading: number; castCard: number }
+  /** The same measurement taken before the remote touched the page. */
+  rowArt: { width: number; height: number }
+}
+
 interface SeasonReport {
   strip: { clientWidth: number; scrollWidth: number; left: number; right: number }
   page: { left: number; right: number }
@@ -287,7 +317,7 @@ interface SeasonReport {
  * scroll, the page clipped the cards past its right edge, and the remote could land on an episode
  * that was not on screen with the row never following.
  */
-async function measureSeason(browser: string, probe: string, panels: Panel[]) {
+async function measurePage<T>(browser: string, probe: string, panels: Panel[], query = "") {
   const port = 9400 + Math.floor(Math.random() * 400)
   const profile = mkdtempSync(join(tmpdir(), "mirufin-season-"))
   const child = spawn(
@@ -315,7 +345,7 @@ async function measureSeason(browser: string, probe: string, panels: Panel[]) {
     const session = await Session.open(target.webSocketDebuggerUrl as string)
     try {
       await session.send("Page.enable")
-      const reports: { panel: Panel; report: SeasonReport }[] = []
+      const reports: { panel: Panel; report: T }[] = []
       for (const panel of panels) {
         await session.send("Emulation.setDeviceMetricsOverride", {
           width: panel.width,
@@ -323,12 +353,12 @@ async function measureSeason(browser: string, probe: string, panels: Panel[]) {
           deviceScaleFactor: 1,
           mobile: false,
         })
-        await session.send("Page.navigate", { url: probe })
-        const text = await waitFor(`${panel.name} to measure the season row`, async () => {
+        await session.send("Page.navigate", { url: probe + query })
+        const text = await waitFor(`${panel.name} to measure the page`, async () => {
           const value = await session.evaluate("document.getElementById('probe').textContent")
           return typeof value === "string" && value !== "pending" ? value : null
         })
-        reports.push({ panel, report: JSON.parse(text as string) as SeasonReport })
+        reports.push({ panel, report: JSON.parse(text as string) as T })
       }
       return reports
     } finally {
@@ -342,6 +372,11 @@ async function measureSeason(browser: string, probe: string, panels: Panel[]) {
       /* the temporary profile can wait for the next sweep of the temp folder */
     }
   }
+}
+
+/** The episode row probe: the row's own geometry and where the remote's walk left it. */
+function measureSeason(browser: string, probe: string, panels: Panel[]) {
+  return measurePage<SeasonReport>(browser, probe, panels)
 }
 
 
@@ -640,9 +675,12 @@ for (const { panel, report } of await measureSeason(browser, seasonProbe, PANELS
     stuck.length === 0,
     stuck.map((step) => `${step.index} at ${step.cardLeft}..${step.cardRight}`).join(", "),
   )
+  /* The row stops at its own end rather than running past it. The offset the browser reports is
+     quantised to the panel's own pixels - at 1080p the television build's zoom makes one layout
+     unit about 1.28 of them - so the row is allowed the one unit that rounding costs it. */
   check(
     `${panel.name}: the first episode needed no scrolling, and the last did not run past the row's end`,
-    report.right[0] !== undefined && report.right[0].scrollLeft === 0 && report.atEnd.scrollLeft === end,
+    report.right[0] !== undefined && report.right[0].scrollLeft === 0 && Math.abs(report.atEnd.scrollLeft - end) <= 1,
     `start ${report.right[0]?.scrollLeft ?? "?"}, end ${report.atEnd.scrollLeft} of ${end}`,
   )
   check(
@@ -651,13 +689,115 @@ for (const { panel, report } of await measureSeason(browser, seasonProbe, PANELS
     `rail scrolled ${report.railScrollLeft}`,
   )
   // The row is not fixed by shrinking every episode: the stills keep the size the row is drawn
-  // at, which is what keeps five of them readable from across the room.
+  // at, which is what keeps several of them readable from across the room. 360 design units of
+  // the 1500-unit canvas, with the 16:9 still the card carries inside it.
   check(
     `${panel.name}: the stills keep the width the row is designed at`,
-    report.right.length > 0 && report.right.every((step) => step.artWidth === report.right[0].artWidth) && report.right[0].artWidth === 240,
+    report.right.length > 0 && report.right.every((step) => step.artWidth === report.right[0].artWidth) && report.right[0].artWidth === 360,
     `${report.right[0]?.artWidth ?? 0} design units`,
   )
   console.log("")
+}
+
+/**
+ * The season page walked with the remote, measured the same way.
+ *
+ * The viewer's complaint was that a press of Down on this page skipped the episode row and landed
+ * on the cast, and that Up from the cast did not come back to the row. Both are measured here at
+ * every panel size, from a real layout and the app's own navigation engine: Down from the head
+ * enters the row, the row is walked sideways and scrolls, Down from the row reaches the cast, Up
+ * from the cast returns to the row, Up from the row returns to the head, and no press of any of
+ * it falls back to the navigation rail.
+ *
+ * The season's own page and the series page's shape are both walked: the series page carries the
+ * seasons row between its head and its episode row, and the title's own actions in the band under
+ * the row, so the same walk has to reach the row through the seasons and reach the cast through
+ * the actions.
+ */
+const WALK_SHAPES: { shape: "season" | "series"; above: string; below: string; rowAt: number }[] = [
+  { shape: "season", above: "hero", below: "cast", rowAt: 0 },
+  { shape: "series", above: "seasons", below: "actions", rowAt: 1 },
+]
+
+const seasonWalkProbe = pathToFileURL(resolve("tools/seasonWalkProbe.html")).href
+console.log("\nThe season page walked with the remote: Down into the row, and Up out of it\n")
+
+for (const { shape, between } of WALK_SHAPES) {
+  for (const { panel, report } of await measurePage<SeasonWalkReport>(browser, seasonWalkProbe, PANELS, `?shape=${shape}`)) {
+    const landed = (walk: WalkStep[]) => walk.map((step) => step.group).join(" -> ")
+    console.log(`${panel.name} (${shape}) - ${panel.width}x${panel.height}`)
+    console.log(
+      `     head down: ${landed(report.fromHero)}   row across: ${landed(report.across)}\n` +
+        `     row down:  ${landed(report.rowDown)}   cast up: ${landed(report.castUp)}   row up: ${landed(report.rowUp)}\n` +
+        `     from the rail: ${landed(report.fromRail)}   from the rail below: ${landed(report.railAgain)}\n` +
+        `     still ${report.rowArt.width}x${report.rowArt.height} design units, card ${report.cardWidth}, ` +
+        `edges ${report.edges.hero}/${report.edges.heading}/${report.edges.spot}/${report.edges.row}/${report.edges.actions}/${report.edges.castHeading}/${report.edges.castCard}`,
+    )
+    console.log("")
+  }
+}
+
+for (const { shape, above, below, rowAt } of WALK_SHAPES) {
+  for (const { panel, report } of await measurePage<SeasonWalkReport>(browser, seasonWalkProbe, PANELS, `?shape=${shape}`)) {
+    const landed = (walk: WalkStep[]) => walk.map((step) => step.group).join(" -> ")
+    const edges = report.edges
+    const boundary = edges.hero
+    const strays = Object.entries(edges).filter(([, value]) => value >= 0 && Math.abs(value - boundary) > 1)
+    check(
+      `${panel.name} (${shape}): the head, heading, synopsis, row, actions and cast share one left edge`,
+      strays.length === 0,
+      `boundary ${boundary}, ${strays.map(([name, value]) => `${name} at ${value}`).join(", ")}`,
+    )
+    check(
+      `${panel.name} (${shape}): the episode still is the size the row is designed at`,
+      report.rowArt.width === 360 && report.rowArt.height === 202.5 && report.cardWidth === 360,
+      `${report.rowArt.width}x${report.rowArt.height} still, card ${report.cardWidth}`,
+    )
+    check(
+      `${panel.name} (${shape}): and it keeps the 16:9 shape of the artwork rather than stretching it`,
+      Math.abs(report.rowArt.width / report.rowArt.height - 16 / 9) < 0.01,
+      `${report.rowArt.width}x${report.rowArt.height}`,
+    )
+    check(
+      `${panel.name} (${shape}): Down from the head reaches the episode row`,
+      report.fromHero[rowAt]?.group === "episodes" && report.fromHero[0]?.group === (rowAt === 0 ? "episodes" : above),
+      landed(report.fromHero),
+    )
+    check(
+      `${panel.name} (${shape}): Right and Left walk the row, and the row follows`,
+      report.across.length > 0 && report.across.every((step) => step.group === "episodes" && step.inRow) && report.rowScrollLeft > 0,
+      `${landed(report.across)}, scrolled ${report.rowScrollLeft}`,
+    )
+    check(
+      `${panel.name} (${shape}): Down from the episode row reaches the cast`,
+      report.rowDown[0]?.group === below && report.rowDown[rowAt]?.group === "cast",
+      landed(report.rowDown),
+    )
+    check(
+      `${panel.name} (${shape}): Up from the cast returns to the episode row`,
+      report.castUp.some((step) => step.group === "episodes" && step.inRow),
+      landed(report.castUp),
+    )
+    check(
+      `${panel.name} (${shape}): Up from the episode row returns to the step above it`,
+      report.rowUp[0]?.group === above,
+      landed(report.rowUp),
+    )
+    const walked = [...report.fromHero, ...report.across, ...report.rowDown, ...report.castUp, ...report.rowUp]
+    check(
+      `${panel.name} (${shape}): no press of the walk fell back to the navigation rail`,
+      !walked.some((step) => step.group === "rail"),
+      landed(walked),
+    )
+    // Down from the rail enters the page's own content - the band the viewer was in, or the first
+    // one on screen - and never a band below the row they came from.
+    check(
+      `${panel.name} (${shape}): Down from the rail enters the page's own content`,
+      report.fromRail[0] !== undefined && report.fromRail[0].group !== "rail" && report.railAgain[0]?.group !== "rail",
+      `${landed(report.fromRail)} / ${landed(report.railAgain)}`,
+    )
+    console.log("")
+  }
 }
 
 console.log(failures === 0 ? "The layout checks hold at every panel size." : `${failures} check(s) failed.`)
