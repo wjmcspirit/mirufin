@@ -16,6 +16,8 @@ interface HeroFace {
   playLabel?: string
   detail?: string
   eyebrow?: string
+  /** `"stack"`: the remote walks the hero's actions with Up and Down as well as sideways. */
+  flow?: "stack"
 }
 
 /** The controls the remote can land on inside a hero copy, in the order they are drawn. */
@@ -34,6 +36,7 @@ export function Hero({
   detail,
   eyebrow,
   focused = false,
+  flow,
 }: {
   item: Item
   onHold: (hold: boolean) => void
@@ -45,8 +48,10 @@ export function Hero({
   /** What the line above the title says, when the caller knows better than the item's own type. */
   eyebrow?: string
   focused?: boolean
+  /** `"stack"`: the actions are also the page's vertical focus order; see `remote.ts`. */
+  flow?: "stack"
 }) {
-  const face: HeroFace = { item, presentation, playHref, playLabel, detail, eyebrow }
+  const face: HeroFace = { item, presentation, playHref, playLabel, detail, eyebrow, flow }
   const section = useRef<HTMLElement>(null)
   const at = useRef(-1)
 
@@ -98,7 +103,7 @@ export function Hero({
 
 function HeroCopy({ face, onTrailer }: { face: HeroFace; onTrailer: (open: boolean) => void }) {
   const { userId } = useSession()
-  const { item, presentation, playHref, playLabel, detail, eyebrow: givenEyebrow } = face
+  const { item, presentation, playHref, playLabel, detail, eyebrow: givenEyebrow, flow } = face
   // The favorite is the copy's own state, the way the trailer button's is: this block is
   // keyed on the item, so a hero that moves to the next title starts from whatever the
   // server says about that title, and a press that fails puts the button back where it was.
@@ -155,7 +160,7 @@ function HeroCopy({ face, onTrailer }: { face: HeroFace; onTrailer: (open: boole
       <p className="hero-episode">{under}</p>
       <MetaLine item={item} genres={item.Genres?.slice(0, 3).join(", ") || ""} />
       <p className="overview clamp">{item.Overview || ""}</p>
-      <div className="actions">
+      <div className="actions" data-nav-flow={flow}>
         <Link className="btn btn-primary" to={href}>
           <PlayIcon />
           {label}

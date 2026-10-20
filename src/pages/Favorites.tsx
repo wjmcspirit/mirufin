@@ -5,10 +5,20 @@ import { useHeroRotation } from "../components/HeroDeck"
 import { Loading, Problem } from "../components/Status"
 import { useHeroStage, usePinnedArt, useStageActions } from "../components/Stage"
 import * as api from "../lib/api"
-import { FAVORITE_FILTERS, favoriteHeroDeck, filterFavorites, type FavoriteFilter } from "../lib/heroDeck"
+import { HERO_DECK_LIMIT, FAVORITE_FILTERS, favoriteHeroDeck, filterFavorites, type FavoriteFilter } from "../lib/heroDeck"
 import { ownBackdropSrc } from "../lib/images"
 import type { Item } from "../lib/types"
 import { usePrefs, useSession } from "../session"
+
+/**
+ * The favorite the page was showing when the viewer last left it.
+ *
+ * Kept beside the page rather than in a ref because the page is unmounted by the router: the ref
+ * would be gone by the time they came back, and the hero would open on the same title again. It is
+ * only a hint - `favoriteHeroDeck` uses it to keep a revisit from opening on the same favorite -
+ * and the shelf itself is never reordered by it.
+ */
+let lastFavoriteHero = ""
 
 /**
  * The viewer's own shelf: the titles they hearted, as a personal library rather than a grid with a
@@ -55,9 +65,22 @@ export function FavoritesPage() {
     hover(null)
   }, [hover])
 
-  const favorites = useMemo(() => favoriteHeroDeck(items), [items])
-  const heroItem = useHeroRotation(favorites, heroHold || trailerHold)
   const shown = useMemo(() => filterFavorites(items, filter), [items, filter])
+  // The hero turns through the same favorites the grid is showing, so a filter can never leave a
+  // title in the hero that the grid beneath it has hidden. Its order is a fresh sample of that
+  // list - `shown` keeps the server's own order for the poster grid - and the title the page was
+  // last showing is kept out of the opening slide, so a revisit does not feature it again.
+  const heroPool = useMemo(
+    () => favoriteHeroDeck(shown, HERO_DECK_LIMIT, lastFavoriteHero),
+    // The last title is read when the deck is built, not watched: a turn that changes it must not
+    // rebuild the deck and restart the beat.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [shown],
+  )
+  const heroItem = useHeroRotation(heroPool, heroHold || trailerHold)
+  useEffect(() => {
+    if (heroItem) lastFavoriteHero = heroItem.Id
+  }, [heroItem])
 
   useHeroStage(Boolean(heroItem))
   // A page of the viewer's own titles rests on one of them, not on whatever a poster under the
@@ -80,7 +103,7 @@ export function FavoritesPage() {
     <div className="favorites-page">
       {heroItem && (
         <div className="library-hero">
-          <Hero item={heroItem} onHold={setHeroHold} onTrailer={setTrailerHold} />
+          <Hero item={heroItem} onHold={setHeroHold} onTrailer={setTrailerHold} flow="stack" />
         </div>
       )}
       <header className="page-head favorites-head">
@@ -91,7 +114,7 @@ export function FavoritesPage() {
         </div>
         {/* The filters sit on the heading's own row, the way a library's tools do, so they cost
             the poster row no height at all. */}
-        <div className="filter-row" role="group" aria-label="Filter favorites">
+        <div className="filter-row" role="group" aria-label="Filter favorites" data-nav-flow="stack">
           {FAVORITE_FILTERS.map((option) => (
             <button key={option.id} type="button" aria-pressed={filter === option.id} onClick={() => setFilter(option.id)}>
               {option.label}

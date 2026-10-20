@@ -178,9 +178,26 @@ export function recentlyAddedCollections(collections: Item[], limit = 12) {
   return deckFrom(datedNewestFirst(collections), limit)
 }
 
-/** The favorites a hero turns through: the viewer's own list, one of each, capped. */
-export function favoriteHeroDeck(favorites: Item[], limit = HERO_DECK_LIMIT) {
-  return deckFrom(favorites, limit)
+/**
+ * The favorites a hero turns through: the viewer's own list, one of each, in a fresh order and
+ * capped at the same ten every hero turns through.
+ *
+ * The list is shuffled before it is cut, so a page does not open on whichever favorite the server
+ * happened to send first. The grid below keeps the sort the viewer chose; the hero is the one part
+ * of the screen that samples the shelf. `avoid` is the favorite the hero was showing when the
+ * viewer last left the page, and a visit that would open on it again is swapped with another
+ * slide, so coming back twice in a row does not feature the same title first. A shelf holding one
+ * favorite still features it.
+ */
+export function favoriteHeroDeck(favorites: Item[], limit = HERO_DECK_LIMIT, avoid = "") {
+  const shuffled = shuffle(oneOfEach(favorites))
+  if (avoid && shuffled.length > 1 && shuffled[0].Id === avoid) {
+    const swap = 1 + Math.floor(Math.random() * (shuffled.length - 1))
+    const first = shuffled[0]
+    shuffled[0] = shuffled[swap]
+    shuffled[swap] = first
+  }
+  return shuffled.slice(0, limit)
 }
 
 /** Which favorites a filter shows. */

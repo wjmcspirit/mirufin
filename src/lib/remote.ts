@@ -374,7 +374,7 @@ function stepList(current: FocusItem, items: FocusItem[], key: "ArrowUp" | "Arro
 }
 
 const BAND =
-  ".scroller, .grid, .card-board, .episodes, .library-icons, .letter-row, .actions, .meta-links, .settings-menu, .settings-row, .choice, .seconds, .search-picks, .search-hits"
+  ".scroller, .grid, .card-board, .episodes, .library-icons, .letter-row, .filter-row, .actions, .meta-links, .settings-menu, .settings-row, .choice, .seconds, .search-picks, .search-hits"
 
 function containerOf(node: HTMLElement) {
   return node.closest<HTMLElement>(BAND)
@@ -395,6 +395,7 @@ function kind(band: HTMLElement): "strip" | "grid" | "list" {
   if (
     band.classList.contains("scroller") ||
     band.classList.contains("actions") ||
+    band.classList.contains("filter-row") ||
     band.classList.contains("library-icons") ||
     band.classList.contains("letter-row") ||
     band.classList.contains("meta-links") ||
@@ -455,10 +456,26 @@ function shownRows(rows: FocusItem[][]) {
   return rows.filter((row) => row[row.length - 1].rect.bottom > box.top + 8 && row[0].rect.top < box.bottom - 8)
 }
 
+/**
+ * A band whose controls are walked with Up and Down as well as sideways.
+ *
+ * A hero's actions and the Favorites filter row are short, horizontal rows that are *also* the
+ * page's vertical focus order: Down from any of the hero's buttons goes to the button after it,
+ * and Down from the last filter goes into the grid. The page marks such a band with
+ * `data-nav-flow="stack"`; every other band keeps the app's ordinary behaviour, where a vertical
+ * press leaves it for the band above or below.
+ */
+function stacked(band: HTMLElement) {
+  return band.getAttribute("data-nav-flow") === "stack"
+}
+
 function landing(band: HTMLElement, items: FocusItem[], from: FocusItem, dir: number) {
   const list = ordered(items)
   if (list.length === 0) return null
   if (kind(band) === "list") return dir < 0 ? list[list.length - 1] : list[0]
+  // A stack is entered at the end it is walked from: Down arrives on its first control, Up on its
+  // last, so a press never lands in the middle of a row it has not visited yet.
+  if (stacked(band)) return dir < 0 ? list[list.length - 1] : list[0]
   if (kind(band) === "strip") return list[Math.min(lane, list.length - 1)]
   /* A grid is read from its own beginning. A press of Down from a band above it - a heading, the
      library toolbar, the top of a page - lands on the first item of the first row the viewer can
@@ -543,7 +560,7 @@ let returnMain: HTMLElement | null = null
 
 /** The lists a control can live in. A control's identity is only unique inside one. */
 const SECTIONS =
-  ".row, .season-block, .episode-block, .search-group, .grid, .card-board, .episodes, .library-icons, .letter-row, .settings-menu"
+  ".row, .season-block, .episode-block, .search-group, .grid, .card-board, .episodes, .library-icons, .letter-row, .filter-row, .settings-menu"
 
 /** Bands that scroll on their own, so where they were scrolled is part of the seat. */
 const LANES = ".scroller, .grid, .card-board, .episodes, .library-icons, .letter-row, .settings-menu"
@@ -1036,6 +1053,24 @@ export function moveFocus(key: string) {
     const dir = key === "ArrowDown" ? 1 : -1
     if (!band) {
       const next = nearest(current, main, key)
+      if (next) focusNode(next.node)
+      else if (dir < 0) focusMenu(current.node, side.map((item) => item.node))
+      return
+    }
+    // A stack is walked a control at a time: the press steps to the next control in the row, and
+    // only at the row's own end does it leave for the band above or below. This is what puts
+    // Down on Trailers at All rather than at a filter chosen by the hero button's column, and what
+    // makes Up from All return to the hero action the viewer came down from.
+    if (stacked(band)) {
+      const list = ordered(inside)
+      const step = list[list.indexOf(current) + dir]
+      if (step) {
+        focusNode(step.node)
+        return
+      }
+      const bands = bandsOf(main)
+      const neighbor = bands[bands.indexOf(band) + dir]
+      const next = neighbor ? landing(neighbor, main.filter((item) => neighbor.contains(item.node)), current, dir) : nearest(current, main, key)
       if (next) focusNode(next.node)
       else if (dir < 0) focusMenu(current.node, side.map((item) => item.node))
       return

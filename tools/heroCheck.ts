@@ -204,7 +204,11 @@ same(
 
 // --------------------------------------------------------------------------- favorites
 
-same("a favorites hero holds one of each favorite", favoriteHeroDeck([movie("m", "M"), movie("m", "M"), series("s", "S")]).map((i) => i.Id), ["m", "s"])
+same(
+  "a favorites hero holds one of each favorite",
+  favoriteHeroDeck([movie("m", "M"), movie("m", "M"), series("s", "S")]).map((i) => i.Id).sort(),
+  ["m", "s"],
+)
 same("and is capped", favoriteHeroDeck(Array.from({ length: 30 }, (_, index) => movie(`m${index}`, `M${index}`))).length, HERO_DECK_LIMIT)
 same("the filters offered are All, Movies and TV Shows", FAVORITE_FILTERS.map((entry) => entry.label), ["All", "Movies", "TV Shows"])
 
@@ -218,6 +222,55 @@ same(
   ["Movie", "Series", "Episode", "Movie"],
 )
 same("and filtering an empty shelf is still empty", filterFavorites([], "movies"), [])
+
+/* The featured favorite: a random sample of the shelf the filter is showing, not its first title,
+   and a page the viewer returns to that does not open on the one they just left. */
+const SAVED_FILMS = Array.from({ length: 14 }, (_, index) => movie(`f${index}`, `Film ${index}`))
+const SAVED_SHOWS = Array.from({ length: 12 }, (_, index) => series(`t${index}`, `Show ${index}`))
+const SAVED = [...SAVED_FILMS, ...SAVED_SHOWS]
+
+const favoriteOpenings = new Set<string>()
+for (let pass = 0; pass < 40; pass += 1) favoriteOpenings.add(favoriteHeroDeck(SAVED)[0]?.Id || "")
+check(
+  "the featured favorite is not simply the first of the shelf's own order",
+  favoriteOpenings.size > 1,
+  `${favoriteOpenings.size} different openings in 40 builds`,
+)
+const favoriteDeck = favoriteHeroDeck(SAVED)
+check(
+  "and a shelf of ten or more turns through ten different favorites",
+  new Set(favoriteDeck.map((item) => item.Id)).size === HERO_DECK_LIMIT && favoriteDeck.length === HERO_DECK_LIMIT,
+  `${new Set(favoriteDeck.map((item) => item.Id)).size} of ${favoriteDeck.length}`,
+)
+for (const option of FAVORITE_FILTERS) {
+  const pool = filterFavorites(SAVED, option.id)
+  const deck = favoriteHeroDeck(pool)
+  check(
+    `a ${option.label} hero draws only from what that filter shows`,
+    deck.length === Math.min(pool.length, HERO_DECK_LIMIT) && deck.every((item) => pool.some((entry) => entry.Id === item.Id)),
+    `${deck.length} slides from ${pool.length}`,
+  )
+}
+const movieOpenings = new Set<string>()
+for (let pass = 0; pass < 40; pass += 1) movieOpenings.add(favoriteHeroDeck(filterFavorites(SAVED, "movies"))[0]?.Id || "")
+check("and a filtered hero samples that filter's shelf too", movieOpenings.size > 1, `${movieOpenings.size} different openings in 40 builds`)
+const leftOn = favoriteHeroDeck(SAVED)[0].Id
+const revisits = Array.from({ length: 40 }, () => favoriteHeroDeck(SAVED, HERO_DECK_LIMIT, leftOn))
+check(
+  "a revisit does not open on the favorite the viewer just left",
+  revisits.every((deck) => deck.length > 0 && deck[0].Id !== leftOn),
+)
+same(
+  "a one-item shelf still features its only favorite",
+  favoriteHeroDeck([SAVED[0]], HERO_DECK_LIMIT, SAVED[0].Id).map((item) => item.Id),
+  [SAVED[0].Id],
+)
+same("an empty shelf has no hero", favoriteHeroDeck([], HERO_DECK_LIMIT, leftOn), [])
+same(
+  "and a favorite the server gave no id for is never featured",
+  favoriteHeroDeck([{ Name: "No id", Type: "Movie" }]),
+  [],
+)
 
 // --------------------------------------------------------------------------- at least ten
 
@@ -292,6 +345,7 @@ const stage = readFileSync("src/components/Stage.tsx", "utf8")
 const hero = readFileSync("src/components/Hero.tsx", "utf8")
 const api = readFileSync("src/lib/api.ts", "utf8")
 const format = readFileSync("src/lib/format.ts", "utf8")
+const remote = readFileSync("src/lib/remote.ts", "utf8")
 
 /* One hero, one beat. Every screen that features a title draws the same component and turns it over
    through the same hook, and the hook waits the same 15s Home's hero waits. */
@@ -304,7 +358,7 @@ for (const [page, source] of [
 }
 check(
   "a library's hero, a collection's hero and a favorite's hero all turn through the shared hook",
-  (library.match(/useHeroRotation\(/g) || []).length >= 3 && /useHeroRotation\(favorites/.test(favorites),
+  (library.match(/useHeroRotation\(/g) || []).length >= 3 && /useHeroRotation\(heroPool/.test(favorites),
   "Library.tsx and Favorites.tsx",
 )
 check(
@@ -328,7 +382,7 @@ check(
   "the hero stands still while the viewer is on it or a trailer is open",
   /useHeroRotation\(showPool, heroEngaged\)/.test(library) &&
     /useHeroRotation\(collectionPool, heroEngaged\)/.test(library) &&
-    /useHeroRotation\(favorites, heroHold \|\| trailerHold\)/.test(favorites),
+    /useHeroRotation\(heroPool, heroHold \|\| trailerHold\)/.test(favorites),
   "Library.tsx and Favorites.tsx",
 )
 /* The pause is a quiet window, not a switch. The focus ring is parked on a hero's own Play control
@@ -565,6 +619,31 @@ check(
 )
 check("and the grid draws what the filter chose", /shown\.map\(/.test(favorites), "Favorites.tsx")
 check(
+  "Favorites samples the filtered shelf for its hero rather than the server's own order",
+  /const shown = useMemo\(\(\) => filterFavorites\(items, filter\), \[items, filter\]\)/.test(favorites) &&
+    /favoriteHeroDeck\(shown, HERO_DECK_LIMIT, lastFavoriteHero\)/.test(favorites),
+  "Favorites.tsx",
+)
+check(
+  "and leaves the poster grid in that order, unshuffled",
+  /shown\.map\(\(item\) =>/.test(favorites) && !/shuffle/.test(favorites),
+  "Favorites.tsx",
+)
+check(
+  "and remembers the title the hero was showing for the next visit",
+  /let lastFavoriteHero = ""/.test(favorites) && /lastFavoriteHero = heroItem\.Id/.test(favorites),
+  "Favorites.tsx",
+)
+check(
+  "the hero's actions and the filter row are marked as the page's vertical focus order",
+  /<Hero item=\{heroItem\}[^>]*flow="stack"/.test(favorites) &&
+    /className="filter-row"[^>]*data-nav-flow="stack"/.test(favorites) &&
+    /data-nav-flow=\{flow\}/.test(hero) &&
+    /band\.getAttribute\("data-nav-flow"\) === "stack"/.test(remote) &&
+    /stacked\(band\)/.test(remote),
+  "Favorites.tsx, Hero.tsx and remote.ts",
+)
+check(
   "and an empty shelf is a useful line rather than an empty hero",
   /Heart a title and it will wait here/.test(favorites) && /\{heroItem && \(/.test(favorites),
   "Favorites.tsx",
@@ -637,7 +716,7 @@ const INVENTORY = [
     source: "the viewer's own favorites",
     eligible: BOXSETS.length,
     deck: favoriteHeroDeck(BOXSETS).length,
-    wired: /useHeroRotation\(favorites, heroHold \|\| trailerHold\)/.test(favorites),
+    wired: /useHeroRotation\(heroPool, heroHold \|\| trailerHold\)/.test(favorites),
   },
 ]
 
