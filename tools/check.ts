@@ -22,6 +22,7 @@ import { libraryToolNeighbor, libraryTools } from "../src/lib/toolMenu"
 import { rowSize } from "../src/lib/homeLayout"
 import { moveFocus, ownArrows } from "../src/lib/remote"
 import { canFavorite } from "../src/lib/format"
+import { audioOptions, subtitleOptions } from "../src/lib/playerMenu"
 import type { Item, LibraryView, Preferences } from "../src/lib/types"
 
 const PREFS_KEY = "mirufin.prefs"
@@ -292,6 +293,71 @@ function checkFavoritePages() {
   same("and a title the server did not type does not", canFavorite({ Id: "x" }), false)
 }
 
+/**
+ * What the player's subtitle and audio popups offer, in the order the remote walks them.
+ *
+ * The subtitle menu is the one the viewer uses to choose a language or turn captions off, so Off
+ * is always the first row and every track the plan sent follows in the server's own order. The
+ * current row is the one the popup opens on and the one the focus ring marks; it is computed here
+ * rather than in the page so a selected track, Off, and a title with no tracks at all can be
+ * checked without a DOM.
+ */
+function checkPlayerMenus() {
+  const subtitles = [
+    { index: 3, label: "English", burn: false },
+    { index: 4, label: "Français (Forced) — SDH", burn: false },
+    { index: 5, label: "日本語", burn: true },
+  ]
+  same(
+    "the subtitle menu starts with Off, then every track in the plan's order",
+    subtitleOptions(subtitles, null).map((option) => option.label),
+    ["Off", "English", "Français (Forced) — SDH", "日本語"],
+  )
+  same(
+    "and Off is the current row when subtitles are disabled",
+    subtitleOptions(subtitles, null).filter((option) => option.current).map((option) => option.index),
+    [null],
+  )
+  same(
+    "a selected track is the current row",
+    subtitleOptions(subtitles, 4).filter((option) => option.current).map((option) => option.index),
+    [4],
+  )
+  same(
+    "every track is offered exactly once, with its own index",
+    subtitleOptions(subtitles, 4).map((option) => option.index),
+    [null, 3, 4, 5],
+  )
+  same(
+    "a burn-in track keeps its mark",
+    subtitleOptions(subtitles, null).filter((option) => option.burn).map((option) => option.index),
+    [5],
+  )
+  check(
+    "a long language name is kept whole",
+    subtitleOptions(subtitles, null).some((option) => option.label === "Français (Forced) — SDH"),
+  )
+  same("a title with no tracks still offers Off", subtitleOptions([], null).map((option) => option.index), [null])
+  same(
+    "and Off is still its current row",
+    subtitleOptions([], null).filter((option) => option.current).length,
+    1,
+  )
+
+  const audio = [
+    { index: 2, label: "English 5.1" },
+    { index: 3, label: "Commentary" },
+  ]
+  same("the audio menu keeps the plan's order", audioOptions(audio, 3).map((option) => option.label), ["English 5.1", "Commentary"])
+  same(
+    "and marks the track that is playing",
+    audioOptions(audio, 3).filter((option) => option.current).map((option) => option.index),
+    [3],
+  )
+  same("with no track chosen, no audio row is current", audioOptions(audio, undefined).filter((option) => option.current), [])
+}
+
+
 installStore()
 checkToolbarWalk()
 checkPosterSize()
@@ -299,5 +365,6 @@ checkPersistence()
 checkOpeningView()
 checkMenuOwnsTheSidewaysPress()
 checkFavoritePages()
+checkPlayerMenus()
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`)
 if (failures > 0) throw new Error(`${failures} check(s) failed`)

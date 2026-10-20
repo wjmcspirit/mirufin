@@ -17,6 +17,7 @@ import {
   focusables,
   moveFocus,
   noteRoute,
+  noteBackKeydown,
   ownBack,
   placeFocus as placeFocusOn,
   resetFocusState,
@@ -25,6 +26,7 @@ import {
   trackSeats,
 } from "../src/lib/remote"
 import { episodePlayHref } from "../src/lib/seasons"
+import { focusedMenuOption, insideMenu, menuOptions, menuReturnTarget, menuStart, menuStep, revealMenuOption } from "../src/lib/playerMenu"
 
 let failures = 0
 
@@ -137,6 +139,17 @@ class El {
 
   get offsetWidth() {
     return this.rect.width
+  }
+
+  /** What the browser reports for `offsetTop`: measured from the offsetParent's padding edge. */
+  offsetTopOverride: number | null = null
+
+  get offsetTop() {
+    return this.offsetTopOverride ?? this.rect.top
+  }
+
+  get offsetHeight() {
+    return this.rect.height
   }
 
   add(...nodes: El[]) {
@@ -1453,6 +1466,181 @@ function testFavoritesWalk() {
 }
 
 
+/**
+ * The player's subtitle popup as it is drawn: a capped, scrolling `.pop-menu` above the transport,
+ * with Off and every track among the style rows, and the chip that opened it in the second row.
+ * Rows are 48 high with 8 between them and the popup shows 160 at a time, so a long list has to
+ * scroll to keep the row the remote is on visible.
+ */
+function playerPopup(main: El, labels: string[], currentIndex: number, defaultIndex = -1) {
+  const pop = new El("div", "pop-menu")
+  pop.place(300, 1200, 360, 160)
+  pop.clientHeight = 160
+  pop.scrollHeight = labels.length * 56
+  const buttons = labels.map((label, index) => {
+    const button = new El("button", "")
+    button.text = label
+    button.place(300 + index * 56, 1210, 340, 48)
+    button.offsetTopOverride = index * 56
+    if (index === currentIndex) button.attr("data-menu-current", "true")
+    if (index === defaultIndex) button.attr("data-menu-default", "true")
+    pop.add(button)
+    return button
+  })
+  main.add(pop)
+  const transport = new El("div", "transport-secondary")
+  const chip = new El("button", "transport-chip")
+  chip.text = "Subtitles"
+  chip.place(900, 1300, 160, 48)
+  const fallback = new El("button", "transport-chip")
+  fallback.text = "Speed"
+  fallback.place(900, 1480, 120, 48)
+  transport.add(chip, fallback)
+  main.add(transport)
+  return { pop, buttons, chip, fallback }
+}
+
+/**
+ * The subtitle popup with the remote: it opens on the current choice, walks every row without
+ * leaving the popup, scrolls a long list, and hands focus back to the chip that opened it.
+ *
+ * The reported defect was that the popup opened on the first `aria-pressed` control - the
+ * subtitle-size button - so the first OK changed the size of the captions instead of choosing a
+ * track. The other half of it was Back: the player answered the keydown but did not claim the
+ * native back press or record that it had answered it, so the same press could close the menu and
+ * then leave playback. Both are checked here, along with the rows and the scrolling.
+ */
+function testPlayerPopup() {
+  clearSeats()
+  resetFocusState()
+  const page = shell()
+  const popup = playerPopup(page.main, ["Small", "Medium", "Large", "Higher", "Lower", "Off", "English", "Français (Forced) — SDH"], 6, 5)
+  noteRoute("/play/MOVIE")
+  const options = menuOptions(page.main)
+  check("the subtitle popup offers every row it draws", options.length === popup.buttons.length, `${options.length} of ${popup.buttons.length}`)
+  check("the popup opens on the current subtitle choice", menuStart(options) === popup.buttons[6], label(menuStart(options)))
+  popup.buttons[6].attr("data-menu-current", "false")
+  check("and on Off when the remembered track is no longer in the plan", menuStart(options) === popup.buttons[5], label(menuStart(options)))
+  popup.buttons[6].attr("data-menu-current", "true")
+  placeFocus(popup.buttons[6])
+  check("the current row holds the remote", focusedMenuOption(options) === popup.buttons[6], label(focusedMenuOption(options)))
+  check("Down walks to the next row", menuStep(options, popup.buttons[6], "ArrowDown") === popup.buttons[7], label(menuStep(options, popup.buttons[6], "ArrowDown")))
+  check("Up walks back to Off", menuStep(options, popup.buttons[6], "ArrowUp") === popup.buttons[5], label(menuStep(options, popup.buttons[6], "ArrowUp")))
+  check("Up at the first row stays there", menuStep(options, popup.buttons[0], "ArrowUp") === popup.buttons[0], label(menuStep(options, popup.buttons[0], "ArrowUp")))
+  check("Down at the last row stays there", menuStep(options, popup.buttons[7], "ArrowDown") === popup.buttons[7], label(menuStep(options, popup.buttons[7], "ArrowDown")))
+  check("a lost focus starts again on the current row", menuStep(options, null, "ArrowDown") === popup.buttons[6], label(menuStep(options, null, "ArrowDown")))
+
+  placeFocus(popup.chip)
+  check("a control behind the popup is not mistaken for one of its rows", focusedMenuOption(options) === null, label(focusedMenuOption(options)))
+  check("and the popup tells its own controls from the player's", insideMenu(popup.buttons[6]) && !insideMenu(popup.chip))
+
+  popup.pop.scrollTop = 0
+  revealMenuOption(popup.buttons[6])
+  check("moving to Off scrolls it into the popup's window", popup.pop.scrollTop === 232, String(popup.pop.scrollTop))
+  revealMenuOption(popup.buttons[7])
+  check("and the last row scrolls further", popup.pop.scrollTop === 288, String(popup.pop.scrollTop))
+  revealMenuOption(popup.buttons[0])
+  check("coming back to the first row scrolls up", popup.pop.scrollTop === 0, String(popup.pop.scrollTop))
+
+  check("the remote returns to the chip that opened the popup", menuReturnTarget(popup.chip, page.main) === popup.chip, label(menuReturnTarget(popup.chip, page.main)))
+  popup.chip.connected = false
+  check("and to the transport when that chip has gone", menuReturnTarget(popup.chip, page.main) === popup.fallback, label(menuReturnTarget(popup.chip, page.main)))
+
+  const player = readFileSync("src/pages/Player.tsx", "utf8")
+  const css = readFileSync("src/styles.css", "utf8")
+  check("the open popup claims Back in the shared overlay layer", /ownBack\(\(\) => \{[\s\S]{0,80}?closeMenu\(\)/.test(player), "Player.tsx")
+  check(
+    "and the keydown path tells the shared layer it answered Back",
+    /noteBackKeydown\(\)/.test(player) && /stopImmediatePropagation/.test(player),
+    "Player.tsx",
+  )
+  check(
+    "Back closes the popup before the player is left",
+    /if \(menuOpen\.current\) \{\s*closeMenu\(\)\s*return\s*\}\s*leave\(\)/.test(player),
+    "Player.tsx",
+  )
+  check(
+    "the popup keeps every direction and Tab to itself",
+    /const options = menuOptions\(rootRef\.current\)/.test(player) &&
+      /key === "ArrowLeft" \|\| key === "ArrowRight" \|\| key === "Tab"/.test(player) &&
+      /event\.preventDefault\(\)[\s\S]{0,80}?event\.stopPropagation\(\)/.test(player),
+    "Player.tsx",
+  )
+  check(
+    "and OK cannot activate a control behind the popup when focus is lost",
+    /if \(!focusedMenuOption\(options\)\) \{\s*event\.preventDefault\(\)/.test(player),
+    "Player.tsx",
+  )
+  check(
+    "focus is restored only after the popup leaves the tree",
+    /if \(menu \|\| !restoreMenu\.current\) return/.test(player) && /menuReturnTarget\(menuButton\.current, rootRef\.current\)/.test(player),
+    "Player.tsx",
+  )
+  check(
+    "the popup draws Off and every track, marking the current one",
+    /subtitleOptions\(plan\.subtitles, subtitleIndex\)/.test(player) &&
+      /data-menu-current=\{option\.current \? "true" : undefined\}/.test(player) &&
+      /data-menu-default=\{option\.index == null \? "true" : undefined\}/.test(player),
+    "Player.tsx",
+  )
+  check("audio rows keep their own current track", /audioOptions\(plan\.audio, audioIndex\)/.test(player), "Player.tsx")
+  check(
+    "a title with no subtitle tracks does not offer an empty subtitles menu",
+    /plan && plan\.subtitles\.length > 0/.test(player),
+    "Player.tsx",
+  )
+  check(
+    "choosing a row applies the subtitle and closes the popup",
+    /function chooseSubtitle\(index: number \| null, burn: boolean\)[\s\S]{0,400}?setSubtitleIndex\(index\)[\s\S]{0,80}?closeMenu\(\)/.test(player) &&
+      /onClick=\{\(\) => chooseSubtitle\(option\.index, option\.burn\)\}/.test(player),
+    "Player.tsx",
+  )
+  check(
+    "and the chosen track reaches both playback engines",
+    /nativePlayer\.subtitle\(\{ url: choice\.src \}\)/.test(player) && /video\.textTracks\[track\]\.mode =/.test(player),
+    "Player.tsx",
+  )
+  check(
+    "audio selection still closes and reports to the native player",
+    /function chooseAudio\(index: number\)[\s\S]{0,200}?closeMenu\(\)/.test(player) && /nativePlayer\.selectAudio\(\{ ordinal \}\)/.test(player),
+    "Player.tsx",
+  )
+  check(
+    "the popup scrolls and long names wrap",
+    /\.pop-menu \{[^}]*overflow: auto/.test(css) && /\.pop-menu \{[^}]*overflow-wrap: anywhere/.test(css),
+    "styles.css",
+  )
+
+  // The shared Back layer, exercised the way the player uses it: the open popup claims the native
+  // press, and a keydown that has already answered it keeps the native echo from being acted on
+  // again. That echo was the second half of the reported defect - one press closed the menu and
+  // then left playback.
+  let closed = 0
+  const release = ownBack(() => {
+    closed += 1
+    return true
+  })
+  check("an open popup claims the native Back press", takeBack() === true && closed === 1)
+  release()
+  noteBackKeydown()
+  let echoed = 0
+  const releaseEcho = ownBack(() => {
+    echoed += 1
+    return true
+  })
+  check("the native echo of a Back already answered is not acted on again", takeBack() === true && echoed === 0)
+  releaseEcho()
+  run(300)
+  const releaseLater = ownBack(() => {
+    closed += 1
+    return true
+  })
+  check("and a later press is answered by the popup again", takeBack() === true && closed === 2)
+  releaseLater()
+}
+
+
+
 
 /**
  * The season page's episode row with the remote walking it: the row itself is what has to
@@ -2123,6 +2311,7 @@ testRailEntry()
 testLibraryToolbar()
 testLibraryToolbarShapes()
 testFavoritesWalk()
+testPlayerPopup()
 testEpisodeRowScroll()
 testEpisodeRowPlays()
 testSeasonBack()

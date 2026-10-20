@@ -7,7 +7,8 @@ import { AudioIcon, CaptionsIcon, ChaptersIcon, ForwardIcon, FullscreenIcon, Pau
 import * as api from "../lib/api"
 import type { PlaybackPlan } from "../lib/api"
 import { episodeCode, formatClock, secondsToTicks, ticksToSeconds } from "../lib/format"
-import { isBackKey, remoteKey } from "../lib/remote"
+import { isBackKey, noteBackKeydown, ownBack, remoteKey } from "../lib/remote"
+import { audioOptions, focusedMenuOption, menuOptions, menuReturnTarget, menuStart, menuStep, revealMenuOption, subtitleOptions } from "../lib/playerMenu"
 import { backdropSrc, primarySrc, trickplayUrl } from "../lib/images"
 import { nativeEngine, nativePlayer } from "../lib/nativePlayer"
 import { isTrailerItem } from "../lib/trailer"
@@ -77,6 +78,11 @@ export function PlayerPage() {
   const [seekFlash, setSeekFlash] = useState<{ direction: "back" | "forward"; seconds: number } | null>(null)
   const flashTimer = useRef(0)
   const menuButton = useRef<HTMLElement | null>(null)
+  /** A popup has closed: the remote is to go back to the control that opened it. */
+  const restoreMenu = useRef(false)
+  /** The popup on screen, read by the Back handler even before its effect has re-registered. */
+  const menuOpen = useRef(menu)
+  menuOpen.current = menu
   const fallback = useRef(false)
   const positionRef = useRef(0)
   const dismissed = useRef(new Set<string>())
@@ -438,22 +444,36 @@ export function PlayerPage() {
   }, [id])
 
   // Back must work no matter where focus sits (it can drift to <body> when a
-  // focused control unmounts), so handle it at the window level. Menus still
-  // close first; a second Back then leaves the player.
+  // focused control unmounts), so handle it at the window level. An open popup owns the press:
+  // it is registered with the shared overlay layer as well, because Android delivers Back as the
+  // native `backButton` event rather than as this keydown. The keydown path also tells the shared
+  // layer it has answered the press, so the native echo of the same press cannot leave playback
+  // behind a menu that has just closed.
   useEffect(() => {
+    const release = menu
+      ? ownBack(() => {
+          closeMenu()
+          return true
+        })
+      : undefined
     function onBack(event: KeyboardEvent) {
       if (!isBackKey(event)) return
       event.preventDefault()
-      event.stopPropagation()
-      if (menu) {
-        setMenu(null)
-        focusControl(menuButton.current)
+      event.stopImmediatePropagation()
+      noteBackKeydown()
+      if (menuOpen.current) {
+        closeMenu()
         return
       }
       leave()
     }
     window.addEventListener("keydown", onBack, true)
-    return () => window.removeEventListener("keydown", onBack, true)
+    return () => {
+      release?.()
+      window.removeEventListener("keydown", onBack, true)
+    }
+    // closeMenu is a declaration of this render; the menu is what changes the answer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item, menu])
 
   useEffect(() => {
@@ -484,18 +504,34 @@ export function PlayerPage() {
     return () => window.clearTimeout(timer)
   }, [ended, menu, paused, pointer])
 
+  /**
+   * Put the remote on the popup's current row the moment it opens.
+   *
+   * The old rule took the first `aria-pressed` control in the document, which in the Subtitles
+   * popup is the subtitle-size button - a viewing preference, not the track the viewer opened the
+   * menu to change. A single OK then changed the size of the subtitles instead of choosing one.
+   * The menu's own current row is marked as such, and Off is the current row whenever no track is
+   * selected, so the viewer always lands on the choice they are in the menu to make.
+   */
   useEffect(() => {
     if (!menu) return
     const frame = window.requestAnimationFrame(() => {
-      const current =
-        rootRef.current?.querySelector<HTMLElement>(".pop-menu button[aria-pressed='true']") ||
-        rootRef.current?.querySelector<HTMLElement>(".pop-menu button")
-      if (!current) return
-      rootRef.current?.querySelectorAll(".dpad-focus").forEach((el) => el.classList.remove("dpad-focus"))
-      current.classList.add("dpad-focus")
-      current.focus()
+      const start = menuStart(menuOptions(rootRef.current))
+      if (start) focusControl(start)
     })
     return () => cancelAnimationFrame(frame)
+    // focusControl is this render's; the menu is what changes where the focus starts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menu])
+
+  // The popup has left the tree: give the remote back to the chip that opened it. Waiting for the
+  // menu to be null is what keeps this from focusing a control underneath a popup that is still
+  // on screen, and the target falls back to the transport when the chip itself has gone.
+  useEffect(() => {
+    if (menu || !restoreMenu.current) return
+    restoreMenu.current = false
+    focusControl(menuReturnTarget(menuButton.current, rootRef.current))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [menu])
 
   useEffect(() => {
@@ -681,8 +717,7 @@ export function PlayerPage() {
   function chooseSubtitle(index: number | null, burn: boolean) {
     const video = videoRef.current
     setSubtitleIndex(index)
-    setMenu(null)
-    focusControl(menuButton.current)
+    closeMenu()
     if (nativeEngine()) {
       if (index == null) {
         // Nothing on the picture is a track to switch off. A subtitle burned into the stream has
@@ -750,8 +785,7 @@ export function PlayerPage() {
 
   function chooseAudio(index: number) {
     if (!request) return
-    setMenu(null)
-    focusControl(menuButton.current)
+    closeMenu()
     if (nativeEngine()) {
       const ordinal = plan?.audio.findIndex((track) => track.index === index) ?? 0
       ignoreNativeFailure(nativePlayer.selectAudio({ ordinal }))
@@ -769,7 +803,10 @@ export function PlayerPage() {
     if (!node) return
     rootRef.current?.querySelectorAll(".dpad-focus").forEach((el) => el.classList.remove("dpad-focus"))
     node.classList.add("dpad-focus")
+    // `preventScroll` keeps the page behind the player still; the popup is scrolled by hand
+    // because it is the one thing that is allowed to move, and focus must stay visible in it.
     node.focus({ preventScroll: true })
+    revealMenuOption(node)
   }
 
   function controlRows() {
@@ -835,24 +872,65 @@ export function PlayerPage() {
     seekTo(next)
   }
 
-  function openMenu(name: "audio" | "subs" | "chapters" | "speed") {
-    const opener = document.activeElement
-    if (opener instanceof HTMLElement) menuButton.current = opener
-    setMenu((current) => (current === name ? null : name))
+  function openMenu(name: "audio" | "subs" | "chapters" | "speed", opener?: HTMLElement | null) {
+    // The control that opened the popup is the one Back and selection return to. The caller
+    // passes its own button, which is the chip even when a pointer click did not focus it.
+    const node = opener || (document.activeElement instanceof HTMLElement ? document.activeElement : null)
+    if (node) menuButton.current = node
+    if (menu === name) {
+      closeMenu()
+      wake()
+      return
+    }
+    setMenu(name)
     wake()
+  }
+
+  /**
+   * Close the popup and ask the effect above to put the remote back on the chip that opened it.
+   *
+   * The focus move waits for the menu to leave the tree: moving it here would land on a control
+   * the popup is still covering, and a selection that changes the playback plan can unmount the
+   * chip itself, in which case the transport is the safer place to leave the remote.
+   */
+  function closeMenu() {
+    restoreMenu.current = true
+    setMenu(null)
   }
 
   function onKey(event: ReactKeyboardEvent) {
     const key = remoteKey(event)
     const target = event.target as HTMLElement
     if (menu) {
-      const items = [...(rootRef.current?.querySelectorAll<HTMLElement>(".pop-menu button") || [])]
-      if (key === "ArrowDown" || key === "ArrowUp") {
+      // The popup owns every press while it is open. Up and Down walk its rows and stop at the
+      // ends rather than moving into the player behind it; Left and Right and Tab are spent in
+      // the popup, so the focus cannot slip behind it; OK reaches the focused row's own click.
+      const options = menuOptions(rootRef.current)
+      if (key === "ArrowUp" || key === "ArrowDown") {
         event.preventDefault()
-        const index = items.indexOf(target)
-        const start = index < 0 ? 0 : index
-        const next = items[Math.min(items.length - 1, Math.max(0, start + (key === "ArrowDown" ? 1 : -1)))]
-        focusControl(next || null)
+        event.stopPropagation()
+        const next = menuStep(options, focusedMenuOption(options), key)
+        if (next) focusControl(next)
+        wake()
+        return
+      }
+      if (key === "ArrowLeft" || key === "ArrowRight" || key === "Tab") {
+        event.preventDefault()
+        event.stopPropagation()
+        wake()
+        return
+      }
+      if (key === "Enter") {
+        // If the focus was lost, the first press puts it back on the current row instead of
+        // activating whatever happens to be focused behind the menu.
+        if (!focusedMenuOption(options)) {
+          event.preventDefault()
+          event.stopPropagation()
+          const start = menuStart(options)
+          if (start) focusControl(start)
+        }
+        wake()
+        return
       }
       wake()
       return
@@ -1199,23 +1277,23 @@ export function PlayerPage() {
                 </button>
               )}
               {plan && plan.audio.length > 1 && (
-                <button className="transport-chip" type="button" onClick={() => openMenu("audio")} onFocus={(event) => event.currentTarget.classList.add("dpad-focus")} onBlur={(event) => event.currentTarget.classList.remove("dpad-focus")}>
+                <button className="transport-chip" type="button" onClick={(event) => openMenu("audio", event.currentTarget)} onFocus={(event) => event.currentTarget.classList.add("dpad-focus")} onBlur={(event) => event.currentTarget.classList.remove("dpad-focus")}>
                   <AudioIcon />
                   Audio
                 </button>
               )}
               {!trailerPlayback && plan && plan.subtitles.length > 0 && (
-                <button className={subtitleIndex == null ? "transport-chip" : "transport-chip is-on"} type="button" onClick={() => openMenu("subs")} onFocus={(event) => event.currentTarget.classList.add("dpad-focus")} onBlur={(event) => event.currentTarget.classList.remove("dpad-focus")}>
+                <button className={subtitleIndex == null ? "transport-chip" : "transport-chip is-on"} type="button" onClick={(event) => openMenu("subs", event.currentTarget)} onFocus={(event) => event.currentTarget.classList.add("dpad-focus")} onBlur={(event) => event.currentTarget.classList.remove("dpad-focus")}>
                   <CaptionsIcon />
                   Subtitles
                 </button>
               )}
-              <button className="transport-chip" type="button" onClick={() => openMenu("speed")} onFocus={(event) => event.currentTarget.classList.add("dpad-focus")} onBlur={(event) => event.currentTarget.classList.remove("dpad-focus")}>
+              <button className="transport-chip" type="button" onClick={(event) => openMenu("speed", event.currentTarget)} onFocus={(event) => event.currentTarget.classList.add("dpad-focus")} onBlur={(event) => event.currentTarget.classList.remove("dpad-focus")}>
                 <span className="chip-rate">{rate}×</span>
                 Speed
               </button>
               {item?.Chapters && item.Chapters.length > 0 && (
-                <button className="transport-chip" type="button" onClick={() => openMenu("chapters")} onFocus={(event) => event.currentTarget.classList.add("dpad-focus")} onBlur={(event) => event.currentTarget.classList.remove("dpad-focus")}>
+                <button className="transport-chip" type="button" onClick={(event) => openMenu("chapters", event.currentTarget)} onFocus={(event) => event.currentTarget.classList.add("dpad-focus")} onBlur={(event) => event.currentTarget.classList.remove("dpad-focus")}>
                   <ChaptersIcon />
                   Chapters
                 </button>
@@ -1230,7 +1308,7 @@ export function PlayerPage() {
           {menu === "speed" && (
             <Menu title="Speed">
               {[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((value) => (
-                <button key={value} type="button" aria-pressed={value === rate} onClick={() => { setRate(value); setMenu(null); focusControl(menuButton.current) }}>
+                <button key={value} type="button" aria-pressed={value === rate} data-menu-current={value === rate ? "true" : undefined} onClick={() => { setRate(value); closeMenu() }}>
                   {value}×
                 </button>
               ))}
@@ -1253,22 +1331,32 @@ export function PlayerPage() {
                   Lower
                 </button>
               </div>
-              <button type="button" aria-pressed={subtitleIndex == null} onClick={() => chooseSubtitle(null, false)}>
-                Off
-              </button>
-              {plan.subtitles.map((subtitle) => (
-                <button key={subtitle.index} type="button" aria-pressed={subtitle.index === subtitleIndex} onClick={() => chooseSubtitle(subtitle.index, subtitle.burn)}>
-                  {subtitle.label}
-                  {subtitle.burn ? " · burn in" : ""}
+              {subtitleOptions(plan.subtitles, subtitleIndex).map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  aria-pressed={option.current}
+                  data-menu-current={option.current ? "true" : undefined}
+                  data-menu-default={option.index == null ? "true" : undefined}
+                  onClick={() => chooseSubtitle(option.index, option.burn)}
+                >
+                  {option.label}
+                  {option.burn ? " · burn in" : ""}
                 </button>
               ))}
             </Menu>
           )}
           {menu === "audio" && plan && (
             <Menu title="Audio">
-              {plan.audio.map((track) => (
-                <button key={track.index} type="button" aria-pressed={track.index === audioIndex} onClick={() => chooseAudio(track.index)}>
-                  {track.label}
+              {audioOptions(plan.audio, audioIndex).map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  aria-pressed={option.current}
+                  data-menu-current={option.current ? "true" : undefined}
+                  onClick={() => chooseAudio(option.index)}
+                >
+                  {option.label}
                 </button>
               ))}
             </Menu>
@@ -1276,7 +1364,7 @@ export function PlayerPage() {
           {menu === "chapters" && item?.Chapters && (
             <Menu title="Chapters">
               {item.Chapters.map((chapter, index) => (
-                <button key={`${chapter.Name}-${index}`} type="button" onClick={() => { setMenu(null); focusControl(menuButton.current); seekTo(ticksToSeconds(chapter.StartPositionTicks || 0)) }}>
+                <button key={`${chapter.Name}-${index}`} type="button" onClick={() => { closeMenu(); seekTo(ticksToSeconds(chapter.StartPositionTicks || 0)) }}>
                   {chapterLabel(chapter, index)}
                 </button>
               ))}

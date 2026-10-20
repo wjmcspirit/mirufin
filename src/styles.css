@@ -3037,7 +3037,7 @@ input[type="range"]::-webkit-slider-thumb {
   background: rgba(12, 12, 14, 0.9);
   border: 1px solid var(--line);
 }
-.pop-menu { width: min(360px, calc(100% - 48px)); max-height: 360px; overflow: auto; scrollbar-width: none; bottom: calc(100% + 16px); right: 0; }
+.pop-menu { width: min(360px, calc(100% - 48px)); max-height: 360px; overflow: auto; overscroll-behavior: contain; overflow-wrap: anywhere; scrollbar-width: none; bottom: calc(100% + 16px); right: 0; }
 .pop-menu::-webkit-scrollbar { display: none; }
 .pop-menu button, .next-up h2 {
   text-align: left;
