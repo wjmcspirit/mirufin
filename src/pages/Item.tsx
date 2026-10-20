@@ -4,7 +4,7 @@ import { MediaImage, PosterCard } from "../components/Cards"
 import { CheckIcon, HeartIcon, InfoIcon, PlayIcon, SeasonIcon } from "../components/Icons"
 import { TrailerButton } from "../components/TrailerButton"
 import { MediaInfo } from "../components/MediaInfo"
-import { MetaText } from "../components/Meta"
+import { MetaLine, MetaText } from "../components/Meta"
 import { Row } from "../components/Row"
 import { Loading, Problem } from "../components/Status"
 import { useCollectionStage, useEpisodeStage, useFilmographyStage, usePinnedArt, useStage, useStageActions } from "../components/Stage"
@@ -188,10 +188,12 @@ export function ItemPage() {
             {seasonPage && <SeasonLine season={item} progress={seasonWatch} />}
             {collectionLine ? <p className="count-line">{collectionLine}</p> : null}
             {episode && <p className="hero-episode">{item.Name}</p>}
-            {facts && (
+            {item.Type === "Person" ? facts && (
               <p className="kicker">
                 <MetaText text={facts} />
               </p>
+            ) : (
+              <MetaLine item={item} />
             )}
             {chips.length > 0 && (
               <p className="chips">
@@ -817,9 +819,7 @@ function EpisodeList({
  * does not. Nothing is guessed: an episode with no playback state shows neither.
  */
 function EpisodeSpot({ episode, upNext }: { episode: Item; upNext: boolean }) {
-  const { prefs } = usePrefs()
   const code = episodeCode(episode)
-  const facts = metaLine(episode, prefs.ratings)
   const watched = Boolean(episode.UserData?.Played)
   const resume = isInProgress(episode)
   return (
@@ -833,11 +833,7 @@ function EpisodeSpot({ episode, upNext }: { episode: Item; upNext: boolean }) {
         {resume ? <span className="episode-flag watching">Resume</span> : null}
         {watched ? <span className="episode-flag watched">Watched</span> : null}
       </h2>
-      {facts && (
-        <p className="kicker">
-          <MetaText text={facts} />
-        </p>
-      )}
+      <MetaLine item={episode} />
       {episode.Overview && <p className="overview clamp">{episode.Overview}</p>}
     </div>
   )

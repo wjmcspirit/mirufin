@@ -483,6 +483,15 @@ for (const { panel, report } of await measureAll(browser, probe, PANELS)) {
     report.copy.top >= report.hero.top - 0.5 && report.copy.actionsBottom <= report.hero.bottom + 0.5,
     `copy ${report.copy.top}..${report.copy.actionsBottom} in hero ${report.hero.top}..${report.hero.bottom}`,
   )
+  /* The metadata line - the year, the runtime, what is left, the rating, the scores and the finish
+     time - is held to the same two rows the synopsis beside it is: a longer line wraps inside the
+     box the hero reserves for it rather than pushing the synopsis, the actions or the first row of
+     posters below the fold. */
+  check(
+    `${panel.name} (${report.row}): the metadata line stays in the rows the hero reserves for it`,
+    report.parts.kicker > 0 && report.parts.kicker <= report.parts.overview * 1.05,
+    `line ${report.parts.kicker}, synopsis ${report.parts.overview}`,
+  )
   /* The library page's own fold, measured in the same run. A library's hero is the same `Hero`
      component Home uses, so it has to stand at the same height - and the heading, the count, the
      tools and the top of the grid have to be on screen under it. That is what a library page drawn

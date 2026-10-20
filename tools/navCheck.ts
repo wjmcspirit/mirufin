@@ -1920,9 +1920,12 @@ function testFocusDeclarations() {
   check(
     "every rating goes through the one star renderer",
     cards.includes("MetaText text={subtitle}") &&
-      hero.includes("MetaText text={kicker}") &&
-      (itemPage.match(/MetaText text=\{facts\}/g) || []).length === 2,
-    "Cards.tsx, Hero.tsx and Item.tsx",
+      hero.includes("<MetaLine item={item}") &&
+      (itemPage.match(/<MetaLine item=\{/g) || []).length >= 2 &&
+      itemPage.includes("MetaText text={facts}") &&
+      meta.includes("export function MetaLine(") &&
+      meta.includes("<MetaText text={text} />"),
+    "Meta.tsx, Cards.tsx, Hero.tsx and Item.tsx",
   )
   check(
     "the star is one filled glyph, hidden from a screen reader, with the rating's text untouched",

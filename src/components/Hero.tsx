@@ -1,11 +1,11 @@
 import { useLayoutEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import * as api from "../lib/api"
-import { episodeCode, metaLine, progressPct } from "../lib/format"
-import { usePrefs, useSession } from "../session"
+import { episodeCode, progressPct } from "../lib/format"
+import { useSession } from "../session"
 import type { Item } from "../lib/types"
 import { HeartIcon, InfoIcon, PlayIcon } from "./Icons"
-import { MetaText } from "./Meta"
+import { MetaLine } from "./Meta"
 import { TitleLogo } from "./Title"
 import { TrailerButton } from "./TrailerButton"
 
@@ -97,7 +97,6 @@ export function Hero({
 }
 
 function HeroCopy({ face, onTrailer }: { face: HeroFace; onTrailer: (open: boolean) => void }) {
-  const { prefs } = usePrefs()
   const { userId } = useSession()
   const { item, presentation, playHref, playLabel, detail, eyebrow: givenEyebrow } = face
   // The favorite is the copy's own state, the way the trailer button's is: this block is
@@ -129,7 +128,6 @@ function HeroCopy({ face, onTrailer }: { face: HeroFace; onTrailer: (open: boole
         ? labelFor(item.Type)
         : "")
   const under = detail || (episode ? (freshEpisode ? episodeLine : item.Name) : "")
-  const kicker = [metaLine(item, prefs.ratings), item.Genres?.slice(0, 3).join(", ")].filter(Boolean).join("   ·   ")
 
   async function toggleFavorite() {
     if (saving.current) return
@@ -155,9 +153,7 @@ function HeroCopy({ face, onTrailer }: { face: HeroFace; onTrailer: (open: boole
         <TitleLogo item={item} />
       </div>
       <p className="hero-episode">{under}</p>
-      <p className="kicker">
-        <MetaText text={kicker} />
-      </p>
+      <MetaLine item={item} genres={item.Genres?.slice(0, 3).join(", ") || ""} />
       <p className="overview clamp">{item.Overview || ""}</p>
       <div className="actions">
         <Link className="btn btn-primary" to={href}>

@@ -17,6 +17,7 @@
     "herocheck": "esbuild tools/heroCheck.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.mirufin/heroCheck.mjs && node node_modules/.mirufin/heroCheck.mjs",
     "playbackcheck": "esbuild tools/playbackCheck.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.mirufin/playbackCheck.mjs && node node_modules/.mirufin/playbackCheck.mjs",
     "sessioncheck": "esbuild tools/sessionCheck.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.mirufin/sessionCheck.mjs && node node_modules/.mirufin/sessionCheck.mjs",
+    "metacheck": "esbuild tools/metaCheck.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.mirufin/metaCheck.mjs && node node_modules/.mirufin/metaCheck.mjs",
     "foldcheck": "esbuild tools/foldCheck.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.mirufin/foldCheck.mjs && node node_modules/.mirufin/foldCheck.mjs",
     "preview": "vite preview"
   },

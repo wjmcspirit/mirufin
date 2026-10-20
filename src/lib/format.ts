@@ -211,15 +211,55 @@ function seriesSpan(item: Item) {
   return String(start)
 }
 
-export function endsAtLabel(item: Item) {
+/**
+ * How much of a title is still to play, in ticks.
+ *
+ * A title the viewer has not started is played for the whole of its runtime, so that is what is
+ * left of it; one they are part way through is left with the runtime minus the position the server
+ * reports. Anything that is not a title you sit and watch - a series, a season, a collection, a
+ * person, a live channel - has no such number, and neither does a title the server gave no runtime
+ * for or one already at its end: the answer is 0 rather than a number this app made up.
+ */
+export function remainingTicks(item: Item) {
+  if (item.Type !== "Movie" && item.Type !== "Episode" && item.Type !== "Video" && item.Type !== "MusicVideo" && item.Type !== "Trailer") return 0
   const runtime = item.RunTimeTicks || 0
-  const position = item.UserData?.PlaybackPositionTicks || 0
-  if (!runtime || position <= 0 || position >= runtime) return ""
-  const end = new Date(Date.now() + (runtime - position) / 10_000)
-  return `Ends ${end.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+  if (!(runtime > 0)) return 0
+  const position = isInProgress(item) ? item.UserData?.PlaybackPositionTicks || 0 : 0
+  const left = runtime - position
+  return left > 0 ? left : 0
 }
 
-export function metaLine(item: Item, ratings: RatingsDisplay = "both") {
+/**
+ * When the title would finish, by the viewer's own clock.
+ *
+ * The remaining playback is added to the time now, so a title the viewer is part way through
+ * finishes when its *rest* ends and one they have not started finishes when a full run from now
+ * would - neither is measured from when playback once began, which is what makes a paused title
+ * correct as well. The time is the device's own, in whatever 12- or 24-hour convention its locale
+ * uses, and it is read to the minute: `Ends at 7:12 PM`.
+ *
+ * Nothing is stated when it cannot be true: a series has no runtime of its own, a collection is not
+ * played, a live channel has no end, and a title with no runtime or no time left says nothing at
+ * all rather than a placeholder.
+ */
+export function endsAtLabel(item: Item, now = Date.now()) {
+  const left = remainingTicks(item)
+  if (!left) return ""
+  const end = new Date(now + left / 10_000)
+  return `Ends at ${end.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+}
+
+/**
+ * The fields of a title's metadata line, in the order the line reads them.
+ *
+ * The release year - or, for an episode, the day it aired - then how long it runs, then how much is
+ * left when the viewer is part way through, then what it is rated, then the scores the server
+ * reports and finally when it would finish. A field the server did not send is left out rather
+ * than filled with a placeholder, and nothing is stated twice: a series says how its run of years
+ * goes and how many seasons, never a runtime, and a collection says its year and its scores but
+ * never when it would end.
+ */
+export function metaFields(item: Item, ratings: RatingsDisplay = "both", now = Date.now()): string[] {
   const bits: string[] = []
   if (item.Type === "Series") {
     const span = seriesSpan(item)
@@ -232,17 +272,32 @@ export function metaLine(item: Item, ratings: RatingsDisplay = "both") {
   } else if (item.ProductionYear) bits.push(String(item.ProductionYear))
   const runtime = item.Type === "Series" ? "" : formatRuntime(item.RunTimeTicks)
   if (runtime) bits.push(runtime)
-  if (item.Type === "Movie" || item.Type === "Episode") {
-    const left = remainingLabel(item)
-    if (left) bits.push(left)
-    const ends = endsAtLabel(item)
-    if (ends) bits.push(ends)
-  }
+  const left = remainingLabel(item)
+  if (left) bits.push(left)
   if (item.OfficialRating) bits.push(item.OfficialRating)
-  if (item.CommunityRating && ratings !== "critic" && ratings !== "none") bits.push(`${item.CommunityRating.toFixed(1)} ★`)
+  const community = ratingValue(item, ratings)
+  if (community) bits.push(community)
   const critic = criticLabel(item, true, ratings)
   if (critic) bits.push(critic)
-  return bits.join("  ·  ")
+  const ends = endsAtLabel(item, now)
+  if (ends) bits.push(ends)
+  return bits
+}
+
+/**
+ * The community score as the line states it: the number, and the star that says what it is. The
+ * star is the app's own gold wherever the line is drawn - see `MetaText` - and a score the server
+ * did not send, or one a viewer has asked not to see, is left out rather than shown as zero.
+ */
+export function ratingValue(item: Item, ratings: RatingsDisplay = "both") {
+  if (ratings === "critic" || ratings === "none") return ""
+  const score = item.CommunityRating
+  if (typeof score !== "number" || !Number.isFinite(score)) return ""
+  return `${score.toFixed(1)} ★`
+}
+
+export function metaLine(item: Item, ratings: RatingsDisplay = "both", now = Date.now()) {
+  return metaFields(item, ratings, now).join("  ·  ")
 }
 
 export function progressPct(item: Item) {
