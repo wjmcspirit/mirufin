@@ -1,3 +1,4 @@
+import { HERO_DECK_LIMIT } from "./heroDeck"
 import type { Item, MediaStream, RatingsDisplay } from "./types"
 
 export function ticksToSeconds(ticks = 0) {
@@ -135,14 +136,14 @@ export function seriesFallback(group: AddedSeries): Item {
   }
 }
 
-export function recentlyAddedSeries(series: Item[], now = Date.now()) {
+export function recentlyAddedSeries(series: Item[], now = Date.now(), limit = HERO_DECK_LIMIT) {
   const cutoff = now - RECENT_EPISODE_WINDOW
   return series
     .filter((item) => item.Type === "Series" || !item.Type)
     .map((item) => ({ item, added: Date.parse(item.DateLastMediaAdded || "") }))
     .filter((entry) => Number.isFinite(entry.added) && entry.added >= cutoff)
     .sort((a, b) => b.added - a.added)
-    .slice(0, 8)
+    .slice(0, limit)
     .map((entry) => entry.item)
 }
 

@@ -3,7 +3,7 @@ import { createPortal } from "react-dom"
 import { useParams, useSearchParams } from "react-router-dom"
 import { PosterCard } from "../components/Cards"
 import { Hero } from "../components/Hero"
-import { useHeroRotation } from "../components/HeroDeck"
+import { useHeroQuiet, useHeroRotation } from "../components/HeroDeck"
 import { Row } from "../components/Row"
 import { FilterIcon, SortIcon, ViewIcon } from "../components/Icons"
 import { Loading, Problem } from "../components/Status"
@@ -12,7 +12,7 @@ import * as api from "../lib/api"
 import { collectionSizeLabel } from "../lib/collections"
 import { episodeCode, heroPlayTarget, libraryItemTypes, mergeAddedSeries, recentlyAddedSeries, seriesFallback, seriesFromAddedEpisodes, addedSeriesNote, type AddedSeries, type RecentSeries } from "../lib/format"
 import { backdropSrc, loadImage, logoSrc, ownBackdropSrc, primarySrc, warmImage } from "../lib/images"
-import { collectionHeroDeck, recentlyAddedCollections, showHeroDeck } from "../lib/heroDeck"
+import { HERO_DECK_LIMIT, collectionHeroDeck, deckFrom, movieHeroDeck, recentlyAddedCollections, shuffle, showHeroDeck } from "../lib/heroDeck"
 import { DEFAULT_LIBRARY_VIEW, EPISODE_SORT, LIBRARY_FILTERS, librarySorts, savedLibraryView } from "../lib/libraryView"
 import { isBackKey, noteBackKeydown, ownArrows, ownBack, placeFocus } from "../lib/remote"
 import { libraryToolNeighbor, placeToolMenu, type LibraryTool } from "../lib/toolMenu"
@@ -24,47 +24,9 @@ const PAGE = 60
 const ADDED_PAGE = 180
 const BACKDROP_DWELL = 15000
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")
-/** The movie hero rotates through MOVIE_HERO_COUNT of these, one every MOVIE_HERO_DWELL. */
-const MOVIE_HERO_COUNT = 10
+/** The movie hero samples this many films and turns through ten of them, one every MOVIE_HERO_DWELL. */
 const MOVIE_HERO_POOL = 30
 const MOVIE_HERO_DWELL = 15000
-
-function shuffle<T>(list: T[]) {
-  const next = [...list]
-  for (let index = next.length - 1; index > 0; index -= 1) {
-    const swap = Math.floor(Math.random() * (index + 1))
-    const item = next[index]
-    next[index] = next[swap]
-    next[swap] = item
-  }
-  return next
-}
-
-/**
- * The movies the hero rotates through: a random sample of the movie library,
- * de-duplicated by id and shuffled into a fresh rotation order with the
- * Fisher-Yates pass above, capped at MOVIE_HERO_COUNT. Movies that own a backdrop
- * come first because the stage is built for 16:9 artwork; a library where those
- * are rare still fills the deck from the rest, and those movies borrow the poster
- * fallback the stage already knows.
- */
-function movieHeroDeck(list: Item[]) {
-  const seen = new Set<string>()
-  const framed: Item[] = []
-  const rest: Item[] = []
-  for (const entry of list) {
-    if (entry.Type !== "Movie" || seen.has(entry.Id)) continue
-    seen.add(entry.Id)
-    if (ownBackdropSrc(entry)) framed.push(entry)
-    else rest.push(entry)
-  }
-  const deck = shuffle(framed)
-  for (const entry of shuffle(rest)) {
-    if (deck.length >= MOVIE_HERO_COUNT) break
-    deck.push(entry)
-  }
-  return deck.slice(0, MOVIE_HERO_COUNT)
-}
 
 /** The artwork the stage paints for a hero movie: its own backdrop, then its own poster. */
 function movieHeroArt(item: Item) {
@@ -619,7 +581,11 @@ export function LibraryPage() {
   const heroNext = heroPool.length ? heroPool[(heroSpot + 1) % heroPool.length] : null
   const cardMovie = hovered?.Type === "Movie" ? hovered : null
   const featured = cardMovie || heroItem
-  const heroPaused = heroHold || trailerHold
+  const heroEngaged = heroHold || trailerHold
+  // The hero stands still while the viewer is using it and starts again after the shared quiet
+  // window, so a focus ring parked on the hero's own Play control - which is where a library's page
+  // opens - cannot stop it for the evening.
+  const heroRested = useHeroQuiet(heroEngaged)
   const firstMovie = movies && letter && settled ? items[0] || null : null
   if (movies && firstMovie) shownMovie.current = firstMovie
   else if (movies && !letter && settled && featured) shownMovie.current = featured
@@ -637,7 +603,7 @@ export function LibraryPage() {
   // The hero stands still on the title a viewer is on, while a poster holds focus,
   // in a hidden app and under `prefers-reduced-motion`.
   const heroMoves = useArtMotion()
-  const heroCycling = Boolean(movies && !letter && settled && heroPool.length > 1 && !heroPaused && !cardMovie && heroMoves)
+  const heroCycling = Boolean(movies && !letter && settled && heroPool.length > 1 && !cardMovie && heroMoves && heroRested)
 
   // Keep the next movie's backdrop - or the poster it falls back to - decoded while
   // this hero is on screen, so a rotation never starts against artwork still loading.
@@ -668,7 +634,10 @@ export function LibraryPage() {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [heroCycling, heroNext])
+    // Keyed on which slide is coming rather than on the object, so a page that rebuilds an equal
+    // deck cannot restart the beat.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heroCycling, heroNext?.Id])
 
   const addedMode = Boolean(shows && sort === "EpisodeAdded")
   // A TV library's hero turns through the series the server reports as most recently added, and
@@ -685,10 +654,14 @@ export function LibraryPage() {
         : [],
     [addedMode, items, recent, shows],
   )
-  // The same library sorted by recently added episodes features those episodes instead.
-  const addedPool = useMemo(() => (addedMode && !letter && settled ? items.slice(0, 8) : []), [addedMode, items, letter, settled])
-  const rotatingShow = useHeroRotation(showPool, heroPaused)
-  const rotatingAdded = useHeroRotation(addedPool, heroPaused)
+  // The same library sorted by recently added episodes features those episodes instead: a deck of
+  // the newest of them, which is what the grid is showing in this order, deduplicated by id.
+  const addedPool = useMemo(
+    () => (addedMode && !letter && settled ? deckFrom(items, HERO_DECK_LIMIT) : []),
+    [addedMode, items, letter, settled],
+  )
+  const rotatingShow = useHeroRotation(showPool, heroEngaged)
+  const rotatingAdded = useHeroRotation(addedPool, heroEngaged)
   // The episode the featured series was added with: its number and name, and the episode the Play
   // button should start. A series that came from the library rather than the recent list has no
   // such episode, and the hero simply offers the series itself.
@@ -720,7 +693,7 @@ export function LibraryPage() {
     () => (collections ? collectionHeroDeck(items.filter((item) => item.Type === "BoxSet" || !item.Type)) : []),
     [collections, items],
   )
-  const rotatingCollection = useHeroRotation(collectionPool, heroPaused)
+  const rotatingCollection = useHeroRotation(collectionPool, heroEngaged)
   const addedCollections = useMemo(() => (collections ? recentlyAddedCollections(items) : []), [collections, items])
   const collectionArt = useCollectionBackdrop(
     userId,

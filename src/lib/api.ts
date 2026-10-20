@@ -421,10 +421,10 @@ export function newestEpisode(userId: string, seriesId: string) {
   return jf<ItemList>(`/Users/${userId}/Items?${params}`)
 }
 
-export function latest(userId: string, parentId: string) {
+export function latest(userId: string, parentId: string, limit = 16) {
   const params = new URLSearchParams({
     ParentId: parentId,
-    Limit: "16",
+    Limit: String(limit),
     Fields: `${CARD_FIELDS},DateCreated,DateLastMediaAdded,Genres,OfficialRating,CommunityRating,Status,PremiereDate,BackdropImageTags,ParentBackdropItemId,ParentBackdropImageTags,SeriesId,SeriesName,SeriesPrimaryImageTag,ParentIndexNumber,IndexNumber`,
     EnableImageTypes: CARD_IMAGES,
     ImageTypeLimit: "1",

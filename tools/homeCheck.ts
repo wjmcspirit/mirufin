@@ -520,6 +520,7 @@ check(
   "a .home .hero rule would leave every other page on the base hero",
 )
 const libraryPage = readFileSync("src/pages/Library.tsx", "utf8")
+const deckSource = readFileSync("src/lib/heroDeck.ts", "utf8")
 check(
   "and a library's hero is that same component, inside the library's own hero slot",
   /<div className="library-hero">\s*<Hero/.test(libraryPage),
@@ -546,10 +547,11 @@ check(
 )
 check(
   "and one film cannot fill it: it is de-duplicated by id and capped",
-  /entry\.Type !== "Movie" \|\| seen\.has\(entry\.Id\)/.test(libraryPage) && /deck\.slice\(0, MOVIE_HERO_COUNT\)/.test(libraryPage),
-  "Library.tsx",
+  /entry\.Type !== "Movie" \|\| !entry\.Id \|\| seen\.has\(entry\.Id\)/.test(deckSource) &&
+    /return deckFrom\(\[\.\.\.shuffle\(framed\), \.\.\.shuffle\(rest\)\], limit\)/.test(deckSource),
+  "heroDeck.ts",
 )
-check("and films that own a backdrop are drawn first", /if \(ownBackdropSrc\(entry\)\) framed\.push\(entry\)/.test(libraryPage), "Library.tsx")
+check("and films that own a backdrop are drawn first", /if \(ownBackdropSrc\(entry\)\) framed\.push\(entry\)/.test(deckSource), "heroDeck.ts")
 check(
   "and it is walked in order, so a film is not shown twice before the deck has been through",
   /heroPool\[\(heroSpot \+ 1\) % heroPool\.length\]/.test(libraryPage),
@@ -573,11 +575,11 @@ check(
 const images = readFileSync("src/lib/images.ts", "utf8")
 check(
   "and the artwork a library's hero paints is the film's own, never the library's banner",
-  /if \(ownBackdropSrc\(entry\)\) framed\.push\(entry\)/.test(libraryPage) &&
+  /if \(ownBackdropSrc\(entry\)\) framed\.push\(entry\)/.test(deckSource) &&
     /return ownBackdropSrc\(item\) \|\| primarySrc\(item, 1600\)/.test(libraryPage) &&
     /const spotlight = items\.find\(\(entry\) => ownBackdropSrc\(entry\)\) \|\| null/.test(libraryPage) &&
     /const heroPosterArt = Boolean\(\(movies \|\| shows \|\| collections\) && !letter && pinned && !ownBackdropSrc\(pinned\)\)/.test(libraryPage),
-  "Library.tsx",
+  "heroDeck.ts and Library.tsx",
 )
 check(
   "and that helper takes the item's own backdrop and no parent's",
@@ -591,12 +593,14 @@ const homePage = readFileSync("src/pages/Home.tsx", "utf8")
 const stage = readFileSync("src/components/Stage.tsx", "utf8")
 check(
   "a library's hero waits as long as Home's does between films",
-  /const MOVIE_HERO_DWELL = 15000/.test(libraryPage) && /const HERO_ROTATE_MS = 15_000/.test(homePage),
-  "Library.tsx and Home.tsx",
+  /const MOVIE_HERO_DWELL = 15000/.test(libraryPage) && /const HERO_DWELL_MS = 15000/.test(deckSource),
+  "Library.tsx and heroDeck.ts",
 )
 check(
-  "and the viewer's own use of the screen holds it still",
-  /const heroPaused = heroHold \|\| trailerHold/.test(libraryPage) && /!heroPaused && !cardMovie && heroMoves/.test(libraryPage),
+  "and the viewer's own use of the screen holds it still until the quiet window has passed",
+  /const heroEngaged = heroHold \|\| trailerHold/.test(libraryPage) &&
+    /const heroRested = useHeroQuiet\(heroEngaged\)/.test(libraryPage) &&
+    /!cardMovie && heroMoves && heroRested/.test(libraryPage),
   "Library.tsx",
 )
 check(

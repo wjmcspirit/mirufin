@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useLayoutEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import * as api from "../lib/api"
 import { episodeCode, metaLine, progressPct } from "../lib/format"
@@ -15,6 +15,12 @@ interface HeroFace {
   playLabel?: string
   detail?: string
   eyebrow?: string
+}
+
+/** The controls the remote can land on inside a hero copy, in the order they are drawn. */
+function controlsOf(node: HTMLElement | null) {
+  if (!node) return [] as HTMLElement[]
+  return Array.from(node.querySelectorAll<HTMLElement>(".actions a, .actions button"))
 }
 
 export function Hero({
@@ -40,15 +46,42 @@ export function Hero({
   focused?: boolean
 }) {
   const face: HeroFace = { item, presentation, playHref, playLabel, detail, eyebrow }
+  const section = useRef<HTMLElement>(null)
+  const at = useRef(-1)
+
+  /**
+   * A turn replaces the whole copy, so a control the remote is on would leave the tree along with
+   * the outgoing title and the ring would be gone. The same control of the incoming copy takes the
+   * focus instead - the same place in the same row of actions - so the ring stays where the viewer
+   * put it and the next press does what its label says. Nothing is focused at all unless the viewer
+   * was on a control of this hero: a turn never reaches for the focus on its own.
+   */
+  useLayoutEffect(() => {
+    const index = at.current
+    if (index < 0) return
+    const controls = controlsOf(section.current)
+    const incoming = controls[index]
+    if (!incoming) return
+    for (const control of controls) control.classList.remove("dpad-focus")
+    incoming.classList.add("dpad-focus")
+    incoming.focus()
+  }, [item.Id])
 
   return (
     <section
+      ref={section}
       className={focused ? "hero stage-copy hero-quick" : "hero stage-copy"}
       onMouseEnter={() => onHold(true)}
       onMouseLeave={() => onHold(false)}
-      onFocus={() => onHold(true)}
+      onFocus={() => {
+        at.current = controlsOf(section.current).indexOf(document.activeElement as HTMLElement)
+        onHold(true)
+      }}
       onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onHold(false)
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          at.current = -1
+          onHold(false)
+        }
       }}
     >
       {/*

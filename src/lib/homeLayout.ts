@@ -1,8 +1,6 @@
 import type { HomeCardSize, HomeCardStyle, HomeRowSetting, Item, NavItemSetting } from "./types"
+import { HERO_DECK_LIMIT, deckFrom } from "./heroDeck"
 import { backdropSrc } from "./images"
-
-/** How many titles Home's hero rotates through. */
-const HERO_DECK = 10
 
 /** When a title joined the library, by the newest of the dates the server gave for it. */
 function addedStamp(item: Item) {
@@ -19,21 +17,17 @@ function addedStamp(item: Item) {
  * on a gradient. Identity is the id the server gave, so the same title reported by two libraries
  * is one slide, and the deck is capped so a library that adds a hundred things at once still
  * rotates through a familiar handful.
+ *
+ * The cap is the same ten every other hero turns through, and `deckFrom` is what applies it: the
+ * pool this is handed is already topped up by the screen when a first page of results could not
+ * fill it, so the deck reaches ten whenever ten eligible titles exist.
  */
-export function heroDeck(rows: { items: Item[] }[], limit = HERO_DECK): Item[] {
+export function heroDeck(rows: { items: Item[] }[], limit = HERO_DECK_LIMIT): Item[] {
   const ranked = rows
     .flatMap((row) => row.items)
     .filter((item) => item.Id && backdropSrc(item))
     .sort((a, b) => addedStamp(b) - addedStamp(a))
-  const seen = new Set<string>()
-  const list: Item[] = []
-  for (const item of ranked) {
-    if (seen.has(item.Id)) continue
-    seen.add(item.Id)
-    list.push(item)
-    if (list.length >= limit) break
-  }
-  return list
+  return deckFrom(ranked, limit)
 }
 
 export function libraryRowId(viewId: string) {

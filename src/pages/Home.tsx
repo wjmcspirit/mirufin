@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { PosterCard } from "../components/Cards"
 import { Hero } from "../components/Hero"
+import { useHeroRotation } from "../components/HeroDeck"
 import { Row } from "../components/Row"
 import { Loading, Problem } from "../components/Status"
 import { useHeroStage, usePinnedArt, useStage } from "../components/Stage"
@@ -8,9 +9,8 @@ import { useThemeSong } from "../components/Theme"
 import * as api from "../lib/api"
 import { comingUpEpisodes, continueWatching, resumeCardDetail, resumeCardTitle, upNextCardDetail, upNextCardTitle } from "../lib/format"
 import { followingEpisodes } from "../lib/watch"
-import { remoteKey } from "../lib/remote"
+import { HERO_CANDIDATE_LIMIT, HERO_DECK_LIMIT, topUpLimit } from "../lib/heroDeck"
 import { heroDeck, isShowLibrary, latestTitle, libraryRowId, mergeHomeRows } from "../lib/homeLayout"
-import { backdropSrc, loadImage, logoSrc, warmImage } from "../lib/images"
 import type { Item } from "../lib/types"
 import { usePrefs, useSession } from "../session"
 
@@ -27,45 +27,31 @@ async function settle<T>(work: Promise<T>, fallback: T) {
   }
 }
 
-const HERO_ROTATE_MS = 15_000
-const HERO_QUIET_MS = 20_000
-const REMOTE_KEYS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter"])
+/** How many of each library's newest titles the Home rows draw. */
+const HOME_ROW_LIMIT = 16
 
 /**
- * The hero only cycles once the remote has been quiet for HERO_QUIET_MS. Every
- * D-pad press restarts that window, so a title, its synopsis and its actions can
- * never be swapped out from under the viewer, and a hero that was in use always
- * waits before it starts moving again.
+ * The candidates Home's hero draws from.
+ *
+ * The rows draw the newest HOME_ROW_LIMIT titles of each library, and the hero may feature only the
+ * ones that own a backdrop - so a library whose newest titles are all missing one would leave the
+ * hero turning through the three or four that are not, however large the library is. When the first
+ * page cannot fill a deck of ten the library is asked once more for a wider list, and the rows keep
+ * drawing exactly what they drew before. A library that already fills the deck is not asked again.
  */
-function useHeroQuiet(engaged: boolean) {
-  const [rested, setRested] = useState(true)
-  const timer = useRef(0)
-  const settle = useCallback(() => {
-    setRested(false)
-    window.clearTimeout(timer.current)
-    timer.current = window.setTimeout(() => setRested(true), HERO_QUIET_MS)
-  }, [])
-  useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (REMOTE_KEYS.has(remoteKey(event))) settle()
-    }
-    window.addEventListener("keydown", onKey)
-    return () => {
-      window.removeEventListener("keydown", onKey)
-      window.clearTimeout(timer.current)
-    }
-  }, [settle])
-  const wasEngaged = useRef(engaged)
-  useEffect(() => {
-    // A page that just opened is already at rest. Taking the hero into use, then
-    // leaving it again, both start the quiet window.
-    const changed = wasEngaged.current !== engaged
-    wasEngaged.current = engaged
-    if (!changed) return
-    settle()
-    return () => window.clearTimeout(timer.current)
-  }, [engaged, settle])
-  return rested
+async function topUpHeroRows(rows: LatestRow[], views: Item[], userId: string): Promise<LatestRow[]> {
+  const want = topUpLimit(heroDeck(rows, HERO_DECK_LIMIT).length, HOME_ROW_LIMIT)
+  if (!want) return rows
+  const wider = await Promise.all(
+    views.map(async (view) => ({
+      view,
+      items: await settle(api.latest(userId, view.Id, HERO_CANDIDATE_LIMIT), []),
+    })),
+  )
+  // A library that answered the wider request with less than it already had keeps what it has: the
+  // hero is topped up with the better of the two lists, never narrowed by a request that came back
+  // short.
+  return wider.map((row, index) => (row.items.length >= (rows[index]?.items.length || 0) ? row : rows[index]))
 }
 
 export function HomePage() {
@@ -75,6 +61,7 @@ export function HomePage() {
   const [nextItems, setNextItems] = useState<Item[]>([])
   const [upcomingItems, setUpcomingItems] = useState<Item[]>([])
   const [rows, setRows] = useState<LatestRow[]>([])
+  const [heroRows, setHeroRows] = useState<LatestRow[]>([])
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
   const [error, setError] = useState("")
 
@@ -94,16 +81,20 @@ export function HomePage() {
         Promise.all(
           (library.Items || []).map(async (view) => ({
             view,
-            items: await settle(api.latest(userId, view.Id), []),
+            items: await settle(api.latest(userId, view.Id, HOME_ROW_LIMIT), []),
           })),
         ),
       ])
       const progress = continueWatching(resumeList.Items || [])
       const following = await followingEpisodes(userId, playedList.Items || [], progress)
+      // The hero's candidates are settled before the screen is drawn, so the deck is never briefly
+      // short of the ten titles it is meant to turn through.
+      const heroRows = await topUpHeroRows(latestRows, library.Items || [], userId)
       setResumeItems(resumeList.Items || [])
       setNextItems(nextList.Items || [])
       setUpcomingItems(following)
       setRows(latestRows)
+      setHeroRows(heroRows)
       setStatus("ready")
     }
     run().catch((caught: unknown) => {
@@ -126,61 +117,21 @@ export function HomePage() {
   const libraryKey = views.map((view) => view.Id).join("\n")
   const sections = useMemo(() => mergeHomeRows(prefs.homeRows, libraryKey ? libraryKey.split("\n") : []), [libraryKey, prefs.homeRows])
   const pool = status === "ready" ? [...resumeItems, ...nextItems, ...rows.flatMap((row) => row.items)] : []
-  const featured = useMemo(() => heroDeck(rows), [rows])
-  const featuredKey = featured.map((item) => item.Id).join("\n")
-  const [index, setIndex] = useState(0)
+  const featured = useMemo(() => heroDeck(heroRows), [heroRows])
   const [hold, setHold] = useState(false)
   const [trailerHold, setTrailerHold] = useState(false)
   const { hovered, hover } = useStage()
-  const current = featured[featured.length ? index % featured.length : 0] || null
-  const spot = hovered || current
-  // The hero stands still while the viewer is on it or moving through the rows,
-  // and only starts cycling again after a quiet spell.
+  // The hero stands still while the viewer is on it or moving through the rows, and starts again
+  // after the shared quiet window - the same mechanism every other screen's hero turns on.
   const engaged = Boolean(hovered) || hold || trailerHold
-  const rested = useHeroQuiet(engaged)
-  const cycling = featured.length > 1 && !engaged && rested
+  const current = useHeroRotation(featured, engaged)
+  const spot = hovered || current
 
   useEffect(() => {
     return () => {
       hover(null)
     }
   }, [hover])
-
-  useEffect(() => {
-    setIndex(0)
-  }, [featuredKey])
-
-  // Keep the next backdrop and its title logo decoded while this hero is on
-  // screen, so a rotation never starts against artwork that is still loading.
-  useEffect(() => {
-    if (featured.length < 2) return
-    const upcoming = featured[(index + 1) % featured.length]
-    warmImage(backdropSrc(upcoming))
-    if (prefs.preferLogos) warmImage(logoSrc(upcoming))
-  }, [featured, index, prefs.preferLogos])
-
-  useEffect(() => {
-    if (!cycling) return
-    let cancelled = false
-    const upcoming = featured[(index + 1) % featured.length]
-    const url = backdropSrc(upcoming)
-    const timer = window.setTimeout(() => {
-      if (!url) {
-        setIndex((value) => value + 1)
-        return
-      }
-      // Hold the current hero until the incoming backdrop has decoded, then move
-      // on, so the copy and the artwork always change together. A URL that never
-      // loads resolves as unusable and is skipped rather than frozen on.
-      void loadImage(url).then(() => {
-        if (!cancelled) setIndex((value) => value + 1)
-      })
-    }, HERO_ROTATE_MS)
-    return () => {
-      cancelled = true
-      window.clearTimeout(timer)
-    }
-  }, [cycling, featured, index])
 
   useHeroStage(prefs.showHero)
   usePinnedArt(prefs.showHero ? current : null)
