@@ -351,6 +351,16 @@ function rule(selector: string) {
   return css.slice(start, css.indexOf("}", start))
 }
 
+/* The application's one content boundary: the single rule that puts every page's headings, text,
+   grids, control rows and detail panels on the same left edge - the edge the logo begins on. It is
+   stated once so that no page can drift off it by stating an inset of its own, and what is checked
+   here is that it still names every kind of block a page is built from. */
+const boundary = (() => {
+  const at = css.indexOf("One content boundary for the whole application.")
+  if (at < 0) return ""
+  return css.slice(at, css.indexOf("}", at))
+})()
+
 const hero = rule(".hero.stage-copy")
 check("the shared hero declares a height, not a minimum, so the rows below it cannot move", hero.includes("height: calc(var(--app-height"), hero.trim())
 check("and that height is a share of the television's own, so 4K draws the same picture", /\*\s*[\d.]+\)/.test(hero), hero.trim())
@@ -390,18 +400,41 @@ check(
   rule(".hero.stage-copy .hero-copy").includes("padding: 16px var(--strip-pad)"),
   rule(".hero.stage-copy .hero-copy").trim(),
 )
-check("and so does a section heading", rule(".home .row-head").includes("padding-inline: var(--strip-pad)"), rule(".home .row-head").trim())
-check("and the strip under that heading", rule(".home .row .scroller").includes("padding-inline: var(--strip-pad)"), rule(".home .row .scroller").trim())
+check("and so does a section heading", boundary.includes("\n.row-head,"), rule(".row-head").trim())
+check("and the strip under that heading", rule(".scroller").includes("padding-inline: var(--strip-pad)"), rule(".scroller").trim())
 /* The header and the page below it share one pair of boundaries: the page's own inset plus the
    strip's. The logo's left edge begins where the copy and the first card begin, and the
    right-hand group's outer edge ends where the strip's content ends. The rendered edges are
-   measured in `tools/foldCheck.ts`; what is checked here is that both are stated as the same sum
-   rather than as two insets of their own, and that the sum follows the breakpoints. */
+   measured in `tools/foldCheck.ts`; what is checked here is that the header takes the named
+   boundary itself rather than restating the sum, and that the page inset follows the breakpoints. */
 check("the page begins at the shared page inset", rule(".main").includes("padding: 32px var(--page-pad) 80px"), rule(".main").trim())
 check(
-  "and the header is inset by that plus the strip's, so it lines up with the content below it",
-  rule(".side").includes("padding: 10px calc(var(--page-pad) + var(--strip-pad))"),
+  "and the header is inset by the content boundary itself, so it lines up with the content below it",
+  rule(".side").includes("padding: 10px var(--content-pad)"),
   rule(".side").trim(),
+)
+check(
+  "and that boundary is named once, as the page inset plus the strip's",
+  /--content-pad: calc\(var\(--page-pad\) \+ var\(--strip-pad\)\)/.test(css),
+  "the :root declaration",
+)
+/* One rule, every page. Before it, only Home, a library and Favorites took the inset: a series, a
+   season, a film's page, a person's page and Search's results all began at the page's own edge. */
+check(
+  "one rule puts every page's content on that boundary",
+  boundary.includes("padding-inline: var(--strip-pad)"),
+  "the shared content boundary rule",
+)
+for (const block of [".page-head", ".row-head", ".grid", ".card-board", ".letter-row", ".detail-layout", ".episode-spot", ".search-hits"]) {
+  check(`and a page's ${block} takes it`, boundary.includes(`\n${block},`) || boundary.includes(`\n${block} {`), block)
+}
+check(
+  "and no page states a horizontal inset of its own any more",
+  !/\.home \.row-head[^}]*padding-inline/.test(css) &&
+    !/\.home \.row \.scroller[^}]*padding-inline/.test(css) &&
+    !/\.library-page \.(grid|card-board|row-head|letter-row)[^}]*padding-inline/.test(css) &&
+    !/\.favorites-page \.card-board[^}]*padding-inline/.test(css),
+  "no per-page content inset remains",
 )
 check(
   "and the page inset is stated once per panel size, so it can move with the page",

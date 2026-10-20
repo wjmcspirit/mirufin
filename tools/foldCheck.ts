@@ -463,6 +463,43 @@ for (const { panel, report } of await measureAll(browser, probe, PANELS)) {
     Math.abs(library.edges.logo - library.lefts.hero) <= 1 && Math.abs(library.edges.group - library.edges.grid) <= 1,
     `logo ${library.edges.logo}, hero ${library.lefts.hero}, group ends ${library.edges.group}, grid content ends ${library.edges.grid}`,
   )
+  /* A film's page - the page type that used to begin at the page's own edge, `--strip-pad` to the
+     left of everything else and off the header's logo. Its hero is the compact `.detail-hero`, not a
+     `.hero`, and its poster and copy sit in a two-column grid, so it is the page that drifts first
+     if the boundary is ever stated per page rather than once. Measured at every panel size, against
+     the same logo and the same right-hand group the other pages are measured against. */
+  const detail = report.detail
+  console.log(
+    `     detail: poster ${detail.lefts.poster}  copy ${detail.lefts.copy}  heading ${detail.lefts.heading}  ` +
+      `row card ${detail.lefts.row}  grid card ${detail.lefts.grid}`,
+  )
+  check(
+    `${panel.name} (${report.row}): a film's poster, its heading and the first card of each block share one left edge`,
+    Math.abs(detail.lefts.poster - detail.lefts.heading) <= 1 &&
+      Math.abs(detail.lefts.heading - detail.lefts.row) <= 1 &&
+      Math.abs(detail.lefts.row - detail.lefts.grid) <= 1,
+    `poster ${detail.lefts.poster}, heading ${detail.lefts.heading}, row ${detail.lefts.row}, grid ${detail.lefts.grid}`,
+  )
+  check(
+    `${panel.name} (${report.row}): and it is the same edge Home's copy begins on`,
+    Math.abs(detail.lefts.poster - report.lefts.hero) <= 1,
+    `film ${detail.lefts.poster}, home ${report.lefts.hero}`,
+  )
+  check(
+    `${panel.name} (${report.row}): its copy keeps its own column, inside the boundary`,
+    detail.lefts.copy > detail.lefts.poster,
+    `poster ${detail.lefts.poster}, copy ${detail.lefts.copy}`,
+  )
+  check(
+    `${panel.name} (${report.row}): the header lines up with a film's page as well`,
+    Math.abs(detail.edges.logo - detail.lefts.poster) <= 1 && Math.abs(detail.edges.group - detail.edges.grid) <= 1,
+    `logo ${detail.edges.logo}, poster ${detail.lefts.poster}, group ends ${detail.edges.group}, grid content ends ${detail.edges.grid}`,
+  )
+  check(
+    `${panel.name} (${report.row}): and none of the page's blocks reach past the screen's right edge`,
+    detail.wide <= detail.screen && detail.overflow <= 0.5,
+    `widest box ends at ${detail.wide} of ${detail.screen}, overflow ${detail.overflow}`,
+  )
   console.log("")
 }
 

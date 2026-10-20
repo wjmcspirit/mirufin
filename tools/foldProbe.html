@@ -198,6 +198,115 @@
         </div>
       </div>
     </div>
+
+    <!-- A film's page, the same shell a third time. Its hero is not a `.hero` - it is the shorter
+         `.detail-hero` - and the poster and the copy sit in a two-column grid inside it, but the
+         poster's left edge, the copy's, the heading over the row and the first card of each block
+         under it all have to begin on the content boundary the logo begins on. This is the page
+         type that used to begin at the page's own edge: `--strip-pad` to the left of everything
+         else, and off the header's logo. -->
+    <div class="shell" id="detail-shell" style="display: none">
+      <header class="side">
+        <div class="brand" role="img" aria-label="Mirufin">
+          <img class="brand-logo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='34'%3E%3C/svg%3E" alt="" />
+        </div>
+        <nav class="side-nav" aria-label="Main">
+          <button class="nav"><svg viewBox="0 0 24 24"></svg></button>
+          <button class="nav"><svg viewBox="0 0 24 24"></svg></button>
+          <button class="nav"><svg viewBox="0 0 24 24"></svg></button>
+          <button class="nav"><svg viewBox="0 0 24 24"></svg></button>
+          <button class="nav"><svg viewBox="0 0 24 24"></svg></button>
+        </nav>
+        <div class="side-end">
+          <time class="clock">9:41</time>
+          <p class="account">
+            <span class="account-mark" aria-hidden="true">W</span>
+            <span class="account-name">Viewer</span>
+          </p>
+        </div>
+      </header>
+      <div class="main">
+        <article class="detail">
+          <header class="detail-hero stage-copy">
+            <div class="detail-layout">
+              <div class="poster-lg">
+                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='480'%3E%3C/svg%3E" alt="" />
+              </div>
+              <div class="detail-copy">
+                <p class="eyebrow">Film</p>
+                <div class="hero-title"><h1>Underworld Awakening</h1></div>
+                <p class="hero-episode"></p>
+                <p class="kicker">2012  ·  1h 28m  ·  R  ·  6.3 ★  ·  Action, Fantasy, Horror</p>
+                <div class="actions">
+                  <a class="btn btn-primary" href="#">Play</a>
+                  <a class="btn" href="#">Favorite</a>
+                  <button class="btn" type="button">Trailers</button>
+                </div>
+              </div>
+            </div>
+          </header>
+          <div class="detail-body">
+            <section class="episode-block">
+              <div class="row-head">
+                <h2>Cast</h2>
+              </div>
+              <div class="scroller" id="detail-row">
+                <a class="card poster labeled" href="#">
+                  <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='252'%3E%3C/svg%3E" alt="" /></span>
+                  <span class="card-copy">
+                    <span class="card-title">Kate Beckinsale</span>
+                    <span class="card-sub">Selene</span>
+                  </span>
+                </a>
+                <a class="card poster labeled" href="#">
+                  <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='252'%3E%3C/svg%3E" alt="" /></span>
+                  <span class="card-copy">
+                    <span class="card-title">Stephen Rea</span>
+                    <span class="card-sub">Dr. Jacob Lane</span>
+                  </span>
+                </a>
+                <a class="card poster labeled" href="#">
+                  <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='252'%3E%3C/svg%3E" alt="" /></span>
+                  <span class="card-copy">
+                    <span class="card-title">Michael Ealy</span>
+                    <span class="card-sub">Detective Sebastian</span>
+                  </span>
+                </a>
+              </div>
+            </section>
+            <section class="season-block">
+              <div class="row-head">
+                <h2>More like this</h2>
+              </div>
+              <div class="grid poster size-medium" id="detail-grid">
+                <a class="card poster labeled" href="#">
+                  <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='252'%3E%3C/svg%3E" alt="" /></span>
+                  <span class="card-copy">
+                    <span class="card-title">Underworld</span>
+                    <span class="card-sub">2003  ·  2h 1m  ·  R</span>
+                  </span>
+                </a>
+                <a class="card poster labeled" href="#">
+                  <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='252'%3E%3C/svg%3E" alt="" /></span>
+                  <span class="card-copy">
+                    <span class="card-title">Underworld: Evolution</span>
+                    <span class="card-sub">2006  ·  1h 46m  ·  R</span>
+                  </span>
+                </a>
+                <a class="card poster labeled" href="#">
+                  <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='252'%3E%3C/svg%3E" alt="" /></span>
+                  <span class="card-copy">
+                    <span class="card-title">Underworld: Blood Wars</span>
+                    <span class="card-sub">2016  ·  1h 31m  ·  R</span>
+                  </span>
+                </a>
+              </div>
+            </section>
+          </div>
+        </article>
+      </div>
+    </div>
+
     <div id="probe">pending</div>
     <script>
       /**
@@ -365,6 +474,51 @@
           }
 
           libShell.style.display = "none"
+          homeShell.style.display = ""
+          return out
+        })()
+        // A film's page, measured the same way and in the same run: the poster and the copy in its
+        // hero, the heading over the row under it, and the first card of the scrolling row and of
+        // the grid. Four kinds of box with three different parents, and all of them have to begin
+        // where the logo begins - and none of them may reach past the screen's own right edge.
+        report.detail = (function () {
+          var homeShell = document.getElementById("home-shell")
+          var libShell = document.getElementById("library-shell")
+          var detailShell = document.getElementById("detail-shell")
+          homeShell.style.display = "none"
+          libShell.style.display = "none"
+          detailShell.style.display = "grid"
+
+          var row = detailShell.querySelector("#detail-row")
+          var grid = detailShell.querySelector("#detail-grid")
+          var rowPad = parseFloat(getComputedStyle(row).paddingRight)
+          var gridPad = parseFloat(getComputedStyle(grid).paddingRight)
+          var rowBox = units(row)
+          var gridBox = units(grid)
+          var out = {
+            lefts: {
+              poster: round(units(detailShell.querySelector(".poster-lg")).left),
+              copy: round(units(detailShell.querySelector(".detail-copy")).left),
+              heading: round(units(detailShell.querySelector(".row-head h2")).left),
+              row: round(units(row.querySelector(".card")).left),
+              grid: round(units(grid.querySelector(".card")).left),
+            },
+            edges: {
+              logo: round(units(detailShell.querySelector(".brand-logo")).left),
+              group: round(units(detailShell.querySelector(".side-end")).right),
+              row: round(rowBox.right - rowPad),
+              grid: round(gridBox.right - gridPad),
+            },
+            // The canvas in its own units, and the furthest right any box on the page reaches, so
+            // an inset that pushed content off the screen would be caught here.
+            screen: round(window.innerWidth / rectScale),
+            wide: round(Math.max(rowBox.right, gridBox.right)),
+            // Nothing may make the document scroll sideways: content past the right edge is
+            // content the viewer cannot reach with a remote.
+            overflow: round((document.documentElement.scrollWidth - window.innerWidth) / rectScale),
+          }
+
+          detailShell.style.display = "none"
           homeShell.style.display = ""
           return out
         })()

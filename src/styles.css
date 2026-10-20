@@ -27,6 +27,13 @@
      the rendered edges at 1080p, 1440p and 4K; `tools/homeCheck.ts` holds the proportion. */
   --page-pad: 18px;
   --strip-pad: 32px;
+  /* THE horizontal boundary of the application, named once: where every page's headings, text,
+     grids, control rows and detail panels begin, where the logo's left edge sits, and where the
+     header's right-hand controls end. It is the sum of the two above because a band that scrolls
+     sideways has to run to the edge of the page's own column while its first card still begins on
+     this boundary - so `.main` carries `--page-pad` and the band gives the rest back as its own
+     padding. Nothing else should ever state a horizontal inset of its own. */
+  --content-pad: calc(var(--page-pad) + var(--strip-pad));
   --shadow: 0 30px 70px rgba(0, 0, 0, 0.38);
   color-scheme: dark;
   font-family: Outfit, "Segoe UI", sans-serif;
@@ -722,11 +729,11 @@ h1, h2, h3 {
   gap: 22px;
   min-width: 0;
   overflow: visible;
-  /* The header is inset by the page's own padding plus the strip's, which is where the content
-     below it begins: the logo's left edge and the right-hand group's outer edge line up with the
+  /* The header is inset by the content boundary itself, which is where the content below it
+     begins: the logo's left edge and the right-hand group's outer edge line up with the
      hero's copy and with the first and last poster of a row. Stated as the sum rather than as a
      number so it follows the breakpoints with the page. */
-  padding: 10px calc(var(--page-pad) + var(--strip-pad));
+  padding: 10px var(--content-pad);
   background: none;
   border: 0;
   box-shadow: none;
@@ -939,26 +946,17 @@ html:not(.remote) .nav:hover .nav-label {
   min-height: 350px;
   margin-bottom: 8px;
 }
-/* The home screen's content inset. The hero's copy, the section headings and the strips under
-   them used to be three independent offsets - the copy's own 36, a heading with none, and the
-   strip's 40 - which put the "Continue watching" heading 36 units to the left of the title above
-   it and 40 to the left of the posters under it. All three take `--strip-pad` now, the inset the
-   rest of the app already draws a strip with, so they begin on one left edge at every panel size
-   and move together when it changes. Scoped to `.home`: every other page keeps its own offsets. */
+/* Home's rows take the application's one content boundary, stated once for every page - see the
+   shared content boundary rule. Home only says what is its own: the vertical rhythm below. */
 /* Home's own vertical rhythm is tighter than the rest of the app's. Under the hero there is a
    heading, a strip of posters and a caption of two lines of title and up to three of detail, and
    all of it has to clear the bottom edge of the screen without a scroll - so the space between
    those parts is what it needs to be and no more. It is scoped to Home: every other page keeps
    the rhythm it has. */
 .home .row { margin-top: 0; }
-.home .row-head {
-  margin-bottom: 8px;
-  /* The heading starts where the hero's copy and the first poster under it start. */
-  padding-inline: var(--strip-pad);
-}
+.home .row-head { margin-bottom: 8px; }
 .home .row .scroller {
   padding-top: 16px;
-  padding-inline: var(--strip-pad);
 }
 /* The copy fills the hero and stacks up from its bottom edge, so what a title does not use is
    empty artwork above it rather than a shorter hero. Its own gap and padding are what make it fit
@@ -1673,19 +1671,27 @@ html:not(.remote) .nav:hover .nav-label {
 .library-head { align-items: center; margin: 0 0 12px; }
 .library-head h1 { font-size: 32px; }
 .library-head .eyebrow { margin: 0; }
-/* What a library page stacks under its hero begins on the same left edge the hero's copy begins
-   on. The hero draws that inset itself - its copy is padded by `--strip-pad` inside the page's own
-   inset - so the blocks under it take the same one here, the way a row's heading and its strip do
-   on Home. Without it a library's heading, its count, its tools and its whole grid began at the
-   page's own edge: `--strip-pad` to the left of the hero title above them, of the first card in
-   the grid and of the header's logo. */
-.library-head,
-.library-page .row-head,
-.library-page .grid,
-.library-page .card-board,
-.library-page .letter-row,
-.favorites-head,
-.favorites-page .card-board {
+/* One content boundary for the whole application.
+   Every page's headings, text, grids, poster rows' headings, control rows and detail panels begin
+   on the same left edge - the edge the logo begins on and the header's controls end on. It is the
+   token `--content-pad`, and this is the one place a page's own content takes it.
+   A band that scrolls sideways carries the same inset itself (see `.scroller`), because its first
+   card has to begin on the boundary while the band still runs to the edge of the page's column.
+   Before this rule every page stated an inset of its own, and only Home, a library and Favorites
+   did: a series, a season, a film's page, a person's page and Search's results all began at the
+   page's own edge - `--strip-pad` to the left of everything else, and off the header's logo. */
+.page-head,
+.row-head,
+.grid,
+.card-board,
+.letter-row,
+.detail-layout,
+.episode-spot,
+.search-hits,
+.problem,
+.empty,
+.error,
+.more-sentinel {
   padding-inline: var(--strip-pad);
 }
 /* The heading, its count and its filters sit close to the grid under them: the page has a hero, a
@@ -2057,7 +2063,8 @@ select {
   gap: 6px;
   max-width: 1180px;
   margin-bottom: 2px;
-  padding: 0 40px;
+  /* The inset is the application's content boundary, taken with every other page's content. */
+  padding: 0;
 }
 .episode-spot .eyebrow { margin: 0; }
 .episode-spot h2 {
@@ -2962,7 +2969,7 @@ input[type="range"]::-webkit-slider-thumb {
 
 @media (max-width: 860px) {
   .shell { height: auto; max-height: none; min-height: 100vh; overflow: visible; }
-  .side { position: sticky; top: 0; padding: 10px calc(var(--page-pad) + var(--strip-pad)); }
+  .side { position: sticky; top: 0; padding: 10px var(--content-pad); }
   .side-nav { overflow-x: auto; scrollbar-width: none; }
   .account-name { display: none; }
   .main { height: auto; overflow: visible; padding: 20px var(--page-pad) 48px; }
@@ -3023,7 +3030,7 @@ input[type="range"]::-webkit-slider-thumb {
      here grew them twice over - and on a canvas 844 units tall the top bar sits above every
      page's fold. Only the room they sit in, across, grows - and it grows with the content
      boundary the page below uses, so the mark and the group keep lining up with it. */
-  .side { padding: 10px calc(var(--page-pad) + var(--strip-pad)); gap: 28px; }
+  .side { padding: 10px var(--content-pad); gap: 28px; }
   .settings { width: min(1100px, 100%); font-size: 22px; }
   .settings > h1 { font-size: 56px; }
   .settings .hint { font-size: 22px; }
@@ -3104,13 +3111,13 @@ input[type="range"]::-webkit-slider-thumb {
      here too, so the hero's share of the screen is the same as it is at 1080p. */
   .main { padding-top: 32px; }
   .home .row .scroller { padding-top: 16px; }
-  .side { padding: 10px calc(var(--page-pad) + var(--strip-pad)); gap: 36px; }
+  .side { padding: 10px var(--content-pad); gap: 36px; }
   /* A 4K panel gives the console less height (the navigation bar is taller there), so it
      takes a little more of the page padding back to keep the poster row fully on screen. */
   .search-screen { margin-top: -40px; margin-bottom: -96px; }
   /* The rail keeps its 1080p height here as well; only its horizontal room grows - and it grows
      with the content boundary, so the mark and the group stay lined up with the page. */
-  .side { padding: 10px calc(var(--page-pad) + var(--strip-pad)); gap: 36px; }
+  .side { padding: 10px var(--content-pad); gap: 36px; }
   .settings { width: min(1400px, 100%); font-size: 30px; }
   .settings > h1 { font-size: 72px; }
   .settings .hint { font-size: 26px; }
