@@ -49,6 +49,9 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(UpdatePlugin.class);
         registerPlugin(NativePlayerPlugin.class);
         registerPlugin(StartupPlugin.class);
+        // The television's own voice input, for the search screen. Registered here so the page can
+        // ask the device to listen; see VoiceSearchPlugin.
+        registerPlugin(VoiceSearchPlugin.class);
         super.onCreate(savedInstanceState);
         Bridge bridge = getBridge();
         if (bridge != null) bridge.addWebViewListener(new RecoveryListener());

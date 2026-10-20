@@ -264,6 +264,63 @@ h1, h2, h3 {
   max-width: none;
   width: 100%;
 }
+/* The search console's own row: the voice control and the field it fills, side by side, both the
+   same height so the pair reads as one control group from the couch. It is the field that takes
+   the room - a spoken query is a sentence - and the button keeps a fixed width beside it. */
+.search-voice-row {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  /* The row takes the room the field used to keep under itself, so the console's rhythm - and the
+     keyboard under it - is where it was. */
+  margin-bottom: 10px;
+}
+.search-voice-row .search-page { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
+.search-voice {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-width: 118px;
+  min-height: 48px;
+  padding: 0 16px;
+  border: 1px solid rgba(62, 200, 255, 0.3);
+  border-radius: 12px;
+  background: rgba(12, 13, 17, 0.86);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+}
+/* The remote's own focus ring, the same cyan the rest of the app draws: a button here is reached
+   with the D-pad like any other control. */
+.search-voice:focus,
+.search-voice:focus-visible,
+.search-voice.dpad-focus {
+  outline: 3px solid #8ee6ff;
+  outline-offset: 3px;
+  color: #fff;
+}
+/* Listening is a state, not an animation: the button takes the accent it does when it is in use
+   and says so, which is what a viewer looking at the screen needs to know. The one slow pulse is
+   there so a listening button cannot be mistaken for a still one, and it stops for a viewer who
+   asked for less motion. */
+.search-voice.listening {
+  border-color: rgba(62, 200, 255, 0.65);
+  background: rgba(62, 200, 255, 0.18);
+  color: #eaf9ff;
+  animation: search-voice-listen 1.6s ease-in-out infinite alternate;
+}
+@keyframes search-voice-listen {
+  from { box-shadow: 0 0 0 0 rgba(62, 200, 255, 0.34); }
+  to { box-shadow: 0 0 0 6px rgba(62, 200, 255, 0.06); }
+}
+.search-voice-note {
+  margin: 8px 0 0;
+  color: #ffd9b0;
+  font-size: 14px;
+  text-align: center;
+}
 .search-center .keypad { max-width: none; }
 .search-center .search-label { text-align: center; }
 .search-center .search-browse { justify-content: center; }

@@ -38,6 +38,20 @@ export function SearchIcon(props: IconProps) {
 }
 
 /**
+ * A microphone, for the search screen's voice control: the recognizer the television already has,
+ * opened for one search. Drawn with the same stroke and size as every other icon in the app.
+ */
+export function MicIcon(props: IconProps) {
+  return (
+    <Base {...props}>
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0" />
+      <path d="M12 18v3" />
+    </Base>
+  )
+}
+
+/**
  * The Settings destination: a gear, not the brightness dial it used to be drawn as.
  * The geometry is the conventional gear, drawn a little smaller than its own 24-unit
  * box so it sits at the same visual size as the other rail icons, and the strokes are

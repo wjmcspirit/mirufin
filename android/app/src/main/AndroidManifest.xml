@@ -12,6 +12,16 @@
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.hardware.faketouch" android:required="false" />
 
+    <!-- Voice search asks the television's own recognizer to listen (see VoiceSearchPlugin). From
+         Android 11 an app only sees the packages it names here, so without this the device would
+         look like one with no voice input at all. The recognizer owns the microphone while its
+         screen is open, which is why Mirufin asks for no RECORD_AUDIO permission. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.RECOGNIZE_SPEECH" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:banner="@drawable/tv_banner"

@@ -3,11 +3,13 @@ import { createPortal } from "react-dom"
 import { Link, useSearchParams } from "react-router-dom"
 import { PosterCard } from "../components/Cards"
 import { usePinnedArt, useStageActions } from "../components/Stage"
-import { HomeIcon, LibraryIcon, SearchIcon } from "../components/Icons"
+import { HomeIcon, LibraryIcon, MicIcon, SearchIcon } from "../components/Icons"
 import { Loading, Problem } from "../components/Status"
 import * as api from "../lib/api"
 import { backdropSrc, primarySrc } from "../lib/images"
+import { placeFocus } from "../lib/remote"
 import type { Item } from "../lib/types"
+import { askVoice, listenOnce } from "../lib/voice"
 import { usePrefs, useSession } from "../session"
 
 const GROUPS: { title: string; types: string[] }[] = [
@@ -105,7 +107,13 @@ export function SearchPage() {
     [highlights],
   )
   const picksRef = useRef<HTMLDivElement>(null)
+  const micRef = useRef<HTMLButtonElement>(null)
   const [pickCount, setPickCount] = useState(PICK_LIMIT)
+  // Voice search: whether the recognizer's screen is up, what to say when it heard nothing, and
+  // the guard that keeps one press from starting a second session behind the first.
+  const [listening, setListening] = useState(false)
+  const [voiceNote, setVoiceNote] = useState("")
+  const asking = useRef(false)
   useLayoutEffect(() => {
     const node = picksRef.current
     if (!node) return
@@ -174,6 +182,33 @@ export function SearchPage() {
     setRecent(rememberSearch(term))
   }, [items.length, status, term])
 
+  /**
+   * Voice search: the television's own recognizer, opened for one search and nothing else.
+   *
+   * A press asks the device to listen; what it heard becomes the query in the field, which is the
+   * same query the keyboard types and the same search the page runs, so nothing about the results
+   * is different. The words stay in the field so they can be read and edited, and a recognizer that
+   * heard nothing - or is not there at all - says so in a line under the field while typing carries
+   * on working. One press asks once: `asking` is a guard rather than a disabled button, because a
+   * disabled control drops the remote's focus.
+   */
+  async function startVoice() {
+    if (asking.current) return
+    asking.current = true
+    setVoiceNote("")
+    setListening(true)
+    try {
+      const answer = await askVoice(listenOnce)
+      if (answer.text) setText(answer.text)
+      else if (!answer.cancelled) setVoiceNote(answer.error)
+    } finally {
+      asking.current = false
+      setListening(false)
+      // The recognizer's screen has closed: the remote belongs back on the control that opened it.
+      if (micRef.current) placeFocus(micRef.current)
+    }
+  }
+
   return (
     <div className="search-screen">
       <SearchAtmosphere urls={backdrops} quiet={Boolean(term)} />
@@ -185,15 +220,33 @@ export function SearchPage() {
               <h1>Find something</h1>
             </div>
           </header>
-          <label className="field search-page search-field">
-            <SearchIcon size={18} />
-            <input
-              value={text}
-              onChange={(event) => setText(event.target.value)}
-              placeholder="Titles, people"
-              aria-label="Search"
-            />
-          </label>
+          <div className="search-voice-row">
+            <button
+              ref={micRef}
+              className={listening ? "search-voice listening" : "search-voice"}
+              type="button"
+              aria-label={listening ? "Listening" : "Voice search"}
+              aria-pressed={listening}
+              onClick={() => void startVoice()}
+            >
+              <MicIcon size={22} />
+              <span className="search-voice-label">{listening ? "Listening…" : "Voice"}</span>
+            </button>
+            <label className="field search-page search-field">
+              <SearchIcon size={18} />
+              <input
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+                placeholder="Titles, people"
+                aria-label="Search"
+              />
+            </label>
+          </div>
+          {voiceNote && (
+            <p className="search-voice-note" role="status">
+              {voiceNote}
+            </p>
+          )}
           <div className="keypad" aria-label="On-screen keyboard">
             {KEY_ROWS.map((row) => (
               <div key={row} className="key-row">
