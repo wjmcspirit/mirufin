@@ -1643,6 +1643,582 @@ function testPlayerPopup() {
 
 
 /**
+ * A settings row as the page draws it: one `.settings-row` band with unlike controls on its line.
+ * The controls are placed individually so a check can speak about their columns; the
+ * `.settings-choice` wrappers are the real control groups, but they are not bands of their own -
+ * the row is what the navigation engine sees.
+ */
+interface SettingsLine {
+  id: string
+  top: number
+  el: El
+  controls: El[]
+}
+
+function settingsLine(main: El, id: string, top: number): SettingsLine {
+  const el = new El("div", "settings-row settings-rows").attr("data-row", id)
+  el.place(top, 100, 1280, 72)
+  const line: SettingsLine = { id, top, el, controls: [] }
+  main.add(el)
+  return line
+}
+
+function settingsChoice(line: SettingsLine, key: string, labels: string[], selected: number, left: number, gap = 90, width = 80) {
+  const group = new El("div", "settings-choice").attr("data-key", key)
+  const buttons = labels.map((label, index) => {
+    const button = new El("button", "btn tiny")
+    button.text = label
+    button.place(line.top + 14, left + index * gap, width, 44)
+    button.attr("data-choice", "")
+    button.attr("data-key", key)
+    button.attr("data-value", label)
+    if (index === selected) button.attr("aria-pressed", "true")
+    group.add(button)
+    line.controls.push(button)
+    return button
+  })
+  line.el.add(group)
+  return buttons
+}
+
+function settingsMove(line: SettingsLine, left: number) {
+  const group = new El("div", "settings-choice settings-move")
+  const up = new El("button", "btn tiny").attr("data-move", "-1").attr("data-row", line.id)
+  const down = new El("button", "btn tiny").attr("data-move", "1").attr("data-row", line.id)
+  up.text = "↑"
+  down.text = "↓"
+  up.place(line.top + 14, left, 80, 44)
+  down.place(line.top + 14, left + 90, 80, 44)
+  group.add(up, down)
+  line.el.add(group)
+  line.controls.push(up, down)
+  return { up, down }
+}
+
+function settingsSwitch(line: SettingsLine, key: string, left = 800) {
+  const holder = new El("label", "switch")
+  const input = new El("input", "").attr("type", "checkbox").attr("data-key", key)
+  input.place(line.top + 20, left, 44, 30)
+  holder.add(input)
+  line.el.add(holder)
+  line.controls.push(input)
+  return input
+}
+
+function settingsButton(line: SettingsLine, label: string, action: string, left: number, width = 160) {
+  const button = new El("button", "btn")
+  button.text = label
+  button.attr("data-action", action)
+  button.place(line.top + 14, left, width, 44)
+  line.el.add(button)
+  line.controls.push(button)
+  return button
+}
+
+function settingsStepper(line: SettingsLine, key: string, left: number) {
+  const group = new El("div", "settings-stepper")
+  const minus = new El("button", "btn tiny").attr("data-step", "-1").attr("data-key", key)
+  const plus = new El("button", "btn tiny").attr("data-step", "1").attr("data-key", key)
+  minus.text = "−"
+  plus.text = "+"
+  minus.place(line.top + 14, left, 60, 44)
+  plus.place(line.top + 14, left + 120, 60, 44)
+  group.add(minus, plus)
+  line.el.add(group)
+  line.controls.push(minus, plus)
+  return { minus, plus }
+}
+
+function settingsPick(line: SettingsLine, key: string, left: number) {
+  const trigger = new El("button", "settings-value").attr("data-action", "pick").attr("data-key", key)
+  trigger.text = "Open"
+  trigger.place(line.top + 14, left, 260, 44)
+  line.el.add(trigger)
+  line.controls.push(trigger)
+  return trigger
+}
+
+
+/**
+ * Settings with the remote: a Customize page made of nested, multi-control rows, and enough of the
+ * other sections to prove the same model reaches them.
+ *
+ * The reported defect was that Left and Right were kept by the controls themselves. A choice moved
+ * its value instead of letting the viewer look at the options; a stepper never let focus reach the
+ * increase button; and a move control reordered the row instead of moving to its other button, so
+ * the down button could not be reached at all by the D-pad and the row jumped while navigating.
+ * These checks walk the row, activate with OK, and verify the rows below keep a sensible column.
+ */
+function testSettingsNavigation() {
+  clearSeats()
+  resetFocusState()
+  const page = shell()
+  const main = page.main
+  const state = {
+    hero: true,
+    libraryShape: "Poster",
+    posterSize: "Medium",
+    visible: "Show",
+    shape: "Poster",
+    rewind: 10,
+    order: [] as string[],
+    actions: [] as string[],
+  }
+  const lines: SettingsLine[] = []
+  const byKey = new Map<string, El[]>()
+  const rowByButton = new Map<El, SettingsLine>()
+  const remember = (key: string, buttons: El[]) => byKey.set(key, buttons)
+
+  const head = new El("header", "settings-head")
+  head.place(60, 100, 1280, 60)
+  const back = new El("button", "settings-back")
+  back.text = "Settings"
+  back.place(70, 100, 120, 44)
+  head.add(back)
+  main.add(head)
+
+  const featured = settingsLine(main, "featured", 120)
+  lines.push(featured)
+  const heroSwitch = settingsSwitch(featured, "hero")
+
+  const library = settingsLine(main, "library", 200)
+  lines.push(library)
+  const libraryShapes = settingsChoice(library, "libraryShape", ["Poster", "Landscape"], 0, 600)
+  remember("libraryShape", libraryShapes)
+
+  const homeLine = (id: string, top: number) => {
+    const line = settingsLine(main, id, top)
+    lines.push(line)
+    const visible = settingsChoice(line, `${id}.visible`, ["Show", "Hide"], 0, 450)
+    const shape = settingsChoice(line, `${id}.shape`, ["Poster", "Landscape"], 0, 650)
+    const move = settingsMove(line, 850)
+    remember(`${id}.visible`, visible)
+    remember(`${id}.shape`, shape)
+    rowByButton.set(move.up, line)
+    rowByButton.set(move.down, line)
+    return { line, visible, shape, ...move }
+  }
+  const a = homeLine("home-a", 300)
+  const b = homeLine("home-b", 380)
+  const c = homeLine("home-c", 460)
+
+  const poster = settingsLine(main, "poster", 540)
+  lines.push(poster)
+  const posterSizes = settingsChoice(poster, "posterSize", ["Small", "Medium", "Large"], 1, 600)
+  remember("posterSize", posterSizes)
+
+  const homeSize = settingsLine(main, "home-size", 620)
+  lines.push(homeSize)
+  const homeSizes = settingsChoice(homeSize, "home-size", ["Small", "Medium", "Large"], 1, 600)
+  remember("home-size", homeSizes)
+
+  const nav = settingsLine(main, "nav-a", 700)
+  lines.push(nav)
+  const navVisible = settingsChoice(nav, "nav-a.visible", ["Show", "Hide"], 0, 500)
+  const navMove = settingsMove(nav, 700)
+  remember("nav-a.visible", navVisible)
+  rowByButton.set(navMove.up, nav)
+  rowByButton.set(navMove.down, nav)
+
+  const titles = settingsLine(main, "titles", 780)
+  lines.push(titles)
+  settingsSwitch(titles, "titles")
+
+  const logo = settingsLine(main, "logo", 860)
+  lines.push(logo)
+  settingsSwitch(logo, "logo")
+
+  const ratings = settingsLine(main, "ratings", 940)
+  lines.push(ratings)
+  const ratingsPick = settingsPick(ratings, "ratings", 750)
+
+  const playback = settingsLine(main, "playback", 1020)
+  lines.push(playback)
+  const rewind = settingsStepper(playback, "rewind", 700)
+
+  const server = new El("div", "actions")
+  server.place(1100, 100, 1280, 72)
+  const serverButtons = ["Test connection", "Sign out", "Forget server"].map((label, index) => {
+    const button = new El("button", "btn")
+    button.text = label
+    button.attr("data-action", label.toLowerCase().replace(/\s+/g, "-"))
+    button.place(1114, 400 + index * 180, 160, 44)
+    server.add(button)
+    return button
+  })
+  main.add(server)
+
+  const about = settingsLine(main, "about", 1180)
+  lines.push(about)
+  const aboutButton = settingsButton(about, "Check for updates", "update", 700, 220)
+  state.order = lines.filter((line) => line.id.startsWith("home-") && line.id !== "home-size").map((line) => line.id)
+
+  function shiftRects(dy: number) {
+    visit(main, (node) => {
+      node.rect = { ...node.rect, top: node.rect.top - dy, bottom: node.rect.bottom - dy }
+    })
+  }
+
+  function sync(before: number) {
+    const dy = main.scrollTop - before
+    if (dy !== 0) shiftRects(dy)
+  }
+
+  function focus(node: El) {
+    const before = main.scrollTop
+    placeFocus(node)
+    sync(before)
+  }
+
+  function step(key: string) {
+    const before = main.scrollTop
+    moveFocus(key)
+    sync(before)
+  }
+
+  function resetViewport() {
+    if (!main.scrollTop) return
+    shiftRects(-main.scrollTop)
+    main.scrollTop = 0
+  }
+
+  function reorder(button: El, delta: number) {
+    const row = rowByButton.get(button)
+    if (!row) return
+    const index = lines.indexOf(row)
+    const target = lines[index + delta]
+    if (!target) return
+    const rowTop = row.top
+    const targetTop = target.top
+    const moveLine = (line: SettingsLine, top: number) => {
+      const dy = top - line.top
+      line.top = top
+      line.el.rect = { ...line.el.rect, top: top, bottom: top + line.el.rect.height }
+      for (const control of line.controls) {
+        control.rect = { ...control.rect, top: control.rect.top + dy, bottom: control.rect.bottom + dy }
+      }
+    }
+    moveLine(row, targetTop)
+    moveLine(target, rowTop)
+    lines[index] = target
+    lines[index + delta] = row
+    const at = main.children.indexOf(row.el)
+    const other = main.children.indexOf(target.el)
+    main.children[at] = target.el
+    main.children[other] = row.el
+    state.order = lines.filter((line) => line.id.startsWith("home-") && line.id !== "home-size").map((line) => line.id)
+    window.requestAnimationFrame(() => {
+      if (button.isConnected) placeFocus(button)
+    })
+  }
+
+  function onClick(event: Event) {
+    const target = event.target
+    if (!(target instanceof El)) return
+    const key = target.getAttribute("data-key") || ""
+    const value = target.getAttribute("data-value")
+    if (target.tagName === "INPUT" && key === "hero") {
+      state.hero = !state.hero
+      return
+    }
+    if (value != null && key) {
+      if (key === "libraryShape") state.libraryShape = value
+      else if (key === "posterSize") state.posterSize = value
+      else if (key === "home-a.visible") state.visible = value
+      else if (key === "home-a.shape") state.shape = value
+      for (const sibling of byKey.get(key) || []) sibling.attr("aria-pressed", sibling === target ? "true" : "false")
+      return
+    }
+    const increment = target.getAttribute("data-step")
+    if (increment) {
+      state.rewind += Number(increment)
+      return
+    }
+    const move = target.getAttribute("data-move")
+    if (move) {
+      reorder(target, Number(move))
+      return
+    }
+    const action = target.getAttribute("data-action")
+    if (action) state.actions.push(action)
+  }
+  window.addEventListener("click", onClick)
+  noteRoute("/settings/customize")
+  // A Customize row is one line of controls: every option and both move buttons are stops.
+  focus(a.visible[0])
+  const right = [a.visible[1], a.shape[0], a.shape[1], a.up, a.down]
+  for (const expected of right) {
+    step("ArrowRight")
+    check(`Right reaches ${expected.text} in the Home row`, active === expected, label(active))
+  }
+  step("ArrowRight")
+  check("Right stays at the end of the row", active === a.down, label(active))
+  check("browsing the row changed no setting", state.visible === "Show" && state.shape === "Poster")
+  for (let press = 0; press < 5; press += 1) step("ArrowLeft")
+  check("Left walks the row back to its first control", active === a.visible[0], label(active))
+
+  // Up from the first row reaches the section's Back chip, and Down comes back to the row.
+  focus(heroSwitch)
+  step("ArrowUp")
+  check("Up from the first row reaches the Back chip", active === back, label(active))
+  step("ArrowDown")
+  check("and Down comes back to the first row", active === heroSwitch, label(active))
+
+  // Down and Up land on the control at the same horizontal position, not at a fixed ordinal.
+  focus(a.visible[0])
+  step("ArrowDown")
+  check("Down keeps the visibility column", active === b.visible[0], label(active))
+  focus(a.shape[0])
+  step("ArrowDown")
+  check("Down keeps the shape column", active === b.shape[0], label(active))
+  focus(a.shape[1])
+  step("ArrowDown")
+  check("and the other shape column", active === b.shape[1], label(active))
+  focus(a.down)
+  step("ArrowDown")
+  check("and the move-down column", active === b.down, label(active))
+  step("ArrowUp")
+  check("Up comes back to the same move-down control", active === a.down, label(active))
+  focus(a.shape[0])
+  step("ArrowUp")
+  check(
+    "Up enters the row above at its horizontal position rather than its first control",
+    active !== null && [libraryShapes[0], libraryShapes[1]].includes(active),
+    label(active),
+  )
+
+  // Library shape is the other two-option segmented control above the Home rows.
+  focus(libraryShapes[0])
+  step("ArrowRight")
+  check("Right walks the library shape to Landscape", active === libraryShapes[1], label(active))
+  step("ArrowLeft")
+  check("and Left walks it back", active === libraryShapes[0], label(active))
+
+  // The three poster sizes are three controls of the same row, all reachable in order.
+  focus(posterSizes[0])
+  step("ArrowRight")
+  check("Right walks the poster sizes to Medium", active === posterSizes[1], label(active))
+  step("ArrowRight")
+  check("and on to Large", active === posterSizes[2], label(active))
+  step("ArrowRight")
+  check("and stops at the last size", active === posterSizes[2], label(active))
+  step("ArrowLeft")
+  check("Left walks the sizes back", active === posterSizes[1], label(active))
+
+  // OK activates a switch in place and the checkbox keeps the focus.
+  focus(heroSwitch)
+  activate(heroSwitch)
+  check("OK flips the focused switch", state.hero === false, String(state.hero))
+  check("and the switch keeps the focus", active === heroSwitch, label(active))
+
+  // OK is what applies a choice, and the focused control keeps the focus.
+  focus(a.visible[1])
+  activate(a.visible[1])
+  check("OK applies the focused visibility choice", state.visible === "Hide", state.visible)
+  check("the chosen option is the one marked", a.visible[1].getAttribute("aria-pressed") === "true")
+  check("and the focus stays on it", active === a.visible[1], label(active))
+  focus(a.shape[1])
+  activate(a.shape[1])
+  check("OK applies the focused shape choice", state.shape === "Landscape", state.shape)
+  focus(posterSizes[2])
+  activate(posterSizes[2])
+  check("OK applies the focused poster size", state.posterSize === "Large", state.posterSize)
+  check("and the focus stays on the size that was chosen", active === posterSizes[2], label(active))
+
+  // The stepper's increase button is now a stop of its own; OK, not walking, changes the value.
+  focus(rewind.minus)
+  step("ArrowRight")
+  check("Right reaches the increase button", active === rewind.plus, label(active))
+  step("ArrowRight")
+  check("and stays there at the end of the row", active === rewind.plus, label(active))
+  const beforeRewind = state.rewind
+  activate(rewind.plus)
+  check("OK steps the value", state.rewind === beforeRewind + 1, String(state.rewind))
+  check("and keeps the increase button focused", active === rewind.plus, label(active))
+
+  // A move button is reached with Left/Right and applied with OK; the row does not jump while
+  // the viewer is walking to it.
+  focus(a.down)
+  const beforeOrder = state.order.join(",")
+  activate(a.down)
+  run(20)
+  check("OK moves the row down its list", state.order[0] === "home-b" && state.order[1] === "home-a", state.order.join(","))
+  check("the row had not moved while the viewer walked to the button", beforeOrder === "home-a,home-b,home-c", beforeOrder)
+  check("and focus stays on the move button after the row changes places", active === a.down, label(active))
+
+  // The bottom of the page scrolls to the focused row, and the other sections are reached by the
+  // same Up/Down and Left/Right rules.
+  resetViewport()
+  focus(ratingsPick)
+  const beforeScroll = main.scrollTop
+  step("ArrowDown")
+  check("Down reaches the playback stepper", active === rewind.minus || active === rewind.plus, label(active))
+  check("and the page scrolls to keep it visible", main.scrollTop > beforeScroll, `${beforeScroll} -> ${main.scrollTop}`)
+  const stepperRect = active.getBoundingClientRect()
+  check(
+    "the focused stepper control is inside the page window",
+    stepperRect.top >= 0 && stepperRect.bottom <= 1080,
+    `${stepperRect.top}..${stepperRect.bottom}`,
+  )
+  step("ArrowDown")
+  check("Down reaches the Server actions", active !== null && serverButtons.includes(active), label(active))
+  const serverRect = active.getBoundingClientRect()
+  check(
+    "and that action is inside the page window",
+    serverRect.top >= 0 && serverRect.bottom <= 1080,
+    `${serverRect.top}..${serverRect.bottom}`,
+  )
+  step("ArrowDown")
+  check("Down reaches the About action", active === aboutButton, label(active))
+  const aboutRect = aboutButton.getBoundingClientRect()
+  check(
+    "the About row is scrolled fully into view",
+    aboutRect.top >= 0 && aboutRect.bottom <= 1080,
+    `${aboutRect.top}..${aboutRect.bottom}`,
+  )
+  step("ArrowUp")
+  check("Up comes back to the Server actions", active !== null && serverButtons.includes(active), label(active))
+
+  // The rows with a single control are not a dead end either: their buttons are still stops.
+  focus(serverButtons[0])
+  step("ArrowRight")
+  check("Right walks the Server actions", active === serverButtons[1], label(active))
+  step("ArrowRight")
+  check("and the last one", active === serverButtons[2], label(active))
+  step("ArrowRight")
+  check("and stops at the end of that row", active === serverButtons[2], label(active))
+  step("ArrowLeft")
+  check("Left walks them back", active === serverButtons[1], label(active))
+  activate(serverButtons[1])
+  check("OK activates the focused Server action", state.actions.includes("sign-out"), state.actions.join(","))
+
+  // The wiring behind the checks above: the three multi-control rows are ordinary controls now,
+  // and the section's Back owns the press itself.
+  const settings = readFileSync("src/pages/Settings.tsx", "utf8")
+  const controls = readFileSync("src/components/SettingsControls.tsx", "utf8")
+  const remote = readFileSync("src/lib/remote.ts", "utf8")
+  const css = readFileSync("src/styles.css", "utf8")
+  check(
+    "choices, steppers and move buttons leave Left and Right to the focus walk",
+    (controls.match(/useArrows</g) || []).length === 3,
+    `${(controls.match(/useArrows</g) || []).length} registrations`,
+  )
+  check(
+    "a moved row hands the remote back to the same button",
+    /function move\(button: HTMLButtonElement, delta: number\)[\s\S]{0,220}?placeFocus\(button\)/.test(controls),
+    "SettingsControls.tsx",
+  )
+  check(
+    "Back from a section returns to the Settings list",
+    /function backToSettings\(\) \{\s*navigate\("\/settings", \{ replace: true \}\)\s*\}/.test(settings) &&
+      /ownBack\(\(\) => \{[\s\S]{0,320}?noteBackKeydown\(\)[\s\S]{0,80}?backToSettings\(\)/.test(settings) &&
+      /onClick=\{backToSettings\}/.test(settings),
+    "Settings.tsx",
+  )
+  check(
+    "a section opens on its first enabled control",
+    /\.settings-section button:not\(\[disabled\]\), \.settings-section input:not\(\[disabled\]\)/.test(settings),
+    "Settings.tsx",
+  )
+  check(
+    "a busy update button stays in the focus order",
+    /aria-disabled=\{Boolean\(updating\)\}/.test(settings) && !/^\s+disabled=\{Boolean\(updating\)\}/m.test(settings),
+    "Settings.tsx",
+  )
+  check("and the busy state is drawn", /\.settings \.btn\[aria-disabled="true"\]/.test(css), "styles.css")
+  check(
+    "a selector opens on its chosen value and gives the remote back when it closes",
+    /const selected = list\?\.querySelector<HTMLElement>\('button\[aria-pressed="true"\]'\)/.test(controls) &&
+      /if \(selected\) placeFocus\(selected\)/.test(controls) &&
+      /if \(lost && trigger\.current\) placeFocus\(trigger\.current\)/.test(controls),
+    "SettingsControls.tsx",
+  )
+  check(
+    "a settings row is entered at the control in the same column",
+    /band\.classList\.contains\("settings-row"\)/.test(remote),
+    "remote.ts",
+  )
+  check(
+    "and the whole row is kept in view",
+    /node\.closest<HTMLElement>\("\.settings-row"\)/.test(remote),
+    "remote.ts",
+  )
+  check(
+    "a section's Back chip is part of the same row walk",
+    /\.settings-head/.test(remote) && /band\.classList\.contains\("settings-head"\)/.test(remote),
+    "remote.ts",
+  )
+}
+
+/** The Settings landing page: one card per category, in a list the remote walks. */
+function settingsCards(main: El) {
+  const menu = new El("nav", "settings-menu")
+  const names = ["Customize", "Appearance", "Playback", "Server", "About"]
+  const cards = names.map((name, index) => {
+    const card = new El("a", "settings-card").attr("href", `/settings/${name.toLowerCase()}`)
+    card.text = name
+    card.place(200 + index * 90, 100, 860, 72)
+    menu.add(card)
+    return card
+  })
+  main.add(menu)
+  return cards
+}
+
+/**
+ * Back from a section returns to the Settings list with the remote on the category that opened
+ * it. The old handler was `navigate(-1)`, which left Settings entirely for a section opened from a
+ * deep link or after a reload; the section now owns the press and names its parent route.
+ */
+function testSettingsBack() {
+  clearSeats()
+  resetFocusState()
+  const landing = shell()
+  const cards = settingsCards(landing.main)
+  noteRoute("/settings")
+  placeFocus(cards[0])
+  moveFocus("ArrowDown")
+  check("Down walks the Settings categories", active === cards[1], label(active))
+  moveFocus("ArrowUp")
+  check("and Up walks them back", active === cards[0], label(active))
+  placeFocus(cards[0])
+  activate(cards[0])
+
+  const section = shell()
+  const line = settingsLine(section.main, "featured", 120)
+  settingsSwitch(line, "hero")
+  noteRoute("/settings/customize")
+
+  let returned = false
+  const release = ownBack(() => {
+    returned = true
+    return true
+  })
+  check("a Settings section claims Back before the app", takeBack() === true && returned)
+  release()
+
+  const back = shell()
+  const again = settingsCards(back.main)
+  noteRoute("/settings")
+  let gaveUp = false
+  const cancel = restoreSeat("/settings", false, () => {
+    gaveUp = true
+  })
+  run(100)
+  check("Back returns focus to the category the section was opened from", active === again[0], label(active))
+  check("and the generic landing was not needed", !gaveUp)
+  cancel()
+}
+
+
+
+
+
+
+
+
+
+/**
  * The season page's episode row with the remote walking it: the row itself is what has to
  * scroll, and the episode the remote lands on has to be inside what the row is showing.
  *
@@ -2312,6 +2888,8 @@ testLibraryToolbar()
 testLibraryToolbarShapes()
 testFavoritesWalk()
 testPlayerPopup()
+testSettingsNavigation()
+testSettingsBack()
 testEpisodeRowScroll()
 testEpisodeRowPlays()
 testSeasonBack()

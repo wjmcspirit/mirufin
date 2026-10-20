@@ -7,7 +7,7 @@ import { Choice, Pick, SettingsRow, Stepper, Switch, type Option } from "../comp
 import { SettingsBackdrop } from "../components/SettingsBackdrop"
 import * as api from "../lib/api"
 import { CARD_SIZES, CARD_STYLES, mergeHomeRows } from "../lib/homeLayout"
-import { placeFocus } from "../lib/remote"
+import { noteBackKeydown, ownBack, placeFocus } from "../lib/remote"
 import { clearStartupProblem, startupDiagnostics } from "../lib/startup"
 import type { Preferences, SegmentType, SkipMode } from "../lib/types"
 import { APP_VERSION, installRelease, isNewerVersion, latestRelease } from "../lib/version"
@@ -143,12 +143,38 @@ export function SettingsPage() {
   // where the work is, with the chip one press up.
   useEffect(() => {
     if (!active) return
-    const node = document.querySelector<HTMLElement>(".settings-section button, .settings-section input, .settings-section select")
+    const node = document.querySelector<HTMLElement>(
+      ".settings-section button:not([disabled]), .settings-section input:not([disabled]), .settings-section select:not([disabled])",
+    )
     if (!node) return
     const focused = document.activeElement
     const unclaimed = !(focused instanceof HTMLElement) || focused === document.body || Boolean(focused.closest(".settings-back"))
     if (unclaimed) placeFocus(node)
   }, [active])
+
+  /**
+   * A section's Back goes to the Settings list, not to whatever history happens to hold.
+   *
+   * `navigate(-1)` was right only when the viewer had just come from the list. A section opened
+   * from a deep link, or after a reload, has no such entry, and Back left Settings entirely. The
+   * press is registered in the shared overlay layer so the native Back path is claimed too.
+   */
+  function backToSettings() {
+    navigate("/settings", { replace: true })
+  }
+
+  useEffect(() => {
+    if (!active) return
+    return ownBack(() => {
+      // Told to the shared layer so the native echo of a keydown Back cannot act on the landing
+      // page this press has just opened - one press must not leave Settings entirely.
+      noteBackKeydown()
+      backToSettings()
+      return true
+    })
+    // backToSettings is a declaration of this render; the section is what changes the answer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, navigate])
 
   async function testConnection() {
     setMessage("")
@@ -210,7 +236,7 @@ export function SettingsPage() {
     <div className="settings">
       <SettingsBackdrop />
       <header className="settings-head">
-        <button className="settings-back" type="button" onClick={() => navigate(-1)}>
+        <button className="settings-back" type="button" onClick={backToSettings}>
           <ChevronIcon direction="left" size={18} />
           Settings
         </button>
@@ -302,8 +328,9 @@ export function SettingsPage() {
               <button
                 className="btn btn-primary"
                 type="button"
-                disabled={Boolean(updating)}
+                aria-disabled={Boolean(updating)}
                 onClick={() => {
+                  if (updating) return
                   setUpdating("Downloading…")
                   void installRelease(available, (percent) => setUpdating(percent > 0 ? `Downloading ${percent}%` : "Downloading…"))
                     .then(() => setUpdating(""))

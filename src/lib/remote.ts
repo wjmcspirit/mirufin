@@ -221,6 +221,17 @@ function placeReveal(node: HTMLElement) {
   if (!(main instanceof HTMLElement)) return
   const view = () => main.getBoundingClientRect()
   const hero = node.closest(".hero, .detail-hero")
+  // A settings row is one question: its name, its hint and its control belong on screen together.
+  // The control alone is not enough context on a long page, so a row that is not wholly visible is
+  // parked near the top; a row already in view is left where it is and moving along it does not
+  // scroll the page at all.
+  const settingsRow = node.closest<HTMLElement>(".settings-row")
+  if (settingsRow) {
+    const rect = settingsRow.getBoundingClientRect()
+    const box = view()
+    if (rect.top < box.top + 8 || rect.bottom > box.bottom - 16) park(main, settingsRow, 16)
+    return
+  }
   // A row is brought into view as a whole - its heading, its strip and whatever it carries
   // with it - rather than just the control that took focus. A season's episodes are the block
   // they belong to: parking it puts the episode the remote is on, the details that follow it
@@ -374,7 +385,7 @@ function stepList(current: FocusItem, items: FocusItem[], key: "ArrowUp" | "Arro
 }
 
 const BAND =
-  ".scroller, .grid, .card-board, .episodes, .library-icons, .letter-row, .filter-row, .actions, .meta-links, .settings-menu, .settings-row, .choice, .seconds, .search-picks, .search-hits"
+  ".scroller, .grid, .card-board, .episodes, .library-icons, .letter-row, .filter-row, .actions, .meta-links, .settings-head, .settings-menu, .settings-row, .choice, .seconds, .search-picks, .search-hits"
 
 function containerOf(node: HTMLElement) {
   return node.closest<HTMLElement>(BAND)
@@ -400,6 +411,7 @@ function kind(band: HTMLElement): "strip" | "grid" | "list" {
     band.classList.contains("letter-row") ||
     band.classList.contains("meta-links") ||
     band.classList.contains("settings-row") ||
+    band.classList.contains("settings-head") ||
     band.classList.contains("choice") ||
     band.classList.contains("seconds")
   ) {
@@ -476,7 +488,25 @@ function landing(band: HTMLElement, items: FocusItem[], from: FocusItem, dir: nu
   // A stack is entered at the end it is walked from: Down arrives on its first control, Up on its
   // last, so a press never lands in the middle of a row it has not visited yet.
   if (stacked(band)) return dir < 0 ? list[list.length - 1] : list[0]
-  if (kind(band) === "strip") return list[Math.min(lane, list.length - 1)]
+  if (kind(band) === "strip") {
+    // A settings row is a line of unlike controls - a switch, one or two groups of choices, a
+    // stepper or the move buttons - and its rows do not all hold the same number of them. The
+    // control nearest the one the viewer left is the horizontal position they expect; an ordinal
+    // in the row would land on a different question whenever the row above had more buttons.
+    if (band.classList.contains("settings-row")) {
+      let best = list[0]
+      let bestDx = Number.POSITIVE_INFINITY
+      for (const item of list) {
+        const dx = Math.abs(item.cx - from.cx)
+        if (dx < bestDx) {
+          best = item
+          bestDx = dx
+        }
+      }
+      return best
+    }
+    return list[Math.min(lane, list.length - 1)]
+  }
   /* A grid is read from its own beginning. A press of Down from a band above it - a heading, the
      library toolbar, the top of a page - lands on the first item of the first row the viewer can
      see, which is where the grid starts. Answering with the item nearest the control they left

@@ -2485,6 +2485,12 @@ select {
   /* The button's own elevation, kept: the focus state adds no glow of its own. */
   box-shadow: 0 10px 24px rgba(80, 90, 255, 0.28);
 }
+/* A control that is busy stays where it is. Removing it from the focus order - `disabled` - drops
+   the remote on the page body, so it is marked busy and guards its own click instead. */
+.settings .btn[aria-disabled="true"] { opacity: 0.6; }
+.settings .btn[aria-disabled="true"]:focus,
+.settings .btn[aria-disabled="true"]:focus-visible,
+.settings .btn[aria-disabled="true"].dpad-focus { opacity: 1; }
 .settings select:focus,
 .settings select:focus-visible,
 .settings select.dpad-focus {
@@ -2611,6 +2617,7 @@ select {
      4K rules below scale the whole group rather than only its text. */
   gap: 0.7em;
   padding-block: 0.6em;
+  min-width: 0;
 }
 .settings-row.settings-rows > .settings-copy { padding-right: 0.4em; }
 /* Two questions share these rows - whether a row shows, and what shape it is - so a
@@ -2670,6 +2677,7 @@ select {
   align-items: center;
   gap: 0.35em;
   min-height: 2.6em;
+  min-width: 0;
 }
 .settings-choice .btn.tiny {
   align-self: stretch;

@@ -7,11 +7,11 @@ import { ChevronIcon } from "./Icons"
 /**
  * The controls the Settings page is built from.
  *
- * Every one of them is reachable with the remote alone: Up/Down walks between rows, and
- * Left/Right moves the value of the control that holds focus (a slider, a choice) instead
- * of walking the focus off the end of the row. The global handler in `RemoteNav` still
- * owns every key - these controls only register how they answer Left/Right, and how the
- * one of them that opens a list answers Back.
+ * Every one of them is reachable with the remote alone: Up/Down walks between logical setting
+ * rows, and Left/Right walks the controls inside the current row - the options of a choice, the
+ * two ends of a stepper, or a row's move buttons. OK activates the control that holds focus, so
+ * browsing a row never changes a value by itself. A switch and a picker are the only control in
+ * their row: they keep their own Left/Right shortcut because there is no other control to walk to.
  */
 
 export interface Option<T> {
@@ -72,9 +72,10 @@ export function Switch({ label, checked, onChange }: { label: string; checked: b
 }
 
 /**
- * A few short choices, all of them on screen. The chosen one is highlighted, and
- * Left/Right moves the choice one step and takes focus with it - at either end the press
- * is handed back, so it can move on to the next control in the row.
+ * A few short choices, all of them on screen. Every option is a control in the row, so Left and
+ * Right walk from one option to the next and OK chooses the one holding the focus. Nothing is
+ * applied merely by passing over it: the chosen option stays visible while the viewer looks at
+ * the rest.
  */
 export function Choice<T extends string | number>({ label, value, options, onChange }: {
   label: string
@@ -82,18 +83,8 @@ export function Choice<T extends string | number>({ label, value, options, onCha
   options: Option<T>[]
   onChange: (value: T) => void
 }) {
-  const ref = useArrows<HTMLDivElement>((key) => {
-    const nodes = [...(ref.current?.querySelectorAll<HTMLElement>("[data-choice]") || [])]
-    const seat = nodes.findIndex((node) => node === document.activeElement)
-    const base = seat >= 0 ? seat : options.findIndex((option) => option.value === value)
-    const next = base + (key === "ArrowRight" ? 1 : -1)
-    if (base < 0 || next < 0 || next >= options.length) return false
-    onChange(options[next].value)
-    if (nodes[next]) placeFocus(nodes[next])
-    return true
-  })
   return (
-    <div className="settings-choice" ref={ref} role="group" aria-label={label}>
+    <div className="settings-choice" role="group" aria-label={label}>
       {options.map((option) => (
         <button
           key={String(option.value)}
@@ -111,8 +102,9 @@ export function Choice<T extends string | number>({ label, value, options, onCha
 }
 
 /**
- * A number in fixed steps. Left/Right is the slider - the value moves while focus stays
- * on the control - and the buttons are there for OK and for a mouse.
+ * A number in fixed steps. The two buttons are the controls in the row: Left and Right walk
+ * between the decrease and increase buttons, and OK applies that step. The value itself is shown
+ * between them and never takes focus - walking past it does not change it.
  */
 export function Stepper({ label, value, min, max, step = 1, format, onChange }: {
   label: string
@@ -124,14 +116,8 @@ export function Stepper({ label, value, min, max, step = 1, format, onChange }: 
   onChange: (value: number) => void
 }) {
   const clamp = (next: number) => onChange(Math.min(max, Math.max(min, next)))
-  const ref = useArrows<HTMLDivElement>((key) => {
-    const next = value + (key === "ArrowRight" ? step : -step)
-    if (next < min || next > max) return false
-    onChange(next)
-    return true
-  })
   return (
-    <div className="settings-stepper" ref={ref} data-low={value <= min} data-high={value >= max}>
+    <div className="settings-stepper" data-low={value <= min} data-high={value >= max}>
       <button className="btn tiny" type="button" aria-label={`Decrease ${label}`} onClick={() => clamp(value - step)}>
         −
       </button>
@@ -277,9 +263,13 @@ export function Pick<T extends string | number>({ label, value, options, onChang
 }
 
 /**
- * Where a row sits in its list. Left/Right moves the row, and the buttons do the same
- * thing with OK, so a move never goes through a control that has just become disabled and
- * taken the focus with it.
+ * Where a row sits in its list. The two buttons are the controls in the row: Left and Right
+ * walk between them, and OK moves the row. Walking through a row never reorders anything - an
+ * order only changes when the viewer presses the button they chose.
+ *
+ * After a move the row has changed places under the button, so the button is handed back to
+ * `placeFocus` on the next frame: the remote stays on the same logical control and the page
+ * scrolls to the row's new position rather than leaving it off screen.
  */
 export function MoveControl({ label, index, count, onMove }: {
   label: string
@@ -287,18 +277,18 @@ export function MoveControl({ label, index, count, onMove }: {
   count: number
   onMove: (delta: number) => void
 }) {
-  const ref = useArrows<HTMLDivElement>((key) => {
-    const delta = key === "ArrowRight" ? 1 : -1
-    if (index + delta < 0 || index + delta >= count) return false
+  function move(button: HTMLButtonElement, delta: number) {
     onMove(delta)
-    return true
-  })
+    window.requestAnimationFrame(() => {
+      if (button.isConnected) placeFocus(button)
+    })
+  }
   return (
-    <div className="settings-choice settings-move" ref={ref} data-first={index === 0} data-last={index === count - 1}>
-      <button className="btn tiny" type="button" aria-label={`Move ${label} up`} onClick={() => onMove(-1)}>
+    <div className="settings-choice settings-move" data-first={index === 0} data-last={index === count - 1}>
+      <button className="btn tiny" type="button" aria-label={`Move ${label} up`} onClick={(event) => move(event.currentTarget, -1)}>
         ↑
       </button>
-      <button className="btn tiny" type="button" aria-label={`Move ${label} down`} onClick={() => onMove(1)}>
+      <button className="btn tiny" type="button" aria-label={`Move ${label} down`} onClick={(event) => move(event.currentTarget, 1)}>
         ↓
       </button>
     </div>
