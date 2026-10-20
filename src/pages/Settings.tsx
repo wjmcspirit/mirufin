@@ -86,7 +86,7 @@ const SUBTITLE_POSITIONS: Option<number>[] = [
 
 const SHAPES: Option<Preferences["libraryStyle"]>[] = CARD_STYLES.map((style) => ({ value: style.id, label: style.label }))
 
-const SIZES: Option<Preferences["librarySize"]>[] = CARD_SIZES.map((size) => ({ value: size.id, label: size.label }))
+const SIZES: Option<Preferences["posterSize"]>[] = CARD_SIZES.map((size) => ({ value: size.id, label: size.label }))
 
 type SectionId = "customize" | "appearance" | "playback" | "server" | "about"
 
@@ -164,7 +164,7 @@ export function SettingsPage() {
   function summarize(id: SectionId) {
     if (id === "customize") {
       const shape = CARD_STYLES.find((style) => style.id === prefs.libraryStyle)?.label || "Poster"
-      const size = CARD_SIZES.find((entry) => entry.id === prefs.librarySize)?.label || "Medium"
+      const size = CARD_SIZES.find((entry) => entry.id === prefs.posterSize)?.label || "Medium"
       const rows = mergeHomeRows(prefs.homeRows, libraries.map((library) => library.Id))
       const shown = rows.filter((row) => row.visible).length
       return `${shape} · ${size} · ${shown} of ${rows.length} rows`
@@ -351,8 +351,11 @@ function CustomizeSection() {
           <h2 id="size-heading">Poster and image size</h2>
           <p className="hint">How large posters and cards appear.</p>
         </header>
-        <SettingsRow title="Library size" hint="How large a library poster is.">
-          <Choice label="Library size" value={prefs.librarySize} options={SIZES} onChange={(librarySize) => setPrefs({ librarySize })} />
+        <SettingsRow
+          title="Poster size"
+          hint="How large posters and cards appear on every screen: Home's rows, the libraries, Collections, Favorites and Search. A home row can still be sized on its own below."
+        >
+          <Choice label="Poster size" value={prefs.posterSize} options={SIZES} onChange={(posterSize) => setPrefs({ posterSize })} />
         </SettingsRow>
         <HomeSizeGroup />
       </section>

@@ -1,4 +1,4 @@
-import { CARD_SIZES, CARD_STYLES, libraryRowId, mergeHomeRows, mergeNavItems, sectionTitle } from "../lib/homeLayout"
+import { CARD_SIZES, CARD_STYLES, libraryRowId, mergeHomeRows, mergeNavItems, rowSize, sectionTitle } from "../lib/homeLayout"
 import type { HomeCardSize, HomeCardStyle, HomeRowSetting, NavItemSetting } from "../lib/types"
 import { usePrefs, useSession } from "../session"
 import { Choice, MoveControl, type Option } from "./SettingsControls"
@@ -86,12 +86,13 @@ export function HomeLayoutGroup() {
 /** How large the poster in each home row is. */
 export function HomeSizeGroup() {
   const { rows, ready, patchRow } = useHomeRows()
+  const { prefs } = usePrefs()
   return (
     <div className="settings-block">
       <h3>Home row posters</h3>
       <p className="hint">
         {ready
-          ? "How large the poster in each row is. Small fits more across the screen; large shows fewer, bigger."
+          ? `How large the poster in each row is. Every row follows the poster size (${prefs.posterSize}) until you give it one of its own. Small fits more across the screen; large shows fewer, bigger.`
           : "Your home rows appear once the server's libraries load."}
       </p>
       {rows.map((row) => (
@@ -99,7 +100,12 @@ export function HomeSizeGroup() {
           <span className="settings-copy">
             <strong>{row.title}</strong>
           </span>
-          <Choice label={`${row.title} poster size`} value={row.size} options={SIZES} onChange={(size) => patchRow(row.id, { size })} />
+          <Choice
+            label={`${row.title} poster size`}
+            value={rowSize(row, prefs.posterSize)}
+            options={SIZES}
+            onChange={(size) => patchRow(row.id, { size })}
+          />
         </div>
       ))}
     </div>

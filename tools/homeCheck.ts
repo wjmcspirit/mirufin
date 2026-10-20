@@ -611,5 +611,66 @@ check(
   "Library.tsx and Stage.tsx",
 )
 
+/* One poster size, everywhere it is drawn. The size is a single saved preference - `posterSize`
+   in `lib/storage`, Medium on a fresh install - and every screen that draws posters reads that one
+   value rather than a default of its own, so changing it on Movies is what TV Shows, Collections,
+   Favorites, Search and a home row that has not been sized for itself draw with. What is checked
+   here is that reach, read from the pages themselves; `tools/check.ts` checks the value and what
+   an upgrade does with the one a viewer had already chosen. */
+const favoritesPage = readFileSync("src/pages/Favorites.tsx", "utf8")
+const searchPage = readFileSync("src/pages/Search.tsx", "utf8")
+const itemPage = readFileSync("src/pages/Item.tsx", "utf8")
+const editor = readFileSync("src/components/HomeEditor.tsx", "utf8")
+const settings = readFileSync("src/pages/Settings.tsx", "utf8")
+check(
+  "the library grid draws at the one shared poster size, and its toolbar changes that one value",
+  libraryPage.includes("const size: HomeCardSize = prefs.posterSize") &&
+    libraryPage.includes("className={`grid ${style} size-${size}`}") &&
+    libraryPage.includes("setPrefs({ posterSize: option })") &&
+    !libraryPage.includes("librarySize"),
+  "Library.tsx",
+)
+check(
+  "Home's rows draw at it too, unless the viewer sized that row for itself",
+  homePage.includes("const size = rowSize(section, prefs.posterSize)") &&
+    homePage.includes("className={`size-${size}`}") &&
+    !homePage.includes("section.size"),
+  "Home.tsx",
+)
+check(
+  "and a screen with no size control of its own still draws at it: favorites, search results and a collection's own page",
+  favoritesPage.includes("className={`card-board size-${prefs.posterSize}`}") &&
+    favoritesPage.includes("size={prefs.posterSize}") &&
+    searchPage.includes("className={`search-hits size-${prefs.posterSize}`}") &&
+    searchPage.includes("size={prefs.posterSize}") &&
+    itemPage.includes("className={`grid poster size-${prefs.posterSize}`}"),
+  "Favorites.tsx, Search.tsx and Item.tsx",
+)
+check(
+  "the grids have all three sizes to draw at, so the value moves the columns rather than only the picture",
+  css.includes(".grid.poster.size-small { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); }") &&
+    css.includes(".grid.poster.size-large { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }") &&
+    css.includes(".card-board.size-large { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }") &&
+    css.includes(".search-hits.size-large .card { width: 220px; }"),
+  "styles.css",
+)
+check(
+  "every control shows the value in force, and writes it back to the same place",
+  settings.includes('label="Poster size" value={prefs.posterSize} options={SIZES} onChange={(posterSize) => setPrefs({ posterSize })}') &&
+    editor.includes("value={rowSize(row, prefs.posterSize)}") &&
+    !settings.includes("librarySize") &&
+    !editor.includes("librarySize"),
+  "Settings.tsx and HomeEditor.tsx",
+)
+check(
+  "and nothing a page does writes the size back on its own: it changes when the viewer changes it",
+  !homePage.includes("setPrefs({ posterSize") &&
+    !libraryPage.includes("savePrefs(") &&
+    !readFileSync("src/components/Cards.tsx", "utf8").includes("posterSize"),
+  "Home.tsx, Library.tsx and Cards.tsx",
+)
+
+
+
 console.log(failures === 0 ? "\nAll home checks passed." : `\n${failures} check(s) failed.`)
 if (failures > 0) throw new Error(`${failures} check(s) failed`)

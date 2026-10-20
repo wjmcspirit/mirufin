@@ -814,6 +814,13 @@ for (const size of LIBRARY_SIZES) {
       Math.abs(report.art.width / report.art.height - 2 / 3) < 0.01,
       `${report.art.width}x${report.art.height}, card ${report.cardWidth}`,
     )
+    check(
+      `${panel.name} (${size} posters): and the grid still walks the way it did, sideways and a row at a time`,
+      report.across.map((entry) => entry.index).join(",") === "1,2" &&
+        report.backAcross.map((entry) => entry.index).join(",") === "1,0" &&
+        report.downRow.map((entry) => entry.index).join(",") === `${report.columns},${report.columns * 2}`,
+      `${report.across.map((entry) => entry.index).join(",")} / ${report.downRow.map((entry) => entry.index).join(",")} of ${report.columns} columns`,
+    )
   }
 }
 

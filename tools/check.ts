@@ -19,6 +19,7 @@
 import { DEFAULT_LIBRARY_VIEW, EPISODE_SORT, librarySorts, normalizeLibraryViews, savedLibraryView } from "../src/lib/libraryView"
 import { loadPrefs, savePrefs } from "../src/lib/storage"
 import { libraryToolNeighbor, libraryTools } from "../src/lib/toolMenu"
+import { rowSize } from "../src/lib/homeLayout"
 import { moveFocus, ownArrows } from "../src/lib/remote"
 import { canFavorite } from "../src/lib/format"
 import type { Item, LibraryView, Preferences } from "../src/lib/types"
@@ -82,6 +83,62 @@ function checkToolbarWalk() {
   same("left from View has nowhere to go while A-Z is absent", libraryToolNeighbor("view", -1, false), null)
 }
 
+/**
+ * The one poster size.
+ *
+ * Medium is what a fresh install draws with, and what any store that cannot say what size the
+ * viewer chose falls back to. A store from a build that kept the same choice under `librarySize`
+ * keeps that choice rather than being reset for having upgraded, and nothing here writes over a
+ * store it has read: the value a viewer chose is only ever replaced by the viewer choosing again.
+ * A home row that was never sized for itself follows this one value.
+ */
+function checkPosterSize() {
+  reset()
+  same("a fresh install draws Medium posters", loadPrefs().posterSize, "medium")
+  same("and a home row that was never sized follows it", rowSize({ id: "lib:l1", visible: true, style: "poster" }, loadPrefs().posterSize), "medium")
+  same("a row the viewer sized keeps that size", rowSize({ id: "lib:l1", visible: true, style: "poster", size: "small" }, "large"), "small")
+
+  for (const chosen of ["small", "large"] as const) {
+    reset()
+    savePrefs({ ...loadPrefs(), posterSize: chosen })
+    same(`a saved ${chosen} is restored`, loadPrefs().posterSize, chosen)
+    same(`and loading it again still says ${chosen}`, loadPrefs().posterSize, chosen)
+  }
+
+  // An upgrade from a build that saved the same choice under the old name: the choice is kept.
+  reset(JSON.stringify({ libraryStyle: "poster", librarySize: "large", libraryViews: {} }))
+  same("an upgrade keeps the poster size the viewer had chosen", loadPrefs().posterSize, "large")
+  same("and the store is not written over by reading it", JSON.parse(store.get(PREFS_KEY) || "{}").librarySize, "large")
+  reset(JSON.stringify({ libraryStyle: "poster", librarySize: "small", posterSize: "small" }))
+  same("a store that holds both names reads the current one", loadPrefs().posterSize, "small")
+
+  // Anything this build cannot use is Medium, and nothing else in the store is disturbed.
+  reset(JSON.stringify({ posterSize: "gigantic", showClock: false }))
+  same("a size this build does not know falls back to Medium", loadPrefs().posterSize, "medium")
+  same("and the rest of the store is still what was saved", loadPrefs().showClock, false)
+  reset(JSON.stringify({ librarySize: "gigantic" }))
+  same("so does a size under the old name", loadPrefs().posterSize, "medium")
+  reset(JSON.stringify({ posterSize: 7 }))
+  same("and a size that is not even a name", loadPrefs().posterSize, "medium")
+
+  // The rows remember what the viewer gave them, and a row that never had a size has none of its
+  // own: it is the shared value that decides.
+  reset(
+    JSON.stringify({
+      posterSize: "large",
+      homeRows: [
+        { id: "lib:l1", visible: true, style: "poster", size: "small" },
+        { id: "lib:l2", visible: true, style: "poster" },
+        { id: "continue", visible: true, style: "landscape", size: "sideways" },
+      ],
+    }),
+  )
+  const rows = loadPrefs().homeRows
+  same("a row the viewer sized keeps its own size", rows[0].size, "small")
+  same("a row that never had one has none, and follows the shared size", [rows[1].size, rowSize(rows[1], loadPrefs().posterSize)], [undefined, "large"])
+  same("and a row size this build does not know is dropped, not guessed at", rows[2].size, undefined)
+}
+
 /** The values a launch reads back are the values the app wrote. */
 function checkPersistence() {
   reset()
@@ -96,7 +153,7 @@ function checkPersistence() {
   const chosen: Preferences = {
     ...loadPrefs(),
     libraryStyle: "landscape",
-    librarySize: "large",
+    posterSize: "large",
     libraryViews: {
       movies: view({ sort: "ProductionYear", order: "Descending", filter: "IsFavorite" }),
       shows: view({ sort: EPISODE_SORT, letter: "M" }),
@@ -105,12 +162,12 @@ function checkPersistence() {
   savePrefs(chosen)
   const reloaded = loadPrefs()
   same("the shape that was chosen survives a reload", reloaded.libraryStyle, "landscape")
-  same("the poster size that was chosen survives a reload", reloaded.librarySize, "large")
+  same("the poster size that was chosen survives a reload", reloaded.posterSize, "large")
   same("a library's sort survives a reload", reloaded.libraryViews.movies, chosen.libraryViews.movies)
   same("a library's A-Z letter survives a reload", reloaded.libraryViews.shows, chosen.libraryViews.shows)
 
   // What session.tsx does when one control changes: a patch over the preferences in hand.
-  savePrefs({ ...reloaded, librarySize: "small" })
+  savePrefs({ ...reloaded, posterSize: "small" })
   const patched = loadPrefs()
   same("changing one preference does not put the shape back", patched.libraryStyle, "landscape")
   same("changing one preference does not put a library's sort back", patched.libraryViews.movies.sort, "ProductionYear")
@@ -237,6 +294,7 @@ function checkFavoritePages() {
 
 installStore()
 checkToolbarWalk()
+checkPosterSize()
 checkPersistence()
 checkOpeningView()
 checkMenuOwnsTheSidewaysPress()

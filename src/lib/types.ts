@@ -200,7 +200,11 @@ export interface HomeRowSetting {
   id: string
   visible: boolean
   style: HomeCardStyle
-  size: HomeCardSize
+  /**
+   * The row's own poster size, when the viewer chose one for that row. A row without it follows
+   * `Preferences.posterSize`, which is what every other screen draws with.
+   */
+  size?: HomeCardSize
 }
 
 /**
@@ -241,6 +245,11 @@ export interface Preferences {
   homeRows: HomeRowSetting[]
   navItems: NavItemSetting[]
   libraryStyle: HomeCardStyle
-  librarySize: HomeCardSize
+  /**
+   * THE poster and artwork size: what every grid and every row that has not been sized for itself
+   * draws with. One value for the whole app, saved with the rest of the preferences, so a viewer
+   * who chooses Small or Large keeps it on every screen until they choose another.
+   */
+  posterSize: HomeCardSize
   libraryViews: Record<string, LibraryView>
 }

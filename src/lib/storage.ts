@@ -48,7 +48,7 @@ export const DEFAULT_PREFS: Preferences = {
   homeRows: [],
   navItems: [],
   libraryStyle: "poster",
-  librarySize: "medium",
+  posterSize: "medium",
   libraryViews: {},
   skip: {
     Intro: "auto",
@@ -210,7 +210,7 @@ export function loadPrefs(): Preferences {
       homeRows: normalizeHomeRows(parsed.homeRows),
       navItems: normalizeNavItems(parsed.navItems),
       libraryStyle: HOME_STYLES.includes(parsed.libraryStyle as HomeCardStyle) ? (parsed.libraryStyle as HomeCardStyle) : "poster",
-      librarySize: HOME_SIZES.includes(parsed.librarySize as HomeCardSize) ? (parsed.librarySize as HomeCardSize) : "medium",
+      posterSize: storedPosterSize(parsed),
       libraryViews: normalizeLibraryViews(parsed.libraryViews),
       skip,
     }
@@ -230,6 +230,22 @@ export function loadPrefs(): Preferences {
 const HOME_STYLES: HomeCardStyle[] = ["poster", "landscape"]
 const HOME_SIZES: HomeCardSize[] = ["small", "medium", "large"]
 const RATINGS: RatingsDisplay[] = ["both", "community", "critic", "none"]
+
+/**
+ * The poster size a launch opens with.
+ *
+ * `posterSize` is the one setting every screen draws with. A store written by a build before this
+ * one holds the same choice under `librarySize`, which is where the value is read from rather than
+ * dropped: a viewer who had chosen Small or Large keeps it, and nobody is reset to Medium for
+ * having upgraded. A value that is missing, or that is not one of the three sizes this app offers,
+ * falls back to Medium - and nothing is written back over the store here, so a value only this
+ * launch could not use is still there for the next one.
+ */
+function storedPosterSize(parsed: Partial<Preferences> & { librarySize?: unknown }): HomeCardSize {
+  if (HOME_SIZES.includes(parsed.posterSize as HomeCardSize)) return parsed.posterSize as HomeCardSize
+  if (HOME_SIZES.includes(parsed.librarySize as HomeCardSize)) return parsed.librarySize as HomeCardSize
+  return DEFAULT_PREFS.posterSize
+}
 
 /**
  * The saved rail. An entry without a usable library id is dropped, and a library the viewer
@@ -262,7 +278,10 @@ function normalizeHomeRows(value: unknown): HomeRowSetting[] {
       id: row.id,
       visible: row.visible !== false,
       style: HOME_STYLES.includes(row.style as HomeCardStyle) ? (row.style as HomeCardStyle) : builtIn ? "landscape" : "poster",
-      size: HOME_SIZES.includes(row.size as HomeCardSize) ? (row.size as HomeCardSize) : "medium",
+      // A row the viewer sized for itself keeps that size; a row that never had one - including
+      // every row saved before the one shared poster size - follows `posterSize` instead, which is
+      // what every other screen draws with.
+      ...(HOME_SIZES.includes(row.size as HomeCardSize) ? { size: row.size as HomeCardSize } : {}),
     })
   }
   return rows

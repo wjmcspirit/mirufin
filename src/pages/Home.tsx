@@ -10,7 +10,7 @@ import * as api from "../lib/api"
 import { comingUpEpisodes, continueWatching, resumeCardDetail, resumeCardTitle, upNextCardDetail, upNextCardTitle } from "../lib/format"
 import { followingEpisodes } from "../lib/watch"
 import { HERO_CANDIDATE_LIMIT, HERO_DECK_LIMIT, topUpLimit } from "../lib/heroDeck"
-import { heroDeck, isShowLibrary, latestTitle, libraryRowId, mergeHomeRows } from "../lib/homeLayout"
+import { heroDeck, isShowLibrary, latestTitle, libraryRowId, mergeHomeRows, rowSize } from "../lib/homeLayout"
 import type { Item } from "../lib/types"
 import { usePrefs, useSession } from "../session"
 
@@ -162,9 +162,12 @@ export function HomePage() {
       {sections.map((section) => {
         if (!section.visible) return null
         const layout = section.style === "landscape" ? "wide" : "poster"
+        // The row's own size, or the one shared poster size when the viewer has never sized this
+        // row for itself: every screen draws with that one value.
+        const size = rowSize(section, prefs.posterSize)
         if (section.id === "continue" && inProgress.length > 0) {
           return (
-            <Row key={section.id} className={`size-${section.size}`} title="Continue watching">
+            <Row key={section.id} className={`size-${size}`} title="Continue watching">
               {/* Continue watching is a resume, not a browse: the card plays the title again from
                   where it stopped, the way Plex and Wholphin do. The same title's page is still a
                   press away from its library row, its series, or Search. */}
@@ -173,7 +176,7 @@ export function HomePage() {
                   key={item.Id}
                   item={item}
                   layout="poster"
-                  size={section.size}
+                  size={size}
                   seriesArt={item.Type === "Episode"}
                   href={`/play/${item.Id}?resume=1`}
                   heading={resumeCardTitle(item)}
@@ -185,22 +188,22 @@ export function HomePage() {
         }
         if (section.id === "next" && upcomingItems.length > 0) {
           return (
-            <Row key={section.id} className={`size-${section.size}`} title="Next up">
+            <Row key={section.id} className={`size-${size}`} title="Next up">
               {upcomingItems.map((item) => (
-                <PosterCard key={item.Id} item={item} layout={layout} size={section.size} href={`/item/${item.Id}`} />
+                <PosterCard key={item.Id} item={item} layout={layout} size={size} href={`/item/${item.Id}`} />
               ))}
             </Row>
           )
         }
         if (section.id === "soon" && comingUp.length > 0) {
           return (
-            <Row key={section.id} className={`size-${section.size}`} title="Coming up">
+            <Row key={section.id} className={`size-${size}`} title="Coming up">
               {comingUp.map((item) => (
                 <PosterCard
                   key={item.SeriesId || item.Id}
                   item={item}
                   layout="poster"
-                  size={section.size}
+                  size={size}
                   seriesArt
                   href={item.SeriesId ? `/item/${item.SeriesId}` : `/item/${item.Id}`}
                   heading={upNextCardTitle(item)}
@@ -214,9 +217,9 @@ export function HomePage() {
         if (!row || row.items.length === 0) return null
         const seriesArt = isShowLibrary(row.view)
         return (
-          <Row key={section.id} className={`size-${section.size}`} title={latestTitle(row.view)}>
+          <Row key={section.id} className={`size-${size}`} title={latestTitle(row.view)}>
             {row.items.map((item) => (
-              <PosterCard key={item.Id} item={item} layout={layout} size={section.size} seriesArt={seriesArt} href={`/item/${item.Id}`} />
+              <PosterCard key={item.Id} item={item} layout={layout} size={size} seriesArt={seriesArt} href={`/item/${item.Id}`} />
             ))}
           </Row>
         )

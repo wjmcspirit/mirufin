@@ -801,7 +801,7 @@ export function LibraryPage() {
   const name = library?.Name || "Library"
   const sorts = librarySorts(library?.CollectionType)
   const layout = wide ? "wide" : "poster"
-  const size: HomeCardSize = prefs.librarySize
+  const size: HomeCardSize = prefs.posterSize
   const style: HomeCardStyle = wide ? "landscape" : "poster"
 
   const count = total ? `${total.toLocaleString()} titles` : "No titles"
@@ -812,7 +812,7 @@ export function LibraryPage() {
   // A letter is only worth stating once the list it narrowed has been read: until then the count
   // beside it would be the count from before the letter was applied.
   const countLine = resultsLine({ letter, filters: narrowedTo, count: letter && !(settled && total) ? "" : count })
-  const viewOn = prefs.libraryStyle !== "poster" || prefs.librarySize !== "medium"
+  const viewOn = prefs.libraryStyle !== "poster" || prefs.posterSize !== "medium"
   const sortOn = sort !== "SortName" || order !== "Ascending"
   const filterOn = Boolean(filter || genreId || studioId)
 
@@ -881,7 +881,7 @@ export function LibraryPage() {
               ))}
               <p className="tool-label">Size</p>
               {(["small", "medium", "large"] as HomeCardSize[]).map((option) => (
-                <button key={option} type="button" aria-pressed={size === option} onClick={() => setPrefs({ librarySize: option })}>
+                <button key={option} type="button" aria-pressed={size === option} onClick={() => setPrefs({ posterSize: option })}>
                   {option[0].toUpperCase() + option.slice(1)}
                 </button>
               ))}

@@ -8,7 +8,7 @@ import * as api from "../lib/api"
 import { FAVORITE_FILTERS, favoriteHeroDeck, filterFavorites, type FavoriteFilter } from "../lib/heroDeck"
 import { ownBackdropSrc } from "../lib/images"
 import type { Item } from "../lib/types"
-import { useSession } from "../session"
+import { usePrefs, useSession } from "../session"
 
 /**
  * The viewer's own shelf: the titles they hearted, as a personal library rather than a grid with a
@@ -23,6 +23,7 @@ import { useSession } from "../session"
  */
 export function FavoritesPage() {
   const { userId } = useSession()
+  const { prefs } = usePrefs()
   const { hover, holdPin } = useStageActions()
   const [items, setItems] = useState<Item[]>([])
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
@@ -107,9 +108,16 @@ export function FavoritesPage() {
           <p>{`Nothing saved under ${label} yet. The filter narrows what is shown here; it does not change what is saved.`}</p>
         </div>
       ) : (
-        <div className="card-board">
+        <div className={`card-board size-${prefs.posterSize}`}>
           {shown.map((item) => (
-            <PosterCard key={item.Id} item={item} layout={item.Type === "Episode" ? "wide" : "poster"} href={`/item/${item.Id}`} art={false} />
+            <PosterCard
+              key={item.Id}
+              item={item}
+              layout={item.Type === "Episode" ? "wide" : "poster"}
+              size={prefs.posterSize}
+              href={`/item/${item.Id}`}
+              art={false}
+            />
           ))}
         </div>
       )}

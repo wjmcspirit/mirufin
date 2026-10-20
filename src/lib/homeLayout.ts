@@ -127,12 +127,23 @@ export function railLibraries(libraries: Item[], saved: NavItemSetting[]) {
 
 function freshRow(id: string): HomeRowSetting {
   const builtIn = id === "continue" || id === "next" || id === "soon"
+  // No size of its own: a row that has never been sized for itself follows the one shared poster
+  // size, so a fresh install is Medium everywhere and changing the size anywhere moves the rows
+  // that have not been sized individually.
   return {
     id,
     visible: true,
     style: builtIn ? "landscape" : "poster",
-    size: "medium",
   }
+}
+
+/**
+ * How large a home row's posters are drawn: the size the viewer gave that row, or the one shared
+ * poster size when they have never sized it. Every screen that draws a grid uses the same shared
+ * size, so this is the only place a row's own preference is allowed to differ.
+ */
+export function rowSize(row: HomeRowSetting, shared: HomeCardSize): HomeCardSize {
+  return row.size || shared
 }
 
 export function mergeHomeRows(saved: HomeRowSetting[], libraryIds: string[]) {

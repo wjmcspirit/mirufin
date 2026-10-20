@@ -8,7 +8,7 @@ import { Loading, Problem } from "../components/Status"
 import * as api from "../lib/api"
 import { backdropSrc, primarySrc } from "../lib/images"
 import type { Item } from "../lib/types"
-import { useSession } from "../session"
+import { usePrefs, useSession } from "../session"
 
 const GROUPS: { title: string; types: string[] }[] = [
   { title: "Movies", types: ["Movie"] },
@@ -68,6 +68,7 @@ function rememberSearch(term: string) {
 
 export function SearchPage() {
   const { userId, libraries } = useSession()
+  const { prefs } = usePrefs()
   const [params, setParams] = useSearchParams()
   const initial = params.get("q") || ""
   const [text, setText] = useState(initial)
@@ -271,7 +272,7 @@ export function SearchPage() {
             <h2>From your library</h2>
             <div className="search-picks" ref={picksRef} style={{ "--pick-cols": shownPicks.length } as CSSProperties}>
               {shownPicks.map((item) => (
-                <PosterCard key={item.Id} item={item} layout="poster" href={`/item/${item.Id}`} art={false} />
+                <PosterCard key={item.Id} item={item} layout="poster" size={prefs.posterSize} href={`/item/${item.Id}`} art={false} />
               ))}
             </div>
           </section>
@@ -290,9 +291,16 @@ export function SearchPage() {
             return (
               <section key={group.title} className="search-group search-results">
                 <h2>{group.title}</h2>
-                <div className="search-hits">
+                <div className={`search-hits size-${prefs.posterSize}`}>
                   {matches.map((item) => (
-                    <PosterCard key={item.Id} item={item} layout={item.Type === "Episode" ? "wide" : "poster"} href={`/item/${item.Id}`} art={false} />
+                    <PosterCard
+                      key={item.Id}
+                      item={item}
+                      layout={item.Type === "Episode" ? "wide" : "poster"}
+                      size={prefs.posterSize}
+                      href={`/item/${item.Id}`}
+                      art={false}
+                    />
                   ))}
                 </div>
               </section>

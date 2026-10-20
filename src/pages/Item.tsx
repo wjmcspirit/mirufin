@@ -370,6 +370,7 @@ function ItemBody({
  */
 function CollectionBody({ item, onLoaded }: { item: Item; onLoaded?: (items: Item[]) => void }) {
   const { userId } = useSession()
+  const { prefs } = usePrefs()
   const [items, setItems] = useState<Item[] | null>(null)
   // Read by the fetch rather than depended on by it: what the list is handed to is not part of
   // what the list is, so a page that re-renders for its own reasons never reads it again.
@@ -401,7 +402,7 @@ function CollectionBody({ item, onLoaded }: { item: Item; onLoaded?: (items: Ite
   if (!items) return <Loading label="Loading collection" />
   if (items.length === 0) return <p className="hint">This collection is empty.</p>
   return (
-    <div className="grid">
+    <div className={`grid poster size-${prefs.posterSize}`}>
       {items.map((entry, index) => (
         // The ordinal is part of the key so a title the server lists twice is drawn twice: with
         // the id alone React would see one key for two children and drop one of them.
@@ -409,6 +410,7 @@ function CollectionBody({ item, onLoaded }: { item: Item; onLoaded?: (items: Ite
           key={`${entry.Id}#${index}`}
           item={entry}
           layout={entry.Type === "Episode" || entry.Type === "Audio" ? "wide" : "poster"}
+          size={prefs.posterSize}
           href={`/item/${entry.Id}`}
         />
       ))}
@@ -430,6 +432,7 @@ function CollectionBody({ item, onLoaded }: { item: Item; onLoaded?: (items: Ite
  */
 function Collections({ item }: { item: Item }) {
   const { userId, libraries } = useSession()
+  const { prefs } = usePrefs()
   const [collections, setCollections] = useState<Item[] | null>(null)
   const libraryId = collectionsLibrary(libraries)
   // Only a title a collection can hold is worth asking about: an episode or a photo is never a
@@ -457,12 +460,13 @@ function Collections({ item }: { item: Item }) {
 
   if (!collections || collections.length === 0) return null
   return (
-    <Row title="Part of">
+    <Row title="Part of" className={`size-${prefs.posterSize}`}>
       {collections.map((collection) => (
         <PosterCard
           key={collection.Id}
           item={collection}
           layout="poster"
+          size={prefs.posterSize}
           href={`/item/${collection.Id}`}
           detail={collectionSizeLabel(collection.ChildCount)}
         />
@@ -937,6 +941,7 @@ function EpisodeCard({
 
 function ChildrenBody({ item }: { item: Item }) {
   const { userId } = useSession()
+  const { prefs } = usePrefs()
   const [items, setItems] = useState<Item[] | null>(null)
   const playlist = item.Type === "Playlist"
 
@@ -959,9 +964,15 @@ function ChildrenBody({ item }: { item: Item }) {
   if (items.length === 0) return <p className="hint">Nothing is in here yet.</p>
   const wide = items.some((entry) => entry.Type === "Episode" || entry.Type === "Audio")
   return (
-    <div className={wide ? "grid wide-grid" : "grid"}>
+    <div className={`grid ${wide ? "landscape wide-grid" : "poster"} size-${prefs.posterSize}`}>
       {items.map((entry) => (
-        <PosterCard key={entry.Id} item={entry} layout={entry.Type === "Episode" || entry.Type === "Audio" ? "wide" : "poster"} href={`/item/${entry.Id}`} />
+        <PosterCard
+          key={entry.Id}
+          item={entry}
+          layout={entry.Type === "Episode" || entry.Type === "Audio" ? "wide" : "poster"}
+          size={prefs.posterSize}
+          href={`/item/${entry.Id}`}
+        />
       ))}
     </div>
   )
@@ -1154,6 +1165,7 @@ function warmFilmography(items: Item[], focusId?: string) {
 
 function PersonBody({ person }: { person: Item }) {
   const { userId } = useSession()
+  const { prefs } = usePrefs()
   const { hovered } = useStage()
   const [items, setItems] = useState<Item[] | null>(null)
   const [known, setKnown] = useState<KnownWork[] | null>(null)
@@ -1215,9 +1227,9 @@ function PersonBody({ person }: { person: Item }) {
         {/* The filmography is the page, and it is drawn from Jellyfin alone: it is here as soon
             as the server answers, whether or not the lookups that follow ever do. */}
         {rows.map((row) => (
-          <Row key={row.title} title={row.title}>
+          <Row key={row.title} title={row.title} className={`size-${prefs.posterSize}`}>
             {row.items.map((entry) => (
-              <PosterCard key={entry.Id} item={entry} layout="poster" href={`/item/${entry.Id}`} />
+              <PosterCard key={entry.Id} item={entry} layout="poster" size={prefs.posterSize} href={`/item/${entry.Id}`} />
             ))}
           </Row>
         ))}
@@ -1225,7 +1237,7 @@ function PersonBody({ person }: { person: Item }) {
             viewer can actually open are above it, and this one arrives whenever the lookup
             answers without pushing them anywhere. */}
         {elsewhere.length > 0 && (
-          <Row title="Also known for">
+          <Row title="Also known for" className={`size-${prefs.posterSize}`}>
             {elsewhere.map((work) => (
               <KnownCard key={work.id} work={work} />
             ))}
@@ -1415,6 +1427,7 @@ const EXTRA_LABELS: Record<string, string> = {
 
 function Extras({ itemId }: { itemId: string }) {
   const { userId } = useSession()
+  const { prefs } = usePrefs()
   const [items, setItems] = useState<Item[]>([])
 
   useEffect(() => {
@@ -1448,9 +1461,9 @@ function Extras({ itemId }: { itemId: string }) {
   return (
     <>
       {keys.map((key) => (
-        <Row key={key} title={EXTRA_LABELS[key] || "Extras"}>
+        <Row key={key} title={EXTRA_LABELS[key] || "Extras"} className={`size-${prefs.posterSize}`}>
           {(groups.get(key) || []).map((extra) => (
-            <PosterCard key={extra.Id} item={extra} layout="wide" href={`/item/${extra.Id}`} />
+            <PosterCard key={extra.Id} item={extra} layout="wide" size={prefs.posterSize} href={`/item/${extra.Id}`} />
           ))}
         </Row>
       ))}
@@ -1460,6 +1473,7 @@ function Extras({ itemId }: { itemId: string }) {
 
 function Similar({ item }: { item: Item }) {
   const { userId } = useSession()
+  const { prefs } = usePrefs()
   const [items, setItems] = useState<Item[]>([])
   const sourceId = item.Type === "Episode" ? item.SeriesId || item.Id : item.Id
   const liked = (item.Type === "Episode" ? item.SeriesName : item.Name) || "this"
@@ -1482,9 +1496,9 @@ function Similar({ item }: { item: Item }) {
 
   if (items.length === 0) return null
   return (
-    <Row title={`If you liked ${liked}`}>
+    <Row title={`If you liked ${liked}`} className={`size-${prefs.posterSize}`}>
       {items.map((entry) => (
-        <PosterCard key={entry.Id} item={entry} layout="poster" href={`/item/${entry.Id}`} />
+        <PosterCard key={entry.Id} item={entry} layout="poster" size={prefs.posterSize} href={`/item/${entry.Id}`} />
       ))}
     </Row>
   )
