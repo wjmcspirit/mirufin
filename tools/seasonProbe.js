@@ -152,6 +152,26 @@
       bannerHeight: design(banner.getBoundingClientRect().height),
       /** The copy the banner carries: it has to fit inside the banner rather than be clipped by it. */
       copy: { top: design(copyBox.top), bottom: design(copyBox.bottom), height: design(copyBox.height) },
+      /** The order the banner's copy is read in: the show's title and its tags above the season
+         pills, and the episode's synopsis below them. */
+      order: (function () {
+        var copy = document.querySelector(".hero-copy")
+        var marks = {
+          title: ".hero-title",
+          episode: ".hero-episode",
+          facts: ".kicker",
+          chips: ".chips",
+          seasons: ".season-tabs",
+          overview: ".overview",
+          links: ".meta-links",
+        }
+        var tops = {}
+        for (var key in marks) {
+          var node = copy.querySelector(marks[key])
+          tops[key] = node ? design(node.getBoundingClientRect().top) : -1
+        }
+        return tops
+      })(),
       season: { top: design(seasonBlock.getBoundingClientRect().top), bottom: design(seasonBlock.getBoundingClientRect().bottom) },
       /** What the season selector's own box is made of, so a strip that grows can be explained. */
       seasonBox: (function () {
@@ -218,7 +238,7 @@
     var strip = episodes.getBoundingClientRect()
     var seasonStrip = seasons.getBoundingClientRect()
     var page = document.getElementById("main").getBoundingClientRect()
-    var seasonFocused = seasons.querySelector(".season-card.dpad-focus")
+    var seasonFocused = seasons.querySelector(".season-tab.dpad-focus")
     var seasonRect = seasonFocused ? seasonFocused.getBoundingClientRect() : null
     document.getElementById("probe").textContent = JSON.stringify({
       strip: {

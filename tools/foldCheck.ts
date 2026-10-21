@@ -362,6 +362,8 @@ interface SeasonReport {
   pageScrollTop: { before: number; atStart: number; atEnd: number; back: number }
   /** The season selector's own box, and what it is made of: a strip that grows needs explaining. */
   seasonBox: { height: number; tab: { width: number; height: number }; padding: string; gap: string; font: string; wrap: string }
+  /** Where each line of the banner's copy begins, so the order they are read in can be asserted. */
+  order: { title: number; episode: number; facts: number; chips: number; seasons: number; overview: number; links: number }
   pristine: BrowseShape
   seasonStrip: { clientWidth: number; scrollWidth: number; scrollLeft: number; left: number; right: number; cardIndex: number; cardInside: boolean }
 }
@@ -778,13 +780,27 @@ for (const { panel, report } of await measureSeason(browser, seasonProbe, PANELS
       `padding ${shape.seasonBox.padding}, gap ${shape.seasonBox.gap}, font ${shape.seasonBox.font}, wrap ${shape.seasonBox.wrap}`,
   )
   check(
-    `${panel.name}: the season selector is above the banner, and the banner above the episode row`,
-    shape.season.bottom <= shape.banner.top + 1 && shape.banner.bottom <= shape.row.top + 1,
-    `seasons end at ${shape.season.bottom}, banner ${shape.banner.top}..${shape.banner.bottom}, row starts at ${shape.row.top}`,
+    `${panel.name}: the season pills are inside the banner, and the banner above the episode row`,
+    shape.season.top >= shape.banner.top - 1 && shape.season.bottom <= shape.banner.bottom + 1 && shape.banner.bottom <= shape.row.top + 1,
+    `seasons ${shape.season.top}..${shape.season.bottom} against banner ${shape.banner.top}..${shape.banner.bottom}, row starts at ${shape.row.top}`,
+  )
+  /* The order the copy is read in, which is what the viewer asked for: the show's title, then the
+     episode's own line and the tags that describe it, then the season pills, then the episode's
+     synopsis. The pills belong under the title and its tags and above the description, not in a
+     strip of their own above the banner. */
+  check(
+    `${panel.name}: the copy reads title, episode, tags, season pills, description - in that order`,
+    shape.order.title < shape.order.episode &&
+      shape.order.episode < shape.order.facts &&
+      shape.order.facts < shape.order.chips &&
+      shape.order.chips < shape.order.seasons &&
+      shape.order.seasons < shape.order.overview,
+    `title ${shape.order.title}, episode ${shape.order.episode}, facts ${shape.order.facts}, chips ${shape.order.chips}, ` +
+      `seasons ${shape.order.seasons}, description ${shape.order.overview}`,
   )
   check(
-    `${panel.name}: the banner is the shared hero's own share of the television`,
-    Math.abs(shape.bannerHeight - shape.fold * 0.4) <= 1,
+    `${panel.name}: the banner keeps the shared hero's own share of the television as its floor`,
+    shape.bannerHeight >= shape.fold * 0.4 - 1,
     `${shape.bannerHeight} of ${shape.fold} units`,
   )
   check(

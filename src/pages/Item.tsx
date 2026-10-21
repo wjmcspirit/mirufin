@@ -641,7 +641,6 @@ function SeasonBody({
 
   return (
     <div className="detail-body">
-      {seasons && seasons.length > 1 && <SeasonTabs seasons={seasons} active={browsed?.Id || season.Id} seriesId={seriesId} />}
       {browsed ? (
         <section className="episode-block">
           <EpisodeList
@@ -652,6 +651,11 @@ function SeasonBody({
             progress={pending ? null : progress}
             series={series}
             actions={actions}
+            // The season selector, drawn by the banner's own copy: under the show's title and its
+            // tags, above the episode's synopsis. It is handed the season being browsed - the one in
+            // the address, which the page has already resolved - so the pill the viewer sees marked
+            // is the season whose episodes are under it.
+            tabs={seasons && seasons.length > 1 ? <SeasonTabs seasons={seasons} active={browsed.Id} seriesId={seriesId} /> : null}
             refreshKey={refreshKey}
             onPlayedChange={onPlayedChange}
             onLoaded={(episodes) => setProgress(episodes.length > 0 ? seasonProgress(episodes) : null)}
@@ -893,6 +897,7 @@ function EpisodeList({
   season = null,
   progress = null,
   actions = null,
+  tabs = null,
   refreshKey = 0,
   onPlayedChange,
   onLoaded,
@@ -907,6 +912,8 @@ function EpisodeList({
   /** How much of the season is watched, for the banner's own line about it. */
   progress?: SeasonProgress | null
   actions?: ReactNode
+  /** The season selector, when the page browsing this season draws one. */
+  tabs?: ReactNode
   /** Changes when the show or season was toggled, so this row reads its episodes again. */
   refreshKey?: number
   /** Told after an episode's own played state changed, so the page can reread its folder. */
@@ -977,7 +984,7 @@ function EpisodeList({
   if (!episodes) {
     return (
       <>
-        <BrowseHero item={item} series={series} season={season} episode={null} progress={progress} upNext={false} />
+        <BrowseHero item={item} series={series} season={season} episode={null} progress={progress} upNext={false} tabs={tabs} />
         <Loading label="Loading episodes" />
       </>
     )
@@ -986,7 +993,7 @@ function EpisodeList({
   if (episodes.length === 0) {
     return (
       <>
-        <BrowseHero item={item} series={series} season={season} episode={null} progress={progress} upNext={false} />
+        <BrowseHero item={item} series={series} season={season} episode={null} progress={progress} upNext={false} tabs={tabs} />
         <p className="hint">No episodes in this season.</p>
         {actions && <div className="actions episode-actions">{actions}</div>}
       </>
@@ -1061,7 +1068,7 @@ function EpisodeList({
 
   return (
     <>
-      <BrowseHero item={item} series={series} season={season} episode={spot} progress={progress} upNext={spot.Id === anchorId} />
+      <BrowseHero item={item} series={series} season={season} episode={spot} progress={progress} upNext={spot.Id === anchorId} tabs={tabs} />
       <div className="scroller episode-scroller">
         {episodes.map((episode) => (
           <EpisodeCard key={episode.Id} episode={episode} series={series} next={episode.Id === anchorId} onPoint={() => setSpotId(episode.Id)} />
@@ -1100,6 +1107,7 @@ function BrowseHero({
   episode,
   progress,
   upNext,
+  tabs = null,
 }: {
   /** The page's own item: the series, or the season this page was opened for. */
   item: Item
@@ -1113,6 +1121,14 @@ function BrowseHero({
   progress: SeasonProgress | null
   /** Whether the episode is the one this season would play next. */
   upNext: boolean
+  /**
+   * The season selector, when the page browsing this season has one to show.
+   *
+   * It belongs in the copy rather than above the banner: the viewer reads what the show is, what the
+   * episode is and which season they are in as one block, so the seasons sit between the show's own
+   * facts and the episode's synopsis - under the title and its tags, above the description.
+   */
+  tabs?: ReactNode
 }) {
   // The subject of the copy: the episode where there is one, and otherwise the season the row is
   // browsing, so the facts and the synopsis are always about something the viewer can see.
@@ -1153,6 +1169,9 @@ function BrowseHero({
             ))}
           </p>
         )}
+        {/* The season selector, when this page has one: under the show's title and its tags, above
+            the episode's synopsis. */}
+        {tabs}
         {subject.Overview && <p className="overview clamp">{subject.Overview}</p>}
         {/* The page's own controls, where every other page keeps them: the head is the title's
             facts, and the episode row follows them. */}

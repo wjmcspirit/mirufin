@@ -140,10 +140,10 @@
     seasonCards = fill(seasonStrip, 9, seasonCard)
     body.appendChild(seasons)
   } else {
-    // The season's page: the season selector across the top, above the banner it belongs to.
+    // The season's page: the season pills, which belong inside the banner's own copy - they are
+    // inserted there below, between the episode's tags and its synopsis.
     seasonStrip = element("nav", "scroller season-tabs", "season-tabs")
     seasonTabs = fill(seasonStrip, 9, seasonTab)
-    body.appendChild(seasonStrip)
   }
 
   // The episode block: the cinematic banner that describes the episode the remote is on, the row
@@ -166,6 +166,17 @@
   var factsLine = element("p", "kicker", "hero-facts")
   factsLine.textContent = "October 16, 2026  ·  43m  ·  TV-14  ·  7.9"
   copy.appendChild(factsLine)
+  // The tags that describe the episode, then the season pills under them: the order the page draws
+  // them in, with the episode's synopsis below.
+  var chips = element("p", "chips", "hero-chips")
+  var chipLabels = ["720p", "H.264", "AC3", "5.1", "Subtitles"]
+  for (var c = 0; c < chipLabels.length; c += 1) {
+    var chip = element("span", "", "")
+    chip.textContent = chipLabels[c]
+    chips.appendChild(chip)
+  }
+  copy.appendChild(chips)
+  if (shape !== "series") copy.appendChild(seasonStrip)
   var overview = element("p", "overview clamp", "")
   overview.textContent = "A synopsis of the sort a server actually sends: two lines of it at this width."
   copy.appendChild(overview)
@@ -242,11 +253,13 @@
   /** The group of the page a control belongs to, so a walk can say where focus went. */
   function groupOf(node) {
     if (!node || node === document.body) return "none"
+    // The season pills are drawn inside the banner's copy, so they are asked about before the
+    // banner is: a pill is the season selector, not the hero.
+    if (node.closest(".season-tabs")) return "seasons"
     if (node.closest(".browse-hero")) return "hero"
     if (node.closest(".episode-scroller")) return "episodes"
     if (node.closest(".episode-actions")) return "actions"
     if (node.closest(".people-row")) return "cast"
-    if (node.closest(".season-tabs")) return "seasons"
     if (node.closest(".season-block")) return "seasons"
     if (node.closest(".side")) return "rail"
     return "other"

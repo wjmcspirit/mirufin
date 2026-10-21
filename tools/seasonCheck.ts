@@ -434,8 +434,8 @@ check(
   "styles.css",
 )
 check(
-  "and carries its own dark gradient on the left, over the shared scrim",
-  /\.browse-hero\.stage-copy::before\s*\{[^}]*display:\s*block[^}]*linear-gradient\(90deg/.test(css),
+  "and takes the shared hero's own share of the television as a floor, not a lid: the copy it carries - title, tags, season pills, description - is what sets its height",
+  /\.browse-hero\.stage-copy\s*\{[^}]*height:\s*auto[^}]*min-height:\s*calc\(var\(--app-height[^}]*0\.40\)/.test(css),
   "styles.css",
 )
 /* The show's page and the season's page, told apart by what each one draws. The show's page is the
@@ -476,10 +476,10 @@ check(
   "Item.tsx",
 )
 check(
-  "the season's page draws the season selector above its banner and its row",
-  seasonScreen.indexOf("<SeasonTabs") >= 0 &&
-    seasonScreen.indexOf("<SeasonTabs") < seasonScreen.indexOf('<section className="episode-block">') &&
-    seasonScreen.includes("<EpisodeList"),
+  "the season's page draws the season pills inside the banner's copy, under the show's title and its tags",
+  seasonScreen.includes("tabs={seasons && seasons.length > 1 ? <SeasonTabs") &&
+    episodeRow.includes("tabs={tabs}") &&
+    /const chips = subject\.Type === "Episode"[\s\S]*?\{tabs\}[\s\S]*?subject\.Overview/.test(page),
   "Item.tsx",
 )
 check(
@@ -523,12 +523,24 @@ check(
 )
 check(
   "the season selector is a scrolled strip, not a snap container the engine cannot satisfy",
-  /\.season-tabs\s*\{[^}]*scroll-snap-type:\s*none/.test(css) && /\.season-tab\.on::after\s*\{[^}]*background:\s*var\(--accent-2\)/.test(css),
+  /\.detail-body \.season-tabs\s*\{[^}]*scroll-snap-type:\s*none/.test(css),
   "styles.css",
 )
 check(
-  "and the focused tab takes the app's violet ring",
-  /\.season-tab:focus,[\s\S]{0,140}?outline:\s*3px solid var\(--accent-2\)/.test(css),
+  "a season pill is the app's own small-control shape, and the season being browsed is filled violet",
+  /\.season-tab\s*\{[^}]*border-radius:\s*999px/.test(css) && /\.season-tab\.on\s*\{[^}]*background:\s*var\(--accent-2\)/.test(css),
+  "styles.css",
+)
+check(
+  "and the pills begin on the banner's own content edge, with room for their ring",
+  /\.detail-body \.season-tabs\s*\{[^}]*padding:\s*6px 4px[^}]*margin:\s*0 -4px/.test(css),
+  "styles.css",
+)
+/* The banner draws no layer of its own: the shared stage behind it is what keeps the copy legible,
+   and a block's own gradient here put a dark rectangle over the show's artwork. */
+check(
+  "the banner draws no dark layer of its own over the artwork",
+  !/\.browse-hero\.stage-copy::before\s*\{[^}]*display:\s*block/.test(css) && /\.hero\.stage-copy::before, \.detail-hero\.stage-copy::before\s*\{\s*display:\s*none/.test(css),
   "styles.css",
 )
 check(
