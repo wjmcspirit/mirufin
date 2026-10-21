@@ -269,10 +269,28 @@ interface WalkStep {
   inRow: boolean
 }
 
+/** The browse page's own shape, in design units, measured before the remote touched it. */
+interface BrowseShape {
+  /** The height of the television's canvas, which is what the layout is drawn against. */
+  fold: number
+  banner: { top: number; bottom: number }
+  bannerHeight: number
+  /** The copy the banner carries: it has to fit inside the banner rather than be clipped by it. */
+  copy: { top: number; bottom: number; height: number }
+  season: { top: number; bottom: number }
+  block: { top: number }
+  row: { top: number; bottom: number }
+  art: { top: number; bottom: number; width: number; height: number }
+  actions: { top: number }
+  /** The one content boundary, as each block of the page begins on it. */
+  edges: { copy: number; season: number; row: number; actions: number }
+}
+
 /** The season page walked with the remote: where each press of the walk landed. */
 interface SeasonWalkReport {
   shape: "season" | "series"
   fromRail: WalkStep[]
+  fromSeasons: WalkStep[]
   fromHero: WalkStep[]
   across: WalkStep[]
   rowDown: WalkStep[]
@@ -287,7 +305,7 @@ interface SeasonWalkReport {
   cardWidth: number
   strip: { left: number; right: number }
   /** The page's content boundary, as every block of the page begins on it. */
-  edges: { hero: number; heading: number; spot: number; row: number; actions: number; castHeading: number; castCard: number }
+  edges: { copy: number; title: number; season: number; row: number; actions: number; castHeading: number; castCard: number }
   /** The same measurement taken before the remote touched the page. */
   rowArt: { width: number; height: number }
 }
@@ -337,6 +355,8 @@ interface SeasonReport {
   snapType: string
   /** Where the page column sat while the remote walked the row, top edge. */
   pageScrollTop: { before: number; atStart: number; atEnd: number; back: number }
+  /** The browse page's own shape - the season selector, the banner and the row - before the walk. */
+  pristine: BrowseShape
   seasonStrip: { clientWidth: number; scrollWidth: number; scrollLeft: number; left: number; right: number; cardIndex: number; cardInside: boolean }
 }
 
@@ -406,8 +426,8 @@ async function measurePage<T>(browser: string, probe: string, panels: Panel[], q
 }
 
 /** The episode row probe: the row's own geometry and where the remote's walk left it. */
-function measureSeason(browser: string, probe: string, panels: Panel[]) {
-  return measurePage<SeasonReport>(browser, probe, panels)
+function measureSeason(browser: string, probe: string, panels: Panel[], query = "") {
+  return measurePage<SeasonReport>(browser, probe, panels, query)
 }
 
 
@@ -736,6 +756,82 @@ for (const { panel, report } of await measureSeason(browser, seasonProbe, PANELS
     report.right.length > 0 && report.right.every((step) => step.artWidth === report.right[0].artWidth) && report.right[0].artWidth === 360,
     `${report.right[0]?.artWidth ?? 0} design units`,
   )
+  /* The page's own hierarchy, measured at every panel size: the season selector across the top of
+     the content area, the cinematic banner under it, and the row of stills directly beneath the
+     banner. This is the order Wholphin's series screen has, and the order this page had lost - it
+     opened on a season row and a compact block of details, with no banner over the episodes at
+     all. Everything here is measured from the real stylesheet, in the design units the layout is
+     drawn in, so a panel size cannot change the answer. */
+  const shape = report.pristine
+  console.log(
+    `     seasons ${shape.season.top}..${shape.season.bottom}  banner ${shape.banner.top}..${shape.banner.bottom} ` +
+      `(${shape.bannerHeight} tall)  row ${shape.row.top}..${shape.row.bottom}  still ${shape.art.top}..${shape.art.bottom} ` +
+      `of the ${shape.fold}-unit canvas\n` +
+      `     edges copy/season/row/actions ${shape.edges.copy}/${shape.edges.season}/${shape.edges.row}/${shape.edges.actions}`,
+  )
+  check(
+    `${panel.name}: the season selector is above the banner, and the banner above the episode row`,
+    shape.season.bottom <= shape.banner.top + 1 && shape.banner.bottom <= shape.row.top + 1,
+    `seasons end at ${shape.season.bottom}, banner ${shape.banner.top}..${shape.banner.bottom}, row starts at ${shape.row.top}`,
+  )
+  check(
+    `${panel.name}: the banner is the shared hero's own share of the television`,
+    Math.abs(shape.bannerHeight - shape.fold * 0.4) <= 1,
+    `${shape.bannerHeight} of ${shape.fold} units`,
+  )
+  check(
+    `${panel.name}: the row sits directly under the banner, with no heading of its own between them`,
+    shape.row.top - shape.banner.bottom <= 16,
+    `${Math.round((shape.row.top - shape.banner.bottom) * 10) / 10} units between them`,
+  )
+  check(
+    `${panel.name}: the banner and the whole row - stills and the caption under them - are on screen without a scroll`,
+    shape.banner.top < shape.fold && shape.art.bottom <= shape.fold && shape.row.bottom <= shape.fold,
+    `banner at ${shape.banner.top}, stills end at ${shape.art.bottom}, row ends at ${shape.row.bottom}, of ${shape.fold}`,
+  )
+  check(
+    `${panel.name}: the row is entered below the banner rather than off the bottom edge`,
+    shape.art.top > shape.banner.bottom && shape.art.top < shape.fold,
+    `stills start at ${shape.art.top}, banner ends at ${shape.banner.bottom}, of ${shape.fold}`,
+  )
+  check(
+    `${panel.name}: the banner's copy, the season selector, the first still and the actions share one left edge`,
+    Math.abs(shape.edges.copy - shape.edges.season) <= 1 &&
+      Math.abs(shape.edges.season - shape.edges.row) <= 1 &&
+      Math.abs(shape.edges.row - shape.edges.actions) <= 1,
+    `copy ${shape.edges.copy}, season ${shape.edges.season}, row ${shape.edges.row}, actions ${shape.edges.actions}`,
+  )
+  check(
+    `${panel.name}: and the copy the banner carries fits inside the banner rather than being clipped by it`,
+    shape.copy.top >= shape.banner.top - 0.5 && shape.copy.bottom <= shape.banner.bottom + 0.5,
+    `copy ${shape.copy.top}..${shape.copy.bottom} inside banner ${shape.banner.top}..${shape.banner.bottom}`,
+  )
+  console.log("")
+}
+
+/* The same page with the worst copy a banner can carry: an episode whose name runs long, and a
+   title with more genres and studios than one row of fact links can hold. The banner's height is a
+   floor rather than a fixed height for exactly this case, so what is asserted here is that the
+   copy is not clipped and that the row of stills is still on the screen under it - the page may
+   give the copy the room it needs, but it may not lose the row. */
+console.log("\nThe same page with a long episode name and a full row of fact links\n")
+
+for (const { panel, report } of await measureSeason(browser, seasonProbe, PANELS, "?full=1")) {
+  const shape = report.pristine
+  console.log(
+    `     ${panel.name}: copy ${shape.copy.height} tall inside a banner of ${shape.bannerHeight}, ` +
+      `row ${shape.row.top}..${shape.row.bottom} of ${shape.fold}`,
+  )
+  check(
+    `${panel.name} (long copy): the banner is not clipped by the copy it carries`,
+    shape.copy.top >= shape.banner.top - 0.5 && shape.copy.bottom <= shape.banner.bottom + 0.5,
+    `copy ${shape.copy.top}..${shape.copy.bottom} inside banner ${shape.banner.top}..${shape.banner.bottom}`,
+  )
+  check(
+    `${panel.name} (long copy): and the row of stills is still on the screen under it`,
+    shape.art.bottom <= shape.fold && shape.row.top >= shape.banner.bottom,
+    `stills end at ${shape.art.bottom} of ${shape.fold}, row starts at ${shape.row.top}`,
+  )
   console.log("")
 }
 
@@ -838,46 +934,46 @@ for (const size of LIBRARY_SIZES) {
  *
  * The viewer's complaint was that a press of Down on this page skipped the episode row and landed
  * on the cast, and that Up from the cast did not come back to the row. Both are measured here at
- * every panel size, from a real layout and the app's own navigation engine: Down from the head
- * enters the row, the row is walked sideways and scrolls, Down from the row reaches the actions
- * under it and then the cast, Up from the cast returns through the actions to the row, Up from the
- * row returns to the head, and no press of any of it falls back to the navigation rail.
+ * every panel size, from a real layout and the app's own navigation engine: Down from the banner's
+ * own controls enters the row, the row is walked sideways and scrolls, Down from the row reaches
+ * the actions under it and then the cast, Up from the cast returns through the actions to the row,
+ * Up from the row returns to the banner, and no press of any of it falls back to the navigation
+ * rail.
  *
- * The season's own page and the series page's shape are both walked: the series page carries the
- * seasons row between its head and its episode row, and both pages carry their title's actions and
- * the focused episode's watched toggle in the band under the row.
+ * The season's own page and the series page's shape are both walked. A series page carries the
+ * season selector above its banner, and the press from there is walked too: the row is the page's
+ * next step in that direction, never the cast. Both pages carry their title's actions and the
+ * focused episode's watched toggle in the band under the row.
  */
-const WALK_SHAPES: { shape: "season" | "series"; above: string; below: string; rowAt: number }[] = [
-  { shape: "season", above: "hero", below: "actions", rowAt: 0 },
-  { shape: "series", above: "seasons", below: "actions", rowAt: 1 },
-]
+const WALK_SHAPES: { shape: "season" | "series" }[] = [{ shape: "season" }, { shape: "series" }]
 
 const seasonWalkProbe = pathToFileURL(resolve("tools/seasonWalkProbe.html")).href
 console.log("\nThe season page walked with the remote: Down into the row, and Up out of it\n")
 
-for (const { shape, between } of WALK_SHAPES) {
+for (const { shape } of WALK_SHAPES) {
   for (const { panel, report } of await measurePage<SeasonWalkReport>(browser, seasonWalkProbe, PANELS, `?shape=${shape}`)) {
     const landed = (walk: WalkStep[]) => walk.map((step) => step.group).join(" -> ")
     console.log(`${panel.name} (${shape}) - ${panel.width}x${panel.height}`)
     console.log(
-      `     head down: ${landed(report.fromHero)}   row across: ${landed(report.across)}\n` +
-        `     row down:  ${landed(report.rowDown)}   cast up: ${landed(report.castUp)}   row up: ${landed(report.rowUp)}\n` +
-        `     from the rail: ${landed(report.fromRail)}   from the rail below: ${landed(report.railAgain)}\n` +
+      `     head down: ${landed(report.fromHero)}   row across: ${landed(report.across)}\\n` +
+        `     row down:  ${landed(report.rowDown)}   cast up: ${landed(report.castUp)}   row up: ${landed(report.rowUp)}\\n` +
+        `     from the seasons: ${landed(report.fromSeasons)}   from the rail: ${landed(report.fromRail)}   ` +
+        `from the rail below: ${landed(report.railAgain)}\\n` +
         `     still ${report.rowArt.width}x${report.rowArt.height} design units, card ${report.cardWidth}, ` +
-        `edges ${report.edges.hero}/${report.edges.heading}/${report.edges.spot}/${report.edges.row}/${report.edges.actions}/${report.edges.castHeading}/${report.edges.castCard}`,
+        `edges ${report.edges.copy}/${report.edges.title}/${report.edges.season}/${report.edges.row}/${report.edges.actions}/${report.edges.castHeading}/${report.edges.castCard}`,
     )
     console.log("")
   }
 }
 
-for (const { shape, above, below, rowAt } of WALK_SHAPES) {
+for (const { shape } of WALK_SHAPES) {
   for (const { panel, report } of await measurePage<SeasonWalkReport>(browser, seasonWalkProbe, PANELS, `?shape=${shape}`)) {
     const landed = (walk: WalkStep[]) => walk.map((step) => step.group).join(" -> ")
     const edges = report.edges
-    const boundary = edges.hero
+    const boundary = edges.copy
     const strays = Object.entries(edges).filter(([, value]) => value >= 0 && Math.abs(value - boundary) > 1)
     check(
-      `${panel.name} (${shape}): the head, heading, synopsis, row, actions and cast share one left edge`,
+      `${panel.name} (${shape}): the banner's copy, its title, the season selector, the row, the actions and the cast share one left edge`,
       strays.length === 0,
       `boundary ${boundary}, ${strays.map(([name, value]) => `${name} at ${value}`).join(", ")}`,
     )
@@ -892,8 +988,8 @@ for (const { shape, above, below, rowAt } of WALK_SHAPES) {
       `${report.rowArt.width}x${report.rowArt.height}`,
     )
     check(
-      `${panel.name} (${shape}): Down from the head reaches the episode row`,
-      report.fromHero[rowAt]?.group === "episodes" && report.fromHero[0]?.group === (rowAt === 0 ? "episodes" : above),
+      `${panel.name} (${shape}): Down from the banner's own controls reaches the episode row`,
+      report.fromHero[0]?.group === "episodes",
       landed(report.fromHero),
     )
     check(
@@ -903,7 +999,7 @@ for (const { shape, above, below, rowAt } of WALK_SHAPES) {
     )
     check(
       `${panel.name} (${shape}): Down from the episode row reaches the actions under it and then the cast`,
-      report.rowDown[0]?.group === below && report.rowDown[1]?.group === "cast",
+      report.rowDown[0]?.group === "actions" && report.rowDown[1]?.group === "cast",
       landed(report.rowDown),
     )
     check(
@@ -912,11 +1008,22 @@ for (const { shape, above, below, rowAt } of WALK_SHAPES) {
       landed(report.castUp),
     )
     check(
-      `${panel.name} (${shape}): Up from the episode row returns to the step above it`,
-      report.rowUp[0]?.group === above,
+      `${panel.name} (${shape}): Up from the episode row returns to the banner above it, not to the rail`,
+      report.rowUp[0]?.group === "hero",
       landed(report.rowUp),
     )
-    const walked = [...report.fromHero, ...report.across, ...report.rowDown, ...report.castUp, ...report.rowUp]
+    // A series page's season selector is the page's own first step, and Down from it is a request
+    // for the episodes: the banner's own controls come first - they are part of the banner the
+    // season selector stands above - and the row is the next step under them. The cast is never
+    // what either press reaches, so the row is not skipped on the way down the page.
+    if (shape === "series") {
+      check(
+        `${panel.name} (series): Down from the season selector walks the banner and then reaches the episode row`,
+        report.fromSeasons[0]?.group === "hero" && report.fromSeasons[1]?.group === "episodes",
+        landed(report.fromSeasons),
+      )
+    }
+    const walked = [...report.fromHero, ...report.across, ...report.rowDown, ...report.castUp, ...report.rowUp, ...report.fromSeasons]
     check(
       `${panel.name} (${shape}): no press of the walk fell back to the navigation rail`,
       !walked.some((step) => step.group === "rail"),

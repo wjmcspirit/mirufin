@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
 import * as api from "../lib/api"
-import { backdropSrc, episodeOwnStill, primarySrc, warmImage, wideBackdrop } from "../lib/images"
+import { backdropSrc, primarySrc, warmImage, wideBackdrop } from "../lib/images"
 import type { Item } from "../lib/types"
 import { useSession } from "../session"
 
@@ -10,7 +10,6 @@ interface StageLook {
   atmosphere: boolean
   wide: boolean
   reel: boolean
-  stills: boolean
 }
 
 const DEFAULT_LOOK: StageLook = {
@@ -19,7 +18,6 @@ const DEFAULT_LOOK: StageLook = {
   atmosphere: false,
   wide: false,
   reel: true,
-  stills: false,
 }
 
 const FILMOGRAPHY_LOOK: StageLook = {
@@ -28,13 +26,6 @@ const FILMOGRAPHY_LOOK: StageLook = {
   atmosphere: true,
   wide: true,
   reel: false,
-  stills: false,
-}
-
-const EPISODE_LOOK: StageLook = {
-  ...DEFAULT_LOOK,
-  retain: true,
-  stills: true,
 }
 
 /** Home's rotating hero: one controlled crossfade beat for the backdrop. */
@@ -413,19 +404,16 @@ export function usePinnedArt(item: Item | null, posterFallback = false, still = 
   }, [active, pin])
 }
 
+/**
+ * The artwork a control's focus asks the stage for.
+ *
+ * A page that browses a season never asks for an episode's own still: the banner and the row
+ * stand on the series' backdrop, and an episode is chosen by the row's own card, so the picture
+ * behind the page cannot become a thumbnail of whichever still the remote happens to be on.
+ */
 function focusArtwork(item: Item, look: StageLook, pinnedFocus: boolean) {
-  if (look.stills && item.Type === "Episode") return episodeOwnStill(item, 1600) || backdropSrc(item)
   if (look.wide) return wideBackdrop(item)
   return backdropSrc(item) || (pinnedFocus ? primarySrc(item, 1600) : null)
-}
-
-export function useEpisodeStage(enabled = true) {
-  const { setLook } = useStageActions()
-  useEffect(() => {
-    if (!enabled) return
-    setLook(EPISODE_LOOK)
-    return () => setLook(null)
-  }, [enabled, setLook])
 }
 
 export function useFilmographyStage(enabled = true) {

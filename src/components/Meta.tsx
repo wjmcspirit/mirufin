@@ -82,13 +82,21 @@ export function MetaLine({
   item,
   genres = "",
   className = "kicker",
+  lead = "",
 }: {
   item: Item
   genres?: string
   className?: string
+  /**
+   * A field of the caller's own that comes before the item's: the season and episode number of
+   * the episode a browse page's banner is describing, which is part of that episode's facts and
+   * belongs on the same line as the rest of them.
+   */
+  lead?: string
 }) {
   const { prefs } = usePrefs()
   const fields = metaFields(item, prefs.ratings, useMinute(true))
+  if (lead) fields.unshift(lead)
   if (genres) fields.push(genres)
   return (
     <p className={className}>

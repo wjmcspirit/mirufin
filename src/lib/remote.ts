@@ -233,10 +233,22 @@ function placeReveal(node: HTMLElement) {
     return
   }
   // A row is brought into view as a whole - its heading, its strip and whatever it carries
-  // with it - rather than just the control that took focus. A season's episodes are the block
-  // they belong to: parking it puts the episode the remote is on, the details that follow it
-  // and the actions under the row on screen together.
-  const row = node.closest<HTMLElement>(".row, .season-block, .episode-block")
+  // with it - rather than just the control that took focus.
+  //
+  // The episodes of a season are the one block that is not parked at the top of the column. It
+  // stands under the page's banner, and the banner is what says which series, which season and
+  // which episode the row is showing; parking the block - which is what every other row does -
+  // pushed the banner off the screen the moment the remote entered the row, and the page the
+  // viewer was browsing stopped saying what they were browsing. The focused control is brought
+  // into view by the least the page can move instead: a banner and a row that already fit on
+  // the screen do not scroll at all, and a page that does not fit keeps as much of the banner
+  // as it can.
+  const episodes = node.closest<HTMLElement>(".episode-block")
+  if (episodes) {
+    placeWithin(main, node)
+    return
+  }
+  const row = node.closest<HTMLElement>(".row, .season-block")
   if (hero && !row) {
     const rect = node.getBoundingClientRect()
     const box = view()
@@ -261,6 +273,33 @@ function placeReveal(node: HTMLElement) {
   if (rect.top >= box.top + 12 && rect.bottom <= box.bottom - 20) return
   const slot = box.top + Math.min(96, box.height * 0.2)
   main.scrollTop += rect.top - slot
+}
+
+/**
+ * Bring a control into view by the least the page can move.
+ *
+ * Used for a control inside a block that has to keep what is above it on screen - the episodes of
+ * a season, under the page's banner. A control that is already wholly inside the column is left
+ * alone, which is the whole point: a page whose banner and row fit on the screen does not move
+ * under the viewer at all while the remote walks the row. Otherwise the page moves just far
+ * enough - and no further - to put the control inside the column, clamped to the page's own ends.
+ *
+ * The distances here are rect measurements and the offset moved is a layout measurement, so the
+ * two are converted before they are added, for the same reason `park` converts them: the
+ * television build scales the whole app with a root zoom, and mixing the two overshoots by the
+ * zoom factor at every press.
+ */
+function placeWithin(main: HTMLElement, node: HTMLElement, pad = 16) {
+  const scale = scrollScale(main)
+  const box = main.getBoundingClientRect()
+  const rect = node.getBoundingClientRect()
+  const top = (rect.top - box.top) / scale
+  const bottom = (rect.bottom - box.top) / scale
+  const height = main.clientHeight
+  if (top >= pad && bottom <= height - pad) return
+  const move = top < pad ? top - pad : bottom - (height - pad)
+  const max = main.scrollHeight - height
+  main.scrollTop = Math.max(0, Math.min(max, main.scrollTop + move))
 }
 
 /**

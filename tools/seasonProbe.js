@@ -45,10 +45,60 @@
     return node
   }
 
+  /**
+   * A season chip: the app's own `.season-card`, which carries the season's number, how much of
+   * it is watched and the progress bar - and no artwork, because the banner above it is what
+   * shows the series' picture.
+   */
+  function seasonChip(index) {
+    var node = document.createElement("a")
+    node.className = index === 1 ? "card season-card on" : "card season-card"
+    node.setAttribute("href", "#")
+    node.setAttribute("data-card", String(index))
+    var copy = document.createElement("span")
+    copy.className = "card-copy"
+    var title = document.createElement("span")
+    title.className = "card-title"
+    title.textContent = "Season " + (index + 1)
+    var sub = document.createElement("span")
+    sub.className = "card-sub"
+    sub.textContent = "3 of 10 watched"
+    var bar = document.createElement("span")
+    bar.className = "season-bar"
+    var fill = document.createElement("span")
+    fill.style.width = "30%"
+    bar.appendChild(fill)
+    copy.appendChild(title)
+    copy.appendChild(sub)
+    copy.appendChild(bar)
+    node.appendChild(copy)
+    return node
+  }
+
   var episodes = document.getElementById("episode-strip")
   var seasons = document.getElementById("season-strip")
   for (var i = 0; i < 12; i += 1) episodes.appendChild(card("episode", i, "S2 E" + (i + 1)))
-  for (var j = 0; j < 9; j += 1) seasons.appendChild(card("card season-card", j, "Season " + (j + 1)))
+  for (var j = 0; j < 9; j += 1) seasons.appendChild(seasonChip(j))
+
+  /*
+   * The worst case the banner has to hold: an episode whose name runs long, and a title with more
+   * genres and studios than one row of fact links can carry. Measured separately from the page as
+   * it usually opens, because what it checks is different - the copy may not be clipped by the
+   * banner, and the row may not be pushed off the bottom edge by a copy that is taller than the
+   * share of the screen the banner takes.
+   */
+  var full = new URLSearchParams(window.location.search).get("full") === "1"
+  if (full) {
+    document.querySelector(".hero-episode").firstChild.textContent =
+      "The Long Way Round And Back Again, And Then The Road Home After That"
+    var links = document.querySelector(".meta-links")
+    for (var g = 0; g < 6; g += 1) {
+      var extra = document.createElement("a")
+      extra.setAttribute("href", "#")
+      extra.textContent = "Genre " + (g + 1)
+      links.appendChild(extra)
+    }
+  }
 
   var remote = window.mirufinRemote
   var cards = [].slice.call(episodes.querySelectorAll(".episode"))
@@ -99,6 +149,39 @@
     // given the couple of frames the engine reveals a card over before the row is measured, so
     // what is measured is what the viewer ends up looking at.
     var pageMain = document.getElementById("main")
+    // The page as it opens, before the remote has touched it: the season selector above, the
+    // banner, and the row directly under the banner - all in design units, so a panel size cannot
+    // change what is being asserted.
+    var zoom = width / 1500
+    function design(px) {
+      return Math.round((px / zoom) * 10) / 10
+    }
+    var banner = document.querySelector(".browse-hero")
+    var seasonBlock = document.querySelector(".season-block")
+    var block = document.querySelector(".episode-block")
+    var actions = document.querySelector(".episode-actions")
+    var pristineArt = cards[0].querySelector(".episode-art").getBoundingClientRect()
+    var copyBox = document.querySelector(".hero-copy").getBoundingClientRect()
+    var pristine = {
+      fold: Math.round(height / zoom),
+      banner: { top: design(banner.getBoundingClientRect().top), bottom: design(banner.getBoundingClientRect().bottom) },
+      bannerHeight: design(banner.getBoundingClientRect().height),
+      /** The copy the banner carries: it has to fit inside the banner rather than be clipped by it. */
+      copy: { top: design(copyBox.top), bottom: design(copyBox.bottom), height: design(copyBox.height) },
+      season: { top: design(seasonBlock.getBoundingClientRect().top), bottom: design(seasonBlock.getBoundingClientRect().bottom) },
+      block: { top: design(block.getBoundingClientRect().top) },
+      row: { top: design(episodes.getBoundingClientRect().top), bottom: design(episodes.getBoundingClientRect().bottom) },
+      art: { top: design(pristineArt.top), bottom: design(pristineArt.bottom), width: design(pristineArt.width), height: design(pristineArt.height) },
+      actions: { top: design(actions.getBoundingClientRect().top) },
+      /* The one content boundary: the banner's copy, the season selector's first chip, the row's
+         first still and the actions under the row all begin on it. */
+      edges: {
+        copy: design(document.querySelector(".hero-copy .eyebrow").getBoundingClientRect().left),
+        season: design(seasons.querySelector(".season-card").getBoundingClientRect().left),
+        row: design(cards[0].getBoundingClientRect().left),
+        actions: design(actions.firstElementChild.getBoundingClientRect().left),
+      },
+    }
     var pageTopBefore = pageMain.scrollTop
     remote.placeFocus(cards[0])
     await nextFrame()
@@ -147,6 +230,9 @@
         right: Math.round(strip.right),
       },
       page: { left: Math.round(page.left), right: Math.round(page.right) },
+      /* The page's own shape, measured before the remote touched it: the season selector across
+         the top, the cinematic banner under it, and the row of stills directly under the banner. */
+      pristine: pristine,
       atEnd: atEnd,
       atStart: atStart,
       right: right,

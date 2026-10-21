@@ -16,9 +16,10 @@
       reasoned about: with the remote moving right along the row, does the row follow?
 
       The structure is the real one - the shell's rail, the scrolling main, the detail body, the
-      season block and the episode block - and the cards are the app's own `.episode` cards, twelve
-      of them, which is more than any television shows at once. `tools/foldCheck.ts` drives this
-      page in a headless browser at 1080p, 1440p and 4K and asserts what comes back.
+      season selector's chips, and the episode block (the cinematic banner, the row of stills and
+      the actions under it) - and the cards are the app's own `.episode` cards, twelve of them,
+      which is more than any television shows at once. `tools/foldCheck.ts` drives this page in a
+      headless browser at 1080p, 1440p and 4K and asserts what comes back.
     -->
     <div class="shell">
       <header class="side">
@@ -32,36 +33,29 @@
         </nav>
       </header>
       <div class="main" id="main">
-        <div class="detail season-page">
-          <header class="detail-hero stage-copy">
-            <div class="detail-layout">
-              <div class="poster-lg" id="poster"></div>
-              <div class="detail-copy">
-                <h1 class="logo-title">Sheriff Country</h1>
-                <p class="overview clamp">A season of it, described the way the page describes it.</p>
-              </div>
-            </div>
-          </header>
+        <div class="detail browse-page">
           <div class="detail-body">
-              <section class="season-block">
-                <div class="row-head"><h2>Seasons</h2></div>
-                <div class="scroller season-scroller" id="season-strip"></div>
-              </section>
-              <section class="episode-block">
-                <div class="row-head"><h2>Season 2</h2></div>
-                <div class="episode-spot">
-                  <p class="eyebrow">Sheriff Country</p>
-                  <h2><span class="episode-code">S2 E1</span>  ·  Family_Trust_And_The_Long_Road_Back_Again<span class="episode-flag">Up next</span></h2>
-                  <p class="kicker" style="white-space: nowrap">October 16, 2026  ·  43m  ·  30m left  ·  Ends 4:14 PM  ·  Recorded from WABC-DT2  ·  Stereo  ·  CC</p>
+            <section class="season-block">
+              <div class="row-head"><h2>Seasons</h2></div>
+              <div class="scroller season-scroller" id="season-strip"></div>
+            </section>
+            <section class="episode-block">
+              <header class="hero stage-copy browse-hero">
+                <div class="hero-copy">
+                  <p class="eyebrow">Season 2  ·  3 of 10 watched</p>
+                  <div class="hero-title"><h1>Sheriff Country</h1></div>
+                  <p class="hero-episode">Family Trust<span class="episode-flag">Up next</span></p>
+                  <p class="kicker">S2 E1  ·  October 16, 2026  ·  43m  ·  TV-14  ·  7.9 ★</p>
                   <p class="overview clamp">A synopsis of the sort a server actually sends: two lines of it at this width and no more, held to the space reserved for it whatever it says.</p>
+                  <p class="meta-links genre-pills"><a href="#">Drama</a><a href="#">Crime</a></p>
                 </div>
-                <div class="scroller episode-scroller" id="episode-strip"></div>
-                <div class="actions episode-actions">
-                  <a class="btn btn-primary" href="#">Play</a>
-                  <a class="btn" href="#">Details</a>
-                </div>
-              </section>
-            </div>
+              </header>
+              <div class="scroller episode-scroller" id="episode-strip"></div>
+              <div class="actions episode-actions">
+                <a class="btn btn-primary" href="#">Play</a>
+                <button class="btn icon-btn" type="button">Mark episode watched</button>
+              </div>
+            </section>
           </div>
         </div>
       </div>

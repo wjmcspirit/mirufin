@@ -57,11 +57,18 @@
 
   function seasonCard(index) {
     var node = element("a", "card season-card", "season-" + (index + 1))
-    node.appendChild(art("card-art"))
     var copy = element("span", "card-copy", "")
     var title = element("span", "card-title", "")
     title.textContent = "Season " + (index + 1)
+    var sub = element("span", "card-sub", "")
+    sub.textContent = "3 of 10 watched"
+    var bar = element("span", "season-bar", "")
+    var fillBar = element("span", "", "")
+    fillBar.style.width = "30%"
+    bar.appendChild(fillBar)
     copy.appendChild(title)
+    copy.appendChild(sub)
+    copy.appendChild(bar)
     node.appendChild(copy)
     return node
   }
@@ -105,57 +112,49 @@
 
   // ---------------------------------------------------------------- the page
   var main = document.getElementById("main")
-  var detail = element("div", "detail season-page browse-page", "detail")
-  var hero = element("header", "detail-hero stage-copy", "hero")
-  var layout = element("div", "detail-layout", "")
-  layout.appendChild(element("div", "poster-lg", "poster"))
-  var copy = element("div", "detail-copy", "hero-copy")
-  copy.appendChild(element("p", "eyebrow", "hero-eyebrow"))
-  var logo = element("h1", "logo-title", "")
+  var detail = element("div", "detail browse-page", "detail")
+  var body = element("div", "detail-body", "body")
+  var seasonCards = []
+  if (shape === "series") {
+    var seasons = rowSection("season-block", "Seasons")
+    seasons.section.className = "season-block"
+    seasonCards = fill(seasons.strip, 9, seasonCard)
+    body.appendChild(seasons.section)
+  }
+
+  // The episode block: the cinematic banner that describes the episode the remote is on, the row
+  // of stills directly under it, and the title's actions under the row.
+  var block = element("section", "episode-block", "episode-block")
+  var banner = element("header", "hero stage-copy browse-hero", "banner")
+  var copy = element("div", "hero-copy", "hero-copy")
+  var eyebrow = element("p", "eyebrow", "hero-eyebrow")
+  eyebrow.textContent = "Season 2  ·  3 of 10 watched"
+  copy.appendChild(eyebrow)
+  // The title's own box: the series' name in type, or its logo where the server has one.
+  var title = element("div", "hero-title", "hero-title")
+  var logo = element("h1", "", "")
   logo.textContent = "Sheriff Country"
-  copy.appendChild(logo)
-  var line = element("p", "season-line", "")
-  var lineText = element("span", "season-line-text", "")
-  lineText.textContent = "Season 2  ·  3 of 10 watched"
-  line.appendChild(lineText)
-  copy.appendChild(line)
-  copy.appendChild(element("p", "kicker", "hero-facts"))
+  title.appendChild(logo)
+  copy.appendChild(title)
+  var episode = element("p", "hero-episode", "hero-episode")
+  episode.textContent = "S2 E1  ·  Family Trust"
+  copy.appendChild(episode)
+  var factsLine = element("p", "kicker", "hero-facts")
+  factsLine.textContent = "October 16, 2026  ·  43m  ·  TV-14  ·  7.9"
+  copy.appendChild(factsLine)
   var overview = element("p", "overview clamp", "")
-  overview.textContent = "A synopsis of the season, two lines of it."
+  overview.textContent = "A synopsis of the sort a server actually sends: two lines of it at this width."
   copy.appendChild(overview)
-  // The season's own fact links, where every other page keeps them: in the head.
+  // The title's own fact links, where every other page keeps them: in the head, which here is the
+  // banner.
   var facts = element("p", "meta-links genre-pills", "hero-links")
   var pills = [element("a", "", "genre-drama"), element("a", "", "genre-crime")]
   pills[0].textContent = "Drama"
   pills[1].textContent = "Crime"
   for (var p = 0; p < pills.length; p += 1) facts.appendChild(pills[p])
   copy.appendChild(facts)
-  layout.appendChild(copy)
-  hero.appendChild(layout)
-  detail.appendChild(hero)
+  banner.appendChild(copy)
 
-  var body = element("div", "detail-body", "body")
-  if (shape === "series") {
-    var seasons = rowSection("season-block", "Seasons")
-    seasons.section.className = "row size-medium season-block"
-    fill(seasons.strip, 9, seasonCard)
-    body.appendChild(seasons.section)
-  }
-
-  var block = element("section", "episode-block", "episode-block")
-  var blockHead = element("div", "row-head", "")
-  var blockH2 = element("h2", "", "")
-  blockH2.textContent = "Season 2"
-  blockHead.appendChild(blockH2)
-  var spot = element("div", "episode-spot", "episode-spot")
-  spot.appendChild(element("p", "eyebrow", "spot-eyebrow"))
-  var spotH2 = element("h2", "", "")
-  spotH2.textContent = "S2 E1  ·  Family Trust"
-  spot.appendChild(spotH2)
-  spot.appendChild(element("p", "kicker", "spot-facts"))
-  var spotOverview = element("p", "overview clamp", "")
-  spotOverview.textContent = "A synopsis of the sort a server actually sends: two lines of it at this width."
-  spot.appendChild(spotOverview)
   var strip = element("div", "scroller episode-scroller", "episode-strip")
   var episodeCards = fill(strip, 12, episodeCard)
   // The band under the row carries the title's own actions and the focused episode's watched
@@ -178,8 +177,7 @@
   episodeWatched.textContent = "Mark episode watched"
   actionButtons.push(episodeWatched)
   for (var b = 0; b < actionButtons.length; b += 1) actions.appendChild(actionButtons[b])
-  block.appendChild(blockHead)
-  block.appendChild(spot)
+  block.appendChild(banner)
   block.appendChild(strip)
   block.appendChild(actions)
   body.appendChild(block)
@@ -206,7 +204,7 @@
   /** The group of the page a control belongs to, so a walk can say where focus went. */
   function groupOf(node) {
     if (!node || node === document.body) return "none"
-    if (node.closest(".detail-hero")) return "hero"
+    if (node.closest(".browse-hero")) return "hero"
     if (node.closest(".episode-scroller")) return "episodes"
     if (node.closest(".episode-actions")) return "actions"
     if (node.closest(".people-row")) return "cast"
@@ -246,13 +244,15 @@
   }
 
   // The page as it opens, before the remote has touched it: every row is at its own beginning,
-  // so a row's first card is a measurement of the page's layout rather than of a scroll.
+  // so a row's first card is a measurement of the page's layout rather than of a scroll. The
+  // banner's own copy, the season selector's first chip, the row's first still and the actions
+  // under the row all have to begin on the application's one content boundary.
   var pristineArt = episodeCards[0].querySelector(".episode-art").getBoundingClientRect()
   var before = {
     edges: {
-      hero: edgeOf(document.querySelector(".poster-lg")),
-      heading: edgeOf(blockHead.querySelector("h2")),
-      spot: edgeOf(spot.querySelector(".eyebrow")),
+      copy: edgeOf(eyebrow),
+      title: edgeOf(title),
+      season: shape === "series" ? edgeOf(seasonCards[0]) : -1,
       row: edgeOf(episodeCards[0]),
       actions: edgeOf(actions.firstElementChild),
       castHeading: edgeOf(cast.section.querySelector("h2")),
@@ -268,7 +268,17 @@
     await nextFrame()
     var fromRail = await walk(["ArrowDown"])
 
-    // Down from the head's own controls: the page's next step, never the cast.
+    // Down from the season selector on a series page: the banner's own controls first - the
+    // title's fact links, which are part of the banner - and the episode row under them. The cast
+    // is never what this press reaches.
+    var fromSeasons = []
+    if (shape === "series") {
+      remote.placeFocus(seasonCards[1])
+      await nextFrame()
+      fromSeasons = await walk(["ArrowDown", "ArrowDown"])
+    }
+
+    // Down from the banner's own controls: the page's next step, never the cast.
     remote.placeFocus(pills[0])
     await nextFrame()
     var fromHero = await walk(["ArrowDown", "ArrowDown"])
@@ -298,6 +308,7 @@
     document.getElementById("probe").textContent = JSON.stringify({
       shape: shape,
       fromRail: fromRail,
+      fromSeasons: fromSeasons,
       fromHero: fromHero,
       across: across,
       rowDown: rowDown,

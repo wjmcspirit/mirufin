@@ -425,7 +425,7 @@ check(
   boundary.includes("padding-inline: var(--strip-pad)"),
   "the shared content boundary rule",
 )
-for (const block of [".page-head", ".row-head", ".grid", ".card-board", ".letter-row", ".detail-layout", ".episode-spot", ".search-hits"]) {
+for (const block of [".page-head", ".row-head", ".grid", ".card-board", ".letter-row", ".detail-layout", ".search-hits"]) {
   check(`and a page's ${block} takes it`, boundary.includes(`\n${block},`) || boundary.includes(`\n${block} {`), block)
 }
 check(

@@ -7,7 +7,7 @@ import { MediaInfo } from "../components/MediaInfo"
 import { MetaLine, MetaText } from "../components/Meta"
 import { Row } from "../components/Row"
 import { Loading, Problem } from "../components/Status"
-import { useCollectionStage, useEpisodeStage, useFilmographyStage, usePinnedArt, useStage, useStageActions } from "../components/Stage"
+import { useCollectionStage, useFilmographyStage, usePinnedArt, useStage } from "../components/Stage"
 import { useThemeSong } from "../components/Theme"
 import { TitleLogo } from "../components/Title"
 import * as api from "../lib/api"
@@ -18,7 +18,7 @@ import { canFavorite, canMarkWatched, canPlayDirectly, episodeCode, formatRuntim
 import { hasMediaInfo } from "../lib/mediaInfo"
 import { episodePlayHref, lastSeason, rememberSeason, resolveSeason, seasonLineText, seasonProgress, seasonProgressBySeason, seasonStart, type SeasonProgress } from "../lib/seasons"
 import { knownFor, type KnownWork } from "../lib/knownFor"
-import { artWidth, backdropSrc, episodeStillSrc, episodeWideStill, imageUrl, loadImage, primarySrc, seasonArtSrc, thumbSrc, warmImage, wideBackdrop } from "../lib/images"
+import { artWidth, backdropSrc, episodeStillSrc, episodeWideStill, imageUrl, loadImage, primarySrc, thumbSrc, warmImage, wideBackdrop } from "../lib/images"
 import type { Item } from "../lib/types"
 import { usePrefs, useSession } from "../session"
 
@@ -35,9 +35,6 @@ export function ItemPage() {
   // body below, so the row and the season progress have to read them again rather than keep the
   // state from before the folder was toggled.
   const [playStateVersion, setPlayStateVersion] = useState(0)
-  // What the season page's header says about the season: read from the episodes the row below
-  // loaded, so the count above and the stills under it can never disagree.
-  const [seasonWatch, setSeasonWatch] = useState<SeasonProgress | null>(null)
   // What a collection page holds: the same reading of the same request, used for its count and
   // for the artwork its page rests on.
   const [bodyItems, setBodyItems] = useState<Item[] | null>(null)
@@ -45,7 +42,6 @@ export function ItemPage() {
   useEffect(() => {
     let cancel = false
     setStatus("loading")
-    setSeasonWatch(null)
     setBodyItems(null)
     setPlayStateVersion(0)
     api
@@ -133,13 +129,12 @@ export function ItemPage() {
   if (status === "error" || !item) return <Problem message={error || "This title is unavailable."} />
 
   const episode = item.Type === "Episode"
-  // A series and a season are the two pages that browse a season, and they carry the actions
-  // under the episode row rather than under the portrait. See `actionBand` below.
+  // A series and a season are the two pages that browse a season: they draw the season's own
+  // episodes as a row under the cinematic banner that describes the episode the remote is on,
+  // and carry the title's own actions under the row rather than under a portrait. See
+  // `BrowseHero`, which draws that banner, and `EpisodeList`, which draws the block around it.
   const browsePage = item.Type === "Series" || item.Type === "Season"
-  // A season with a series behind it is the page the seasons row opens: it takes its own
-  // composition, with a tighter head over the same artwork.
-  const seasonPage = item.Type === "Season" && Boolean(item.SeriesId)
-  const page = ["detail", personPage ? "person-page" : "", browsePage ? "browse-page" : "", seasonPage ? "season-page" : ""].filter(Boolean).join(" ")
+  const page = ["detail", personPage ? "person-page" : "", browsePage ? "browse-page" : ""].filter(Boolean).join(" ")
   // A collection says how many titles it holds: the count its own grid was drawn from, and the
   // figure the server reports until that arrives. A collection holding nothing says nothing.
   const collectionLine =
@@ -213,67 +208,69 @@ export function ItemPage() {
 
   return (
     <article className={page}>
-      <header className="detail-hero stage-copy">
-        <div className={layout}>
-          <div className={episode ? "still-lg" : "poster-lg"}>
-            <MediaImage src={panelArt} alt="" label={episode || seasonPage ? item.Name : undefined} />
-            {episode && progress > 1 && progress < 98 && (
-              <span className="progress" aria-hidden="true">
-                <span style={{ width: `${progress}%` }} />
-              </span>
-            )}
+      {/* The portrait head belongs to a title's own page. The two pages that browse a season
+          draw their own banner over the episode row instead - the series' backdrop with the copy
+          for the episode the remote is on - so they have no head of their own. See `BrowseHero`. */}
+      {!browsePage && (
+        <header className="detail-hero stage-copy">
+          <div className={layout}>
+            <div className={episode ? "still-lg" : "poster-lg"}>
+              <MediaImage src={panelArt} alt="" label={episode ? item.Name : undefined} />
+              {episode && progress > 1 && progress < 98 && (
+                <span className="progress" aria-hidden="true">
+                  <span style={{ width: `${progress}%` }} />
+                </span>
+              )}
+            </div>
+            <div className="detail-copy">
+              {episode && (
+                <p className="eyebrow">
+                  <Link to={`/item/${item.SeriesId}`}>{item.SeriesName}</Link>
+                  {episodeCode(item) ? <span className="episode-code">{`  ·  ${episodeCode(item)}`}</span> : ""}
+                </p>
+              )}
+              {!episode && <p className="eyebrow">{kindLabel(item)}</p>}
+              <TitleLogo item={item} />
+              {collectionLine ? <p className="count-line">{collectionLine}</p> : null}
+              {episode && <p className="hero-episode">{item.Name}</p>}
+              {item.Type === "Person" ? facts && (
+                <p className="kicker">
+                  <MetaText text={facts} />
+                </p>
+              ) : (
+                <MetaLine item={item} />
+              )}
+              {chips.length > 0 && (
+                <p className="chips">
+                  {chips.map((chip) => (
+                    <span key={chip}>{chip}</span>
+                  ))}
+                </p>
+              )}
+              {item.Taglines?.[0] && <p className="tagline">{item.Taglines[0]}</p>}
+              {item.Overview && (item.Type === "Person" ? <Bio text={item.Overview} /> : <p className="overview">{item.Overview}</p>)}
+              {/* A title's genre and studio links are drawn in its head, as they are on every other
+                  page: the head is the page's own controls, and the sections follow them. They used
+                  to sit under a row, where they came between it and the cast - so a press of Down
+                  from the row reached a genre label instead of the cast, Up from the cast reached a
+                  label instead of the row, and a press from a label reached the cast with the row
+                  the viewer had come for left above them. */}
+              <FactLinks item={item} />
+            </div>
           </div>
-          <div className="detail-copy">
-            {episode && (
-              <p className="eyebrow">
-                <Link to={`/item/${item.SeriesId}`}>{item.SeriesName}</Link>
-                {episodeCode(item) ? <span className="episode-code">{`  ·  ${episodeCode(item)}`}</span> : ""}
-              </p>
-            )}
-            {!episode && <p className="eyebrow">{kindLabel(item)}</p>}
-            <TitleLogo item={item} />
-            {seasonPage && <SeasonLine season={item} progress={seasonWatch} />}
-            {collectionLine ? <p className="count-line">{collectionLine}</p> : null}
-            {episode && <p className="hero-episode">{item.Name}</p>}
-            {item.Type === "Person" ? facts && (
-              <p className="kicker">
-                <MetaText text={facts} />
-              </p>
-            ) : (
-              <MetaLine item={item} />
-            )}
-            {chips.length > 0 && (
-              <p className="chips">
-                {chips.map((chip) => (
-                  <span key={chip}>{chip}</span>
-                ))}
-              </p>
-            )}
-            {item.Taglines?.[0] && <p className="tagline">{item.Taglines[0]}</p>}
-            {item.Overview && (item.Type === "Person" ? <Bio text={item.Overview} /> : <p className="overview">{item.Overview}</p>)}
-            {/* A season's genre and studio links are drawn in its head, as they are on every other
-                title's page: the head is the page's own controls, and the episode row follows them.
-                They used to sit under the row, where they came between it and the cast - so a press
-                of Down from the row reached a genre label instead of the cast, Up from the cast
-                reached a label instead of the row, and a press from a label reached the cast with
-                the row the viewer had come for left above them. */}
-            <FactLinks item={item} />
-          </div>
-        </div>
-        {/* The band under the portrait carries playback and title actions. A person
-            page has none of them once Favorite sits with the biography, so the band
-            is left out rather than left behind as an empty stop for the remote, and a
-            page that browses a season carries the band under its episode row instead. */}
-        {!browsePage && (item.Type !== "Person" || hasMediaInfo(item)) && <div className="actions detail-actions">{actionBand}</div>}
-        {error && <p className="error">{error}</p>}
-      </header>
+          {/* The band under the portrait carries playback and title actions. A person
+              page has none of them once Favorite sits with the biography, so the band
+              is left out rather than left behind as an empty stop for the remote. */}
+          {(item.Type !== "Person" || hasMediaInfo(item)) && <div className="actions detail-actions">{actionBand}</div>}
+          {error && <p className="error">{error}</p>}
+        </header>
+      )}
       {infoOpen && <MediaInfo item={item} onClose={() => setInfoOpen(false)} />}
       <ItemBody
         item={item}
         actions={browsePage ? actionBand : null}
         refreshKey={playStateVersion}
         onPlayedChange={refreshItem}
-        onSeasonProgress={setSeasonWatch}
         onChildren={setBodyItems}
       />
     </article>
@@ -391,7 +388,6 @@ function ItemBody({
   actions,
   refreshKey = 0,
   onPlayedChange,
-  onSeasonProgress,
   onChildren,
 }: {
   item: Item
@@ -400,8 +396,6 @@ function ItemBody({
   refreshKey?: number
   /** Told after an episode's own played state changed, so the page can reread its folder. */
   onPlayedChange?: () => void
-  /** Told the season's own watched count, for the line under its title. */
-  onSeasonProgress?: (progress: SeasonProgress | null) => void
   /** Told what a collection holds, for its count and for the art its page rests on. */
   onChildren?: (items: Item[]) => void
 }) {
@@ -409,7 +403,7 @@ function ItemBody({
     return <SeriesBody series={item} actions={actions} refreshKey={refreshKey} onPlayedChange={onPlayedChange} />
   }
   if (item.Type === "Season" && item.SeriesId) {
-    return <SeasonBody season={item} actions={actions} refreshKey={refreshKey} onPlayedChange={onPlayedChange} onProgress={onSeasonProgress} />
+    return <SeasonBody season={item} actions={actions} refreshKey={refreshKey} onPlayedChange={onPlayedChange} />
   }
   if (item.Type === "Person") return <PersonBody person={item} />
   if (item.Type === "BoxSet") return <CollectionBody item={item} onLoaded={onChildren} />
@@ -547,32 +541,7 @@ function Collections({ item }: { item: Item }) {
 }
 
 /**
- * What a season page says about the season: its number, and how much of it is watched.
- *
- * Both come from the season's own episode list - the one the row underneath loaded - so the
- * line above the row can never be a number the row disagrees with, and it is read once rather
- * than on every press. While the episodes are still on their way the line falls back to the
- * count the season itself reports, and to nothing at all when the server reports none: a season
- * page never states a watched count it cannot stand behind.
- */
-function SeasonLine({ season, progress }: { season: Item; progress: SeasonProgress | null }) {
-  const line = seasonLineText(season, progress)
-  if (!line) return null
-  return (
-    <div className="season-line">
-      <p className="season-line-text">{line}</p>
-      {/* The bar is drawn only once the episodes have been read: an empty bar would claim a
-          season nothing has been watched in, which is not something this page knows yet. */}
-      {progress && progress.total > 0 ? (
-        <span className="season-bar" aria-hidden="true">
-          <span style={{ width: `${progress.percent}%` }} />
-        </span>
-      ) : null}
-    </div>
-  )
-}
-
-/** What a season card says under its name: how much of it is watched, or how long it is. */
+ * What a season card says under its name: how much of it is watched, or how long it is. */
 function seasonSubtitle(count: number | undefined, progress: SeasonProgress | undefined) {
   if (progress && progress.total > 0) return `${progress.watched} of ${progress.total} watched`
   if (count == null) return ""
@@ -580,15 +549,16 @@ function seasonSubtitle(count: number | undefined, progress: SeasonProgress | un
 }
 
 /**
- * One season's own page: the episodes are the page, and everything else sits under them.
+ * One season's own page: the season's episodes under the banner that describes the episode the
+ * remote is on, and everything else under them.
  *
  * This is the destination the seasons row on a series page opens, so it is the one screen that
- * browses a whole season rather than a single strip of one. The series is read here - the
- * episode stills borrow its artwork when an episode has none of its own, and its cast and its
- * related titles are what follow the row - and the watched count is handed up to the head of
- * the page from the episodes the row loaded, so the head and the row are one reading of one
- * request rather than two. A season with no episodes keeps its title's actions and says so
- * plainly, rather than leaving the remote nothing to land on.
+ * browses a whole season rather than a single strip of one. The series is read here - the banner
+ * is titled with it, and the episode stills borrow its artwork when an episode has none of its
+ * own - and how much of the season is watched is read from the episodes the row loaded, so the
+ * line the banner states above the row and the stills under it are one reading of one request
+ * rather than two. A season with no episodes keeps its title's actions and says so plainly,
+ * rather than leaving the remote nothing to land on.
  *
  * The season shown is the season this page was opened for, always: the row is given this
  * season's own id and never a resolved one, so a page can only ever browse the season in its
@@ -599,7 +569,6 @@ function SeasonBody({
   actions,
   refreshKey = 0,
   onPlayedChange,
-  onProgress,
 }: {
   season: Item
   actions?: ReactNode
@@ -607,12 +576,12 @@ function SeasonBody({
   refreshKey?: number
   /** Told after one episode was toggled, so the page can reread the season's folder state. */
   onPlayedChange?: () => void
-  onProgress?: (progress: SeasonProgress | null) => void
 }) {
   const { userId } = useSession()
   const [series, setSeries] = useState<Item | null>(null)
+  // How much of this season is watched, read from the episodes the row below loaded.
+  const [progress, setProgress] = useState<SeasonProgress | null>(null)
   const seriesId = season.SeriesId || ""
-  const title = season.Name || (season.IndexNumber != null ? `Season ${season.IndexNumber}` : "Season")
 
   useEffect(() => {
     if (!seriesId) return
@@ -636,20 +605,20 @@ function SeasonBody({
   return (
     <div className="detail-body">
       <section className="episode-block">
-        <div className="row-head">
-          <h2>{title}</h2>
-        </div>
         <EpisodeList
+          item={season}
           seriesId={seriesId}
           seasonId={season.Id}
+          season={season}
+          progress={progress}
           series={series}
           actions={actions}
           refreshKey={refreshKey}
           onPlayedChange={onPlayedChange}
-          onLoaded={(episodes) => onProgress?.(episodes.length > 0 ? seasonProgress(episodes) : null)}
+          onLoaded={(episodes) => setProgress(episodes.length > 0 ? seasonProgress(episodes) : null)}
         />
       </section>
-      {/* The season's genre and studio links are not repeated here: they are drawn in the head,
+      {/* The season's genre and studio links are not repeated here: they are drawn in the banner,
           where every other page keeps them, so nothing stands between this row and the cast. */}
       <Extras itemId={season.Id} />
       {series && <PeopleRows people={series.People} />}
@@ -710,7 +679,6 @@ function SeriesBody({
   const selected = resolveSeason(seasons, seasonId || lastSeason(series.Id)) || ""
 
   const current = seasons?.find((season) => season.Id === selected) || null
-  const currentTitle = current ? current.Name || `Season ${current.IndexNumber ?? ""}` : ""
 
   return (
     <div className="detail-body">
@@ -738,9 +706,6 @@ function SeriesBody({
                   // route it was left on.
                   onClick={() => rememberSeason(series.Id, season.Id)}
                 >
-                  <span className="card-art">
-                    <MediaImage src={seasonArtSrc(season, series)} fallback={primarySrc(series, artWidth("poster"))} alt="" label={title} />
-                  </span>
                   <span className="card-copy">
                     <span className="card-title">{title}</span>
                     <span className="card-sub">{seasonSubtitle(count, watched)}</span>
@@ -758,15 +723,14 @@ function SeriesBody({
           </div>
         </section>
       )}
-      {seasons && seasons.length === 0 && actions && <div className="actions episode-actions">{actions}</div>}
-      {selected && (
+      {selected ? (
         <section className="episode-block">
-          <div className="row-head">
-            <h2>{currentTitle || "Episodes"}</h2>
-          </div>
           <EpisodeList
+            item={series}
             seriesId={series.Id}
             seasonId={selected}
+            season={current}
+            progress={progress.get(selected) || null}
             nextId={nextEpisode?.Id || ""}
             series={series}
             actions={actions}
@@ -782,6 +746,19 @@ function SeriesBody({
             }}
           />
         </section>
+      ) : (
+        /* No season to browse: the server has not answered with the seasons yet, or the show has
+           none at all. The page still opens on its own banner - the series' backdrop with the
+           series' own copy - rather than on nothing or on a bare row of buttons, so the viewer
+           sees what they opened before the server has finished answering. */
+        <section className="episode-block">
+          <BrowseHero item={series} series={series} season={null} episode={null} progress={null} upNext={false} />
+          {seasons && seasons.length === 0 ? <p className="hint">No seasons in this show.</p> : <Loading label="Loading episodes" />}
+          {/* A show with no seasons keeps its own actions: they are the only thing the remote can
+              land on, and a page that offered nothing at all would be a page the viewer cannot
+              leave except with Back. */}
+          {seasons && seasons.length === 0 && actions && <div className="actions episode-actions">{actions}</div>}
+        </section>
       )}
       {selected && <Extras itemId={selected} />}
       {/* The seasons and the episode row are this page's spine, so what the series is part of
@@ -794,35 +771,53 @@ function SeriesBody({
 }
 
 /**
- * One season's episodes: the row of landscape stills the viewer browses, the compact details
- * of the episode the remote is on, and the actions under the row.
+ * One season's episodes: the cinematic banner that describes the episode the remote is on, the
+ * row of landscape stills the viewer browses, and the actions under the row.
  *
- * The row is a strip rather than the vertical list it used to be, so several episodes are on
- * screen at once and the remote walks it sideways while Up and Down leave it. The details
- * above the row follow whichever episode the remote rests on - starting on the episode this
- * season begins at - and they carry the series title, the episode's number and name, its facts
- * and its synopsis, in the space a couple of lines take.
+ * The banner stands over the row rather than beside a portrait, so the series' backdrop is the
+ * dominant thing on the page and the page's own title, the season it is browsing and the episode
+ * the remote is resting on are read as one composition - the shape Wholphin's series screen has.
+ * It is drawn by `BrowseHero`, from the same shared hero the rest of the app features a title
+ * with, and it is inside this block so that the banner, the row and the actions below them are
+ * one section of the page: the season selector above it and the cast below it are what the
+ * remote leaves the block for.
+ *
+ * The row is a strip rather than a vertical list, so several episodes are on screen at once and
+ * the remote walks it sideways while Up and Down leave it. Moving along the row changes the
+ * banner - the episode's name, its facts and its synopsis - and never takes it away. The row is
+ * entered on the episode this season begins at: the one the server named as next up when that
+ * episode is in this season, and otherwise the episode in progress, or the first the viewer has
+ * not watched.
  *
  * Only the episodes the server returned for this season are listed, in the order it returned
  * them, which is Jellyfin's own episode order. Nothing here reads anything while the remote
- * moves: the list is fetched once per season, and the details above the row are drawn from the
- * list already in hand. The watched toggle in the band acts on the episode the details are
- * about, so one episode can be settled without leaving the row.
+ * moves: the list is fetched once per season, and the banner is drawn from the list already in
+ * hand. The watched toggle in the band acts on the episode the banner is about, so one episode
+ * can be settled without leaving the row.
  */
 function EpisodeList({
+  item,
   seriesId,
   seasonId,
   nextId = "",
   series = null,
+  season = null,
+  progress = null,
   actions = null,
   refreshKey = 0,
   onPlayedChange,
   onLoaded,
 }: {
+  /** The page's own item: the series, or the season this page was opened for. */
+  item: Item
   seriesId: string
   seasonId: string
   nextId?: string
   series?: Item | null
+  /** The season the row is browsing, once the page knows which one that is. */
+  season?: Item | null
+  /** How much of the season is watched, for the banner's own line about it. */
+  progress?: SeasonProgress | null
   actions?: ReactNode
   /** Changes when the show or season was toggled, so this row reads its episodes again. */
   refreshKey?: number
@@ -836,7 +831,7 @@ function EpisodeList({
   // The episode whose own watched state is being written, so only its button goes quiet.
   const [playedBusy, setPlayedBusy] = useState("")
   const [playError, setPlayError] = useState("")
-  // The episode the details are about: whatever the remote is resting on, and until it rests
+  // The episode the banner is about: whatever the remote is resting on, and until it rests
   // anywhere, the episode this season begins at.
   const [spotId, setSpotId] = useState("")
   // What the list currently on screen is of. A show or season toggle bumps `refreshKey` and asks
@@ -849,7 +844,6 @@ function EpisodeList({
   // read the season again.
   const loaded = useRef(onLoaded)
   loaded.current = onLoaded
-  useEpisodeStage(true)
 
   useEffect(() => {
     let cancel = false
@@ -880,21 +874,27 @@ function EpisodeList({
     if (episodes) loaded.current?.(episodes)
   }, [episodes])
 
-  // The actions belong to the title the row is showing, so they are drawn once the season's
-  // episodes are known - including when there are none, where they are the only thing on the
-  // page and keep the remote somewhere to land. While the episodes are still on their way the
-  // page waits for its own content rather than putting a button in front of the row the viewer
-  // is about to browse: a button rendered first is the control a page lands on.
+  // The banner is drawn whether or not the episodes have arrived: it is the page's own head, and
+  // a page that opened on a blank space while the server answered would read as a page with no
+  // banner at all. Until an episode is known it describes the season the row is browsing.
   //
   // The band holds the title's own actions and the focused episode's watched toggle. It used to
   // carry a second button that played the whole season from here; that button is gone, and the
   // band is one row of controls rather than a row with a gap in it.
 
-  if (!episodes) return <Loading label="Loading episodes" />
+  if (!episodes) {
+    return (
+      <>
+        <BrowseHero item={item} series={series} season={season} episode={null} progress={progress} upNext={false} />
+        <Loading label="Loading episodes" />
+      </>
+    )
+  }
 
   if (episodes.length === 0) {
     return (
       <>
+        <BrowseHero item={item} series={series} season={season} episode={null} progress={progress} upNext={false} />
         <p className="hint">No episodes in this season.</p>
         {actions && <div className="actions episode-actions">{actions}</div>}
       </>
@@ -904,7 +904,7 @@ function EpisodeList({
   /**
    * Write one episode's own watched state. Jellyfin stores it on the episode, so a season or
    * show's folder summary is reread by the page afterwards; the row itself is updated here so
-   * the still's check and the details above it change as soon as the request succeeds.
+   * the still's check and the banner above it change as soon as the request succeeds.
    */
   async function toggleEpisodePlayed(target: Item) {
     if (!episodes) return
@@ -968,7 +968,7 @@ function EpisodeList({
 
   return (
     <>
-      <EpisodeSpot episode={spot} upNext={spot.Id === anchorId} />
+      <BrowseHero item={item} series={series} season={season} episode={spot} progress={progress} upNext={spot.Id === anchorId} />
       <div className="scroller episode-scroller">
         {episodes.map((episode) => (
           <EpisodeCard key={episode.Id} episode={episode} series={series} next={episode.Id === anchorId} onPoint={() => setSpotId(episode.Id)} />
@@ -980,36 +980,90 @@ function EpisodeList({
 }
 
 /**
- * What the episode row is about: the series it belongs to, the episode the remote is on, that
- * episode's facts and its synopsis. The whole synopsis is on the episode's own page; here a
- * couple of lines are enough to know which episode the viewer is looking at.
+ * The cinematic banner at the top of a page that browses a season: the series' own backdrop with
+ * the copy for the episode the remote is on.
  *
- * The episode's own state is stated with it: an episode the viewer has finished says so, and
- * one they are part way through says they can pick it up again - and how much is left, which
- * the facts line above carries when the server has a position for it and leaves out when it
- * does not. Nothing is guessed: an episode with no playback state shows neither.
+ * It is the app's own hero - the shared `.hero.stage-copy` block, the shared `hero-copy` column,
+ * the shared title box, the shared metadata line and the shared clamped synopsis - so the title,
+ * the facts and the synopsis are drawn at the size they are drawn at everywhere else, and the
+ * artwork behind them is the page's own full-bleed stage: the series' backdrop, which `ItemPage`
+ * pins from the item the page is about. Nothing here paints a picture of its own, so the backdrop
+ * is never a second, smaller copy of itself, and an episode's thumbnail can never take the
+ * series' place.
+ *
+ * What it says follows the row beneath it. The line above the title is where the viewer is -
+ * which season, and how much of it is watched - the title is the series' own logo or name, and
+ * the line under it is the episode the remote is resting on with the episode's facts and its
+ * synopsis. So a press along the row changes the banner and never takes it away.
+ *
+ * Before the season's episodes have arrived there is no episode to describe and the banner
+ * states the season alone, rather than standing empty: the page's head is there from its first
+ * paint.
  */
-function EpisodeSpot({ episode, upNext }: { episode: Item; upNext: boolean }) {
-  const code = episodeCode(episode)
-  const watched = Boolean(episode.UserData?.Played)
-  const resume = isInProgress(episode)
+function BrowseHero({
+  item,
+  series,
+  season,
+  episode,
+  progress,
+  upNext,
+}: {
+  /** The page's own item: the series, or the season this page was opened for. */
+  item: Item
+  /** The series the page is about, once it is known. */
+  series: Item | null
+  /** The season the row is browsing, once the page knows which one that is. */
+  season: Item | null
+  /** The episode the remote is on, or `null` before the season's episodes have been read. */
+  episode: Item | null
+  /** How much of the season is watched, for the line above the title. */
+  progress: SeasonProgress | null
+  /** Whether the episode is the one this season would play next. */
+  upNext: boolean
+}) {
+  // The subject of the copy: the episode where there is one, and otherwise the season the row is
+  // browsing, so the facts and the synopsis are always about something the viewer can see.
+  const subject = episode || season || item
+  const context = season ? seasonLineText(season, progress) : kindLabel(item)
+  const code = episode ? episodeCode(episode) : ""
+  const watched = Boolean(episode?.UserData?.Played)
+  const resume = Boolean(episode && isInProgress(episode))
   return (
-    <div className="episode-spot">
-      {episode.SeriesName && <p className="eyebrow">{episode.SeriesName}</p>}
-      <h2>
-        {code ? <span className="episode-code">{code}</span> : null}
-        {code && episode.Name ? "  ·  " : ""}
-        {episode.Name}
-        {upNext ? <span className="episode-flag">Up next</span> : null}
-        {resume ? <span className="episode-flag watching">Resume</span> : null}
-        {watched ? <span className="episode-flag watched">Watched</span> : null}
-      </h2>
-      <MetaLine item={episode} />
-      {episode.Overview && <p className="overview clamp">{episode.Overview}</p>}
-    </div>
+    <header className="hero stage-copy browse-hero">
+      <div className="hero-copy">
+        <p className="eyebrow">{context}</p>
+        {/* The title's own box: the series' logo where the server has one and its name in type
+            where it has not. It is the show the viewer is browsing, which is what the whole page
+            is about - the episode under it is the one the remote has chosen. */}
+        <div className="hero-title">
+          <TitleLogo item={series || item} />
+        </div>
+        <p className="hero-episode">
+          {episode?.Name || ""}
+          {upNext ? <span className="episode-flag">Up next</span> : null}
+          {resume ? <span className="episode-flag watching">Resume</span> : null}
+          {watched ? <span className="episode-flag watched">Watched</span> : null}
+        </p>
+        <MetaLine item={subject} lead={code} />
+        {subject.Overview && <p className="overview clamp">{subject.Overview}</p>}
+        {/* The page's own controls, where every other page keeps them: the head is the title's
+            facts, and the episode row follows them. */}
+        <FactLinks item={item} />
+      </div>
+    </header>
   )
 }
 
+/**
+ * One episode in a season's row: the still, the number and name under it, the runtime, and the
+ * marks the row has always carried - watched, and how far in.
+ *
+ * A card reports the remote's arrival to the page and nothing else. It does not ask the stage for
+ * its own artwork: the picture behind the page is the series' backdrop, which is what the banner
+ * stands on, and swapping it for a still would put a thumbnail where the series' own art belongs.
+ * What the card does change is the banner above it - the name, the facts and the synopsis - which
+ * is the page saying which episode the remote is on.
+ */
 function EpisodeCard({
   episode,
   series,
@@ -1019,39 +1073,9 @@ function EpisodeCard({
   episode: Item
   series: Item | null
   next: boolean
-  /** Told when this card takes the remote, so the details above the row can follow it. */
+  /** Told when this card takes the remote, so the banner above the row can follow it. */
   onPoint?: () => void
 }) {
-  const { hover } = useStageActions()
-  const release = useRef(0)
-  const cancelHover = useRef<(() => void) | null>(null)
-  useEffect(
-    () => () => {
-      window.clearTimeout(release.current)
-      cancelHover.current?.()
-    },
-    [],
-  )
-
-  function point(item: Item | null) {
-    cancelHover.current = hover(item)
-    if (item) onPoint?.()
-  }
-
-  function stayingOnCard(target: EventTarget | null) {
-    return target instanceof Element && Boolean(target.closest("[data-stage]"))
-  }
-
-  function releaseArt(target: EventTarget | null) {
-    if (stayingOnCard(target)) return
-    window.clearTimeout(release.current)
-    release.current = window.setTimeout(() => {
-      const active = document.activeElement
-      if (active instanceof Element && active.closest("[data-stage]")) return
-      point(null)
-    }, 0)
-  }
-
   const width = artWidth("wide")
   const image = episodeStillSrc(episode, width, series)
   const seriesArt = series && series.Id !== episode.Id ? primarySrc(series, width) || thumbSrc(series, width) : null
@@ -1068,21 +1092,11 @@ function EpisodeCard({
     // the route, so Back still lands on this card once the episode has become something to resume.
     <Link
       className={next ? "episode is-next" : "episode"}
-      data-stage=""
       data-episode={episode.Id}
       data-nav-key={`episode:${episode.Id}`}
       to={episodePlayHref(episode)}
-      onMouseEnter={() => point(episode)}
-      onMouseLeave={(event) => {
-        if (event.currentTarget === document.activeElement) return
-        if (stayingOnCard(event.relatedTarget)) return
-        point(null)
-      }}
-      onFocus={() => {
-        window.clearTimeout(release.current)
-        point(episode)
-      }}
-      onBlur={(event) => releaseArt(event.relatedTarget)}
+      onMouseEnter={() => onPoint?.()}
+      onFocus={() => onPoint?.()}
     >
       <span className="episode-art">
         <MediaImage src={image} fallback={seriesArt && seriesArt !== image ? seriesArt : null} alt="" loading="lazy" />

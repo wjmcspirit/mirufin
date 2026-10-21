@@ -2790,18 +2790,21 @@ function testFocusDeclarations() {
     /\.card\.wide \.card-art,\s*\.episode-art,[\s\S]{0,80}?aspect-ratio:\s*16\s*\/\s*9/.test(css),
     "styles.css",
   )
-  // The page's own content boundary, taken once. The season's episode block and the actions under
-  // the row used to state insets of their own - 0 and 40 - which left the episode's synopsis 32
-  // design units to the left of the heading above it and the Play button 8 to the right of the
-  // still below it, and moved again at 1440p and 4K, where the boundary grows with the panel.
+  // The page's own content boundary, taken once. The episode block's own details used to state
+  // insets of their own - 0 and 40 - which left the episode's synopsis 32 design units to the
+  // left of the heading above it and the Play button 8 to the right of the still below it, and
+  // moved again at 1440p and 4K, where the boundary grows with the panel. Those details are the
+  // banner's copy now, and it takes the shared hero's own inset - the one Home's copy and a
+  // library's copy take - so the title, the facts and the synopsis begin where the season chips
+  // and the first still begin.
   check(
-    "the season's episode block takes the page's own content boundary",
-    /\.episode-spot,\s*[\s\S]{0,400}?padding-inline:\s*var\(--strip-pad\)/.test(css),
+    "the banner's copy takes the page's own content boundary",
+    /\.hero\.stage-copy \.hero-copy\s*\{[^}]*padding:\s*16px var\(--strip-pad\)/.test(css),
     "styles.css",
   )
   check(
-    "and states no inset of its own",
-    /\.episode-spot\s*\{[^}]*\}/.test(css) && !/\.episode-spot\s*\{[^}]*padding/.test(css),
+    "and the block around the banner, the row and the actions states no inset of its own",
+    /\.episode-block\s*\{[^}]*\}/.test(css) && !/\.episode-block\s*\{[^}]*padding/.test(css),
     "styles.css",
   )
   check(

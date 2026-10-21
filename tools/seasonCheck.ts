@@ -349,5 +349,91 @@ check(
 check("a season card still opens that season's own page", page.includes("to={`/item/${season.Id}`}"), "Item.tsx")
 check("and a title's own Play still goes through the player", /to=\{`\/play\/\$\{item\.Id\}/.test(page), "Item.tsx")
 
+/* The page's banner, read from the page's own source and the stylesheet it is drawn with. The
+   episode page's hierarchy is the one thing a viewer sees before pressing anything: the season
+   selector across the top of the content area, the cinematic banner under it - the series'
+   backdrop with the copy for the episode the remote is on - and the row of stills directly under
+   the banner. A page that opened on a plain list of stills, or on a portrait beside the copy, is
+   the shape this check exists to stop coming back. */
+const css = readFileSync("src/styles.css", "utf8")
+check(
+  "a page that browses a season draws a cinematic banner over its episode row",
+  page.includes("function BrowseHero") && page.includes('className="hero stage-copy browse-hero"'),
+  "Item.tsx",
+)
+check(
+  "and the banner is drawn inside the block that holds the row, under the season selector and directly over the stills",
+  /<section className="episode-block">\s*<EpisodeList/.test(page) && /episode-block">\s*<EpisodeList[\s\S]*?<BrowseHero/.test(page),
+  "Item.tsx",
+)
+check(
+  "the banner is the app's own hero composition, so its title, facts and synopsis are the sizes they are everywhere else",
+  page.includes('<div className="hero-copy">') &&
+    page.includes('<div className="hero-title">') &&
+    page.includes("<MetaLine item={subject} lead={code} />") &&
+    page.includes('<p className="overview clamp">'),
+  "Item.tsx",
+)
+check("the series is the title the banner names", page.includes("<TitleLogo item={series || item} />"), "Item.tsx")
+check(
+  "the line above it states the season the row is browsing, and how much of it is watched",
+  page.includes("seasonLineText(season, progress)"),
+  "Item.tsx",
+)
+check(
+  "the episode the remote is on is the banner's own line, with its number, its facts and its synopsis",
+  page.includes("{episode?.Name || \"\"}") && page.includes("<MetaLine item={subject} lead={code} />") && page.includes("subject.Overview"),
+  "Item.tsx",
+)
+check(
+  "and the facts line begins with the season and episode number",
+  /episodeCode\(episode\)/.test(page) && /lead=\{code\}/.test(page),
+  "Item.tsx",
+)
+check(
+  "moving along the row changes the banner rather than taking it away",
+  page.includes("onPoint={() => setSpotId(episode.Id)}") && page.includes("episode={spot}") && page.includes("const spot = episodes.find"),
+  "Item.tsx",
+)
+check(
+  "and the banner is drawn before the season's episodes - or its seasons - have arrived",
+  (page.match(/<BrowseHero item=\{item\} series=\{series\} season=\{season\} episode=\{null\}/g) || []).length >= 2 &&
+    page.includes("<BrowseHero item={series} series={series} season={null} episode={null} progress={null} upNext={false} />"),
+  "Item.tsx",
+)
+/* The backdrop behind the banner is the series' own, pinned by the page from the item it is about:
+   nothing on this page paints an episode's still, or a second smaller copy of the artwork, so the
+   picture behind the copy can never become a thumbnail of whichever still the remote is on. */
+check(
+  "the page never swaps the stage to an episode's own still",
+  !page.includes("useEpisodeStage") && !css.includes("look.stills") && !page.includes('data-stage=""'),
+  "Item.tsx and styles.css",
+)
+check(
+  "the banner takes the shared hero's own share of the television, stepped down for the season selector",
+  /\.browse-hero\.stage-copy\s*\{[^}]*height:\s*auto[^}]*min-height:\s*calc\(var\(--app-height[^}]*0\.40\)/.test(css),
+  "styles.css",
+)
+check(
+  "and carries its own dark gradient on the left, over the shared scrim",
+  /\.browse-hero\.stage-copy::before\s*\{[^}]*display:\s*block[^}]*linear-gradient\(90deg/.test(css),
+  "styles.css",
+)
+check(
+  "the season selector above it is a line of chips, and each keeps the season's watched progress",
+  /\.season-card\s*\{[^}]*border-radius:\s*14px/.test(css) && /\.season-card \.season-bar\s*\{/.test(css),
+  "styles.css",
+)
+check(
+  "and the chips draw their own focus ring, since they carry no artwork for the shared one",
+  /\.season-card:focus,[\s\S]{0,120}?outline:\s*3px solid #8ee6ff/.test(css),
+  "styles.css",
+)
+check(
+  "the stills keep the size and shape the row is designed at",
+  /\.episode-block \.episode-scroller\s*\{[^}]*width:\s*100%/.test(css) && /\.episode\s*\{[^}]*width:\s*360px/.test(css),
+  "styles.css",
+)
+
 console.log(failures === 0 ? "\nAll season checks passed." : `\n${failures} check(s) failed.`)
 if (failures > 0) throw new Error(`${failures} check(s) failed`)
