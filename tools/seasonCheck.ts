@@ -518,7 +518,7 @@ check(
 )
 check(
   "the season posters keep the app's progress bar and mark the season the viewer is in",
-  /\.season-card \.season-bar\s*\{/.test(css) && /\.season-card\.on \.card-art::after\s*\{[^}]*background:\s*var\(--accent-2\)/.test(css),
+  /\.season-card \.season-bar\s*\{/.test(css) && /\.season-card\.on \.card-art::after\s*\{[^}]*background:\s*var\(--violet\)/.test(css),
   "styles.css",
 )
 check(
@@ -527,8 +527,34 @@ check(
   "styles.css",
 )
 check(
-  "a season pill is the app's own small-control shape, and the season being browsed is filled violet",
-  /\.season-tab\s*\{[^}]*border-radius:\s*999px/.test(css) && /\.season-tab\.on\s*\{[^}]*background:\s*var\(--accent-2\)/.test(css),
+  "the season being browsed is a state on the pill, and only focus draws a ring",
+  /\.season-tab\.on\s*\{[^}]*background:\s*rgba\(91, 120, 255/.test(css) &&
+    !/\.season-tab\.on[^{]*\{[^}]*outline/.test(css) &&
+    /\.season-tab:focus,[\s\S]{0,160}?outline:\s*3px solid var\(--violet\)/.test(css),
+  "styles.css",
+)
+check(
+  "and neither is drawn in the magenta accent: the app's violet is the one named for it",
+  /--violet:\s*#5b78ff/.test(css) && !/\.season-tab[^{]*\{[^}]*var\(--accent-2\)/.test(css),
+  "styles.css",
+)
+check(
+  "a season changes only when its pill is pressed, never when the remote merely rests on it",
+  /active=\{browsed\.Id\}/.test(seasonScreen) &&
+    !/onFocus=\{\(\) => rememberSeason/.test(seasonScreen) &&
+    !/onMouseEnter=\{\(\) => rememberSeason/.test(seasonScreen),
+  "Item.tsx",
+)
+check(
+  "the pills sit directly under the show's title, above the episode it is browsing",
+  /<div className="hero-title">[\s\S]*?\{tabs\}[\s\S]*?hero-episode[\s\S]*?<MetaLine item=\{subject\} lead=\{code\} \/>[\s\S]*?className="chips"[\s\S]*?subject\.Overview/.test(
+    page,
+  ),
+  "Item.tsx",
+)
+check(
+  "and the banner states its own rhythm: the pills stand clear of the title and the episode, the episode's own lines stay one group, and the synopsis stands clear of them",
+  /\.browse-hero \.hero-copy\s*\{\s*gap:\s*7px/.test(css) && /\.browse-hero \.overview\s*\{\s*margin-top:\s*3px/.test(css),
   "styles.css",
 )
 check(
@@ -544,8 +570,8 @@ check(
   "styles.css",
 )
 check(
-  "an episode's own focus ring is that violet too, on the row the remote walks",
-  /\.episode:focus \.episode-art,[\s\S]{0,140}?outline:\s*3px solid var\(--accent-2\)/.test(css),
+  "an episode's own focus ring is the app's violet too, on the row the remote walks",
+  /\.episode:focus \.episode-art,[\s\S]{0,140}?outline:\s*3px solid var\(--violet\)/.test(css),
   "styles.css",
 )
 check(

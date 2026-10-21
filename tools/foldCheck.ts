@@ -789,14 +789,14 @@ for (const { panel, report } of await measureSeason(browser, seasonProbe, PANELS
      synopsis. The pills belong under the title and its tags and above the description, not in a
      strip of their own above the banner. */
   check(
-    `${panel.name}: the copy reads title, episode, tags, season pills, description - in that order`,
-    shape.order.title < shape.order.episode &&
+    `${panel.name}: the copy reads title, season pills, episode, tags, description - in that order`,
+    shape.order.title < shape.order.seasons &&
+      shape.order.seasons < shape.order.episode &&
       shape.order.episode < shape.order.facts &&
       shape.order.facts < shape.order.chips &&
-      shape.order.chips < shape.order.seasons &&
-      shape.order.seasons < shape.order.overview,
-    `title ${shape.order.title}, episode ${shape.order.episode}, facts ${shape.order.facts}, chips ${shape.order.chips}, ` +
-      `seasons ${shape.order.seasons}, description ${shape.order.overview}`,
+      shape.order.chips < shape.order.overview,
+    `title ${shape.order.title}, seasons ${shape.order.seasons}, episode ${shape.order.episode}, facts ${shape.order.facts}, ` +
+      `chips ${shape.order.chips}, description ${shape.order.overview}`,
   )
   check(
     `${panel.name}: the banner keeps the shared hero's own share of the television as its floor`,

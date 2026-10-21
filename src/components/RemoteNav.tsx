@@ -3,11 +3,10 @@ import { Capacitor } from "@capacitor/core"
 import { useEffect } from "react"
 import { useLocation, useNavigate, useNavigationType } from "react-router-dom"
 import { useLocalProxy } from "../lib/media"
-import { backHeld, clearSeats, focusables, isBackKey, moveFocus, noteRoute, placeFocus, remoteKey, resetFocusState, restoreSeat, takeBack, trackSeats } from "../lib/remote"
+import { backHeld, clearSeats, focusables, isBackKey, isTextField, landingControl, moveFocus, noteRoute, placeFocus, remoteKey, resetFocusState, restoreSeat, takeBack, trackSeats } from "../lib/remote"
 import { useSession } from "../session"
 
 const ARROWS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])
-const TEXT_TYPES = new Set(["text", "password", "search", "url", "email", "tel"])
 /**
  * How long a landing keeps looking for the page's own content, in 60ms looks: about two and a
  * half seconds, which is longer than a title page's two reads from a server on the same
@@ -15,12 +14,6 @@ const TEXT_TYPES = new Set(["text", "password", "search", "url", "email", "tel"]
  * that is slow - and never by a page that has content already.
  */
 const LAND_LOOKS = 40
-
-function isTextField(node: HTMLElement) {
-  if (node instanceof HTMLTextAreaElement) return true
-  if (!(node instanceof HTMLInputElement)) return false
-  return TEXT_TYPES.has((node.type || "text").toLowerCase())
-}
 
 function stepSelect(select: HTMLSelectElement, delta: number) {
   const next = select.selectedIndex + delta
@@ -100,13 +93,7 @@ export function RemoteNav() {
       // Stop if the viewer or the page already moved focus somewhere of its own.
       if (current instanceof HTMLElement && current !== document.body && current !== held) return
       const items = focusables()
-      const outside = items.filter((item) => !item.closest(".side"))
-      const controls = outside.filter((item) => !isTextField(item))
-      const content =
-        controls.find((item) => item.closest(".hero .btn-primary, .detail-hero .btn-primary, .hero, .detail-hero, .card")) ||
-        controls[0] ||
-        outside.find((item) => item.closest(".hero .btn-primary, .detail-hero .btn-primary, .hero, .detail-hero, .card")) ||
-        outside[0]
+      const content = landingControl(items)
       if (content) {
         held = null
         placeFocus(content)

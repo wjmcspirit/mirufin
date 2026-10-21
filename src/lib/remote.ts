@@ -121,6 +121,44 @@ export function focusables() {
   return [...document.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(visible)
 }
 
+const TEXT_FIELDS = new Set(["text", "password", "search", "url", "email", "tel"])
+
+/** Whether a control is a field the television's own keyboard would open for. */
+export function isTextField(node: HTMLElement) {
+  if (node instanceof HTMLTextAreaElement) return true
+  if (!(node instanceof HTMLInputElement)) return false
+  return TEXT_FIELDS.has((node.type || "text").toLowerCase())
+}
+
+/**
+ * The control a page is entered on when the viewer has nothing to come back to.
+ *
+ * The page's own content, in the order a viewer reads it: the hero's primary action first - the Play
+ * a library or a show opens on - then the page's browse surface, which is the row of cards the viewer
+ * came for, and only then the hero's remaining controls. That order is what keeps a page browsing a
+ * season off its season selector: the pills are the hero's own controls and the episode row is the
+ * browse surface, so the remote lands on the episodes and the selector is one press away. It is also
+ * what keeps the season selector out of the page's memory: the seat a page files on the way out is
+ * whatever the viewer was on, so a page entered on a pill filed a pill - a control linking to another
+ * season - and returning to it put the focus ring back on the first season's pill however late the
+ * season being browsed was.
+ *
+ * A page with none of those - settings, a form, a list of text - keeps the first control it offers,
+ * and a text field is never chosen: entering a page must not open the television's keyboard. The
+ * navigation rail is never chosen either, because a press of Down from the rail is how the viewer
+ * enters a page, and the page has to be able to answer it with something of its own.
+ */
+export function landingControl(nodes: HTMLElement[]): HTMLElement | null {
+  const controls = nodes.filter((node) => !node.closest(".side") && !isTextField(node))
+  return (
+    controls.find((node) => node.closest(".hero .btn-primary, .detail-hero .btn-primary")) ||
+    controls.find((node) => node.closest(".episode, .card")) ||
+    controls.find((node) => node.closest(".hero, .detail-hero")) ||
+    controls[0] ||
+    null
+  )
+}
+
 interface FocusItem {
   node: HTMLElement
   rect: DOMRect

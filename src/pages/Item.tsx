@@ -1153,6 +1153,11 @@ function BrowseHero({
         <div className="hero-title">
           {series ? <TitleLogo item={series} /> : <h1>{season?.SeriesName || item.Name || "Untitled"}</h1>}
         </div>
+        {/* The season selector, when this page has one: directly under the show's own title and
+            artwork, above the episode it is browsing. The viewer reads the show, then which season
+            of it they are in, then the episode - so the pills sit between the logo and the episode
+            line rather than among the episode's own facts. */}
+        {tabs}
         {episode && (
           <p className="hero-episode">
             {episode.Name || ""}
@@ -1169,9 +1174,6 @@ function BrowseHero({
             ))}
           </p>
         )}
-        {/* The season selector, when this page has one: under the show's title and its tags, above
-            the episode's synopsis. */}
-        {tabs}
         {subject.Overview && <p className="overview clamp">{subject.Overview}</p>}
         {/* The page's own controls, where every other page keeps them: the head is the title's
             facts, and the episode row follows them. */}

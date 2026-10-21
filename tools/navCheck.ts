@@ -15,6 +15,7 @@ import { readFileSync } from "node:fs"
 import {
   clearSeats,
   focusables,
+  landingControl,
   moveFocus,
   noteRoute,
   noteBackKeydown,
@@ -244,9 +245,27 @@ function matches(node: El, selector: string) {
   return selector.split(",").some((part) => matchesOne(node, part.trim()))
 }
 
+/**
+ * One selector against one element, descendants included: `.hero .btn-primary` asks for a primary
+ * button anywhere under a hero, which is a selector the app's own landing rule uses and the check
+ * has to be able to answer. Each part before the last has to match an ancestor, in order.
+ */
+function matchesOne(node: El, selector: string) {
+  const parts = selector.split(/\s+/).filter(Boolean)
+  const last = parts.pop()
+  if (!last || !matchesCompound(node, last)) return false
+  let at: El | null = node.parent
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    while (at && !matchesCompound(at, parts[index])) at = at.parent
+    if (!at) return false
+    at = at.parent
+  }
+  return true
+}
+
 const TOKEN = /^(?:\.([\w-]+)|\[([\w-]+)(?:[~|^$*]?=("[^"]*"|'[^']*'|[^\]]*))?\]|:not\(\[([\w-]+)\]\)|:not\(\.([\w-]+)\))/
 
-function matchesOne(node: El, selector: string) {
+function matchesCompound(node: El, selector: string) {
   let rest = selector
   const tag = /^[a-zA-Z][\w-]*/.exec(rest)
   if (tag) {
@@ -337,9 +356,18 @@ class Watcher {
   }
 }
 
+/** An input or a textarea: the two controls the television's own keyboard opens for. */
+class InputEl extends El {
+  type = "text"
+}
+
+class TextAreaEl extends El {}
+
 function installDom() {
   const globals = globalThis as unknown as Record<string, unknown>
   globals.HTMLElement = El
+  globals.HTMLInputElement = InputEl
+  globals.HTMLTextAreaElement = TextAreaEl
   globals.Element = El
   globals.Node = El
   globals.document = doc
@@ -2904,8 +2932,84 @@ function testFocusDeclarations() {
   )
 }
 
+/**
+ * The control a page is entered on.
+ *
+ * The order the landing looks in is the order a viewer reads a page: the hero's primary action, then
+ * the page's browse surface, then the hero's remaining controls. It is what keeps a page that browses
+ * a season off its season selector - the pills are the hero's own controls and the episode row is the
+ * browse surface, so the remote lands on the episodes and the selector is one press away. It is also
+ * what keeps the selector out of the page's memory: the seat a page files on the way out is whatever
+ * the viewer was on, so a page entered on a pill filed a pill - a control linking to another season -
+ * and returning to that page put the focus ring back on the first season's pill, however late the
+ * season being browsed was. That is the defect these checks are here to keep out.
+ */
+function testLandingPolicy() {
+  const nodes = (list: El[]) => list as unknown as HTMLElement[]
+
+  function box(tag: string, classes: string, parent: El | null = null) {
+    const node = new El(tag, classes)
+    if (parent) {
+      node.parent = parent
+      parent.children.push(node)
+    }
+    return node
+  }
+
+  const page = box("div", "detail browse-page")
+  const main = box("div", "main", page)
+  const hero = box("header", "hero stage-copy browse-hero", main)
+  const copy = box("div", "hero-copy", hero)
+  const pills = box("nav", "scroller season-tabs", copy)
+  const firstPill = box("a", "season-tab", pills)
+  const selectedPill = box("a", "season-tab on", pills)
+  const row = box("div", "scroller episode-scroller", main)
+  const episode = box("a", "episode", row)
+  const rail = box("a", "nav", box("nav", "side-nav", box("header", "side", page)))
+
+  check(
+    "a page that browses a season is entered on its episode row, not on its season selector",
+    landingControl(nodes([rail, firstPill, selectedPill, episode])) === (episode as unknown as HTMLElement),
+    label(landingControl(nodes([rail, firstPill, selectedPill, episode])) as unknown as El),
+  )
+  check(
+    "so the seat such a page files is an episode rather than a pill that links to another season",
+    landingControl(nodes([rail, selectedPill, firstPill, episode])) === (episode as unknown as HTMLElement),
+    label(landingControl(nodes([rail, selectedPill, firstPill, episode])) as unknown as El),
+  )
+
+  // A hero's primary action is where a library or a show opens: it outranks the cards under it.
+  const play = box("a", "btn btn-primary", hero)
+  check(
+    "a page whose hero carries the play action is entered on that action",
+    landingControl(nodes([rail, play, episode])) === (play as unknown as HTMLElement),
+    label(landingControl(nodes([rail, play, episode])) as unknown as El),
+  )
+
+  const poster = box("a", "card poster", main)
+  check(
+    "a page of cards is entered on its first card",
+    landingControl(nodes([rail, poster, episode])) === (poster as unknown as HTMLElement),
+    label(landingControl(nodes([rail, poster, episode])) as unknown as El),
+  )
+  check(
+    "a page with nothing but its own hero is entered on the hero's first control",
+    landingControl(nodes([rail, firstPill])) === (firstPill as unknown as HTMLElement),
+    label(landingControl(nodes([rail, firstPill])) as unknown as El),
+  )
+  check("and the rail is never the landing, even when it is all the page has", landingControl(nodes([rail])) === null)
+
+  const field = new InputEl("input", "search-field")
+  check(
+    "a text field is never the landing: entering a page must not open the television's keyboard",
+    landingControl(nodes([rail, field, poster])) === (poster as unknown as HTMLElement),
+    label(landingControl(nodes([rail, field, poster])) as unknown as El),
+  )
+}
+
 installDom()
 trackSeats()
+testLandingPolicy()
 testHomeRow()
 testHeroAndFirstRow()
 testActorCarousel()

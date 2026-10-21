@@ -165,9 +165,10 @@
   copy.appendChild(episode)
   var factsLine = element("p", "kicker", "hero-facts")
   factsLine.textContent = "October 16, 2026  ·  43m  ·  TV-14  ·  7.9"
+  // The season pills, directly under the title: the order the page draws them in, with the episode's
+  // own line, its tags and its synopsis below.
+  if (shape !== "series") copy.appendChild(seasonStrip)
   copy.appendChild(factsLine)
-  // The tags that describe the episode, then the season pills under them: the order the page draws
-  // them in, with the episode's synopsis below.
   var chips = element("p", "chips", "hero-chips")
   var chipLabels = ["720p", "H.264", "AC3", "5.1", "Subtitles"]
   for (var c = 0; c < chipLabels.length; c += 1) {
@@ -176,7 +177,6 @@
     chips.appendChild(chip)
   }
   copy.appendChild(chips)
-  if (shape !== "series") copy.appendChild(seasonStrip)
   var overview = element("p", "overview clamp", "")
   overview.textContent = "A synopsis of the sort a server actually sends: two lines of it at this width."
   copy.appendChild(overview)
