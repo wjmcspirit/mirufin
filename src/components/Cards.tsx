@@ -44,6 +44,11 @@ export function MediaImage({
       </div>
     )
   }
+  // Every piece of artwork the app draws goes through here, and a poster is a few hundred kilobytes
+  // of JPEG: decoded on the main thread, that is a frame the remote waits behind while the viewer
+  // walks a row. `async` lets the browser decode it off that thread and paint the card as soon as it
+  // is ready - the same thing the preloader asks for when it warms a backdrop (`lib/images.ts`),
+  // asked for on the images the viewer actually sees.
   return (
     <img
       key={chosen}
@@ -52,6 +57,7 @@ export function MediaImage({
       className={className}
       draggable={false}
       loading={loading}
+      decoding="async"
       onError={() => setStep((value) => value + 1)}
     />
   )

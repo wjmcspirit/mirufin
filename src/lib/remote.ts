@@ -128,10 +128,19 @@ interface FocusItem {
   cy: number
 }
 
-/** One visibility/geometry pass per keypress; all helpers reuse these rects. */
-function focusSnapshot(): FocusItem[] {
+/**
+ * One visibility/geometry pass per keypress; all helpers reuse these rects.
+ *
+ * `scope` measures the controls inside one band and nothing else. A sideways press is answered from
+ * the band the viewer is in - the engine looks beside the control they are on, and a row with
+ * nothing beside it answers with nothing - so the rest of the page is work that press never uses.
+ * It is the press a viewer makes most, and on a page holding a hundred posters it is the difference
+ * between measuring the row and measuring the whole library.
+ */
+function focusSnapshot(scope?: HTMLElement): FocusItem[] {
+  const root: ParentNode = scope || document
   const items: FocusItem[] = []
-  for (const node of document.querySelectorAll<HTMLElement>(FOCUSABLE)) {
+  for (const node of root.querySelectorAll<HTMLElement>(FOCUSABLE)) {
     if (node.closest("[inert]")) continue
     const rect = node.getBoundingClientRect()
     if (rect.width <= 0 || rect.height <= 0) continue
@@ -1035,6 +1044,30 @@ function contentAnchor(items: FocusItem[]) {
   return (shown || main[0])?.node || null
 }
 
+/**
+ * The band a sideways press is answered from, when it is one that can be answered from a band alone.
+ *
+ * A strip or a grid answers Left and Right from its own controls and nothing else: the neighbour is
+ * found beside the control the viewer is on, and when there is none the press simply does nothing -
+ * it never leaves the band. So that press is measured against the band it is made in, and the rest
+ * of the page is not measured at all.
+ *
+ * Every other press is given the whole page: a vertical press needs the bands above and below, the
+ * rail and a toolbar's open menu answer sideways presses from their own controls, and a control that
+ * belongs to no band has to be able to reach the ones beside it anywhere.
+ */
+function sidewaysScope(key: string, active: HTMLElement | null) {
+  if (key !== "ArrowLeft" && key !== "ArrowRight") return undefined
+  // A control that is no longer in the page has no band on screen to be measured, which is also how
+  // the press below treats one.
+  if (!active || !active.isConnected) return undefined
+  if (active.closest(".side, .tool-pop, .trailer-pop")) return undefined
+  const band = containerOf(active)
+  if (!band) return undefined
+  const sort = kind(band)
+  return sort === "strip" || sort === "grid" ? band : undefined
+}
+
 export function moveFocus(key: string) {
   // A press from the remote is the viewer taking over: a restoration still waiting for a
   // slow page is over, and this press moves from wherever focus is.
@@ -1045,9 +1078,9 @@ export function moveFocus(key: string) {
     const adjust = arrowAdjuster()
     if (adjust && adjust(key)) return
   }
-  const items = focusSnapshot()
-  if (items.length === 0) return
   const active = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  const items = focusSnapshot(sidewaysScope(key, active))
+  if (items.length === 0) return
   const current = active ? items.find((item) => item.node === active) || null : null
   if (!current) {
     // A control that is still connected and focusable is only missing from this

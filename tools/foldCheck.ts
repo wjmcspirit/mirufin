@@ -1077,6 +1077,150 @@ for (const { panel, report } of await measurePage<FavoritesReport>(browser, favo
   console.log("")
 }
 
+/** One measured press of the timing probe: what it cost the DOM, and where focus landed. */
+interface TimingStep {
+  key: string
+  landed: string
+  ms: number
+  frameMs: number
+  queries: number
+  nodes: number
+  rects: number
+  styles: number
+  focuses: number
+}
+
+/** What one walk of presses cost, worst press first. */
+interface TimingCost {
+  presses: number
+  msAvg: number
+  msMax: number
+  frameMsMax: number
+  queries: number
+  nodes: number
+  rects: number
+  styles: number
+}
+
+/** What the timing probe reports about one page: its size, and what a press costs on it. */
+interface TimingReport {
+  viewport: { width: number; height: number }
+  fold: number
+  gridCards: number
+  stripCards: number
+  columns: number
+  elements: number
+  find: { controls: number; ms: number; queries: number; nodes: number; rects: number; styles: number }
+  row: {
+    landed: string
+    scrollLeft: number
+    scrollWidth: number
+    clientWidth: number
+    insideRow: boolean
+    snapType: string
+    cost: TimingCost
+  }
+  held: { presses: number; landed: string; scrollLeft: number; ms: number; queries: number; nodes: number; rects: number; styles: number }
+  fromToolbar: TimingStep
+  acrossRow: string[]
+  acrossRowCost: TimingCost
+  downRows: string[]
+  upRows: string[]
+  backToStart: string[]
+  upToToolbar: TimingStep
+  snap: { immediate: number; settled: number }
+  pageTop: number
+  pageLeft: number
+}
+
+/**
+ * The cost of one press, measured on a page as heavy as the busiest screen the app draws.
+ *
+ * Two kinds of number come out of this. The wall-clock ones - how long `moveFocus` took, and how
+ * long the frame after it took - are this machine's, and are printed rather than asserted: they are
+ * the measurement of record for a change, not a promise about a television. The DOM work the engine
+ * did is counted by the probe and is the same on any machine, so that is what the checks hold: a
+ * press finds the page's controls once, measures what it needs, and does not ask the engine for a
+ * computed style per control on the page.
+ *
+ * The same walk is measured on a small page and a large one, because a press whose cost grows with
+ * the number of controls on the screen is a press that gets slower as a library grows.
+ */
+const navTimingProbe = pathToFileURL(resolve("tools/navTimingProbe.html")).href
+console.log("\nWhat one press costs the page, with the remote walking it\n")
+
+const TIMING_PAGES = [24, 60]
+
+for (const cards of TIMING_PAGES) {
+  for (const { panel, report } of await measurePage<TimingReport>(browser, navTimingProbe, PANELS, `?cards=${cards}`)) {
+    const { find, row, held } = report
+    console.log(`${panel.name} - ${cards} posters (${report.columns} a row, ${report.elements} elements, ${find.controls} controls)`)
+    console.log(
+      `     finding the controls: ${find.ms}ms (${find.queries} query, ${find.nodes} nodes, ${find.rects} rects, ${find.styles} computed styles)\n` +
+        `     a press along a row: ${row.cost.msAvg}ms average, ${row.cost.msMax}ms worst of ${row.cost.presses} ` +
+        `(${row.cost.queries} queries, ${row.cost.nodes} nodes, ${row.cost.rects} rects, ${row.cost.styles} computed styles); ` +
+        `frame after it ${row.cost.frameMsMax}ms\n` +
+        `     a press in the grid: ${report.acrossRowCost.msAvg}ms average, ${report.acrossRowCost.msMax}ms worst ` +
+        `(${report.acrossRowCost.queries} queries, ${report.acrossRowCost.nodes} nodes, ${report.acrossRowCost.rects} rects, ${report.acrossRowCost.styles} styles)\n` +
+        `     a held key: ${held.presses} presses in ${held.ms}ms, landing on ${held.landed}\n` +
+        `     the row: ${row.scrollLeft} of ${row.scrollWidth - row.clientWidth} scrolled, focused card inside ${row.insideRow}, ` +
+        `snap ${row.snapType}; a programmatic scroll of 420 settled at ${report.snap.settled} (was ${report.snap.immediate})`,
+    )
+    check(
+      `${panel.name} (${cards} posters): finding the page's controls is one query, not one per control`,
+      find.queries === 1 && find.nodes === find.controls,
+      `${find.queries} queries over ${find.nodes} nodes for ${find.controls} controls`,
+    )
+    check(
+      `${panel.name} (${cards} posters): a sideways press measures the row it is answered from, not the page`,
+      row.cost.styles === report.stripCards && report.acrossRowCost.styles === report.gridCards,
+      `a row press measured ${row.cost.styles} controls against the row's ${report.stripCards}, ` +
+        `a grid press ${report.acrossRowCost.styles} against the grid's ${report.gridCards}, of ${find.controls} on the page`,
+    )
+    check(
+      `${panel.name} (${cards} posters): and the work it does does not grow with the page`,
+      report.acrossRowCost.queries <= 2 && report.acrossRowCost.nodes <= find.controls * 2,
+      `${report.acrossRowCost.queries} queries over ${report.acrossRowCost.nodes} nodes against ${find.controls} controls`,
+    )
+    check(
+      `${panel.name} (${cards} posters): Down from the toolbar selects the first poster at the left`,
+      report.fromToolbar.landed === "grid-1",
+      report.fromToolbar.landed,
+    )
+    // Two presses right, two rows down, two rows up and two back: the third column of the grid,
+    // which is where the walk is standing when it turns round.
+    const column = 3
+    check(
+      `${panel.name} (${cards} posters): Right walks the row and Down and Up walk the grid's rows`,
+      report.acrossRow.join(",") === "grid-2,grid-3" &&
+        report.downRows.join(",") === `grid-${report.columns + column},grid-${report.columns * 2 + column}` &&
+        report.upRows.join(",") === `grid-${report.columns + column},grid-${column}`,
+      `${report.acrossRow.join(",")} / ${report.downRows.join(",")} / ${report.upRows.join(",")} of ${report.columns} columns`,
+    )
+    check(
+      `${panel.name} (${cards} posters): Left walks back, and Up returns to the toolbar it came from`,
+      report.backToStart.join(",") === "grid-2,grid-1" && report.upToToolbar.landed.startsWith("tool-"),
+      `${report.backToStart.join(",")} then ${report.upToToolbar.landed}`,
+    )
+    check(
+      `${panel.name} (${cards} posters): a sideways walk scrolls the row and keeps the focused card inside it`,
+      row.landed === "strip-11" && row.scrollLeft > 0 && row.insideRow,
+      `${row.landed}, scrolled ${row.scrollLeft} of ${row.scrollWidth - row.clientWidth}, inside ${row.insideRow}`,
+    )
+    check(
+      `${panel.name} (${cards} posters): a held key is neither dropped nor applied twice`,
+      held.landed === "strip-13" && held.scrollLeft > 0,
+      `${held.presses} presses landed on ${held.landed}, scrolled ${held.scrollLeft}`,
+    )
+    check(
+      `${panel.name} (${cards} posters): and a row the engine scrolls does not move again after the press`,
+      report.snap.settled === report.snap.immediate,
+      `asked for 420, settled at ${report.snap.settled} (was ${report.snap.immediate})`,
+    )
+    console.log("")
+  }
+}
+
 /**
  * The season page walked with the remote, measured the same way.
  *
