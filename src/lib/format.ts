@@ -495,6 +495,18 @@ export function techChips(item: Item) {
   return chips.filter(Boolean)
 }
 
+/**
+ * Whether an item carries subtitles the viewer can turn on.
+ *
+ * Read from the same streams `techChips` reads, and said in the same breath as the picture and the
+ * sound: an episode whose streams hold a subtitle track says so, and one whose streams hold none
+ * says nothing - a server that has not reported streams at all has not reported no subtitles, and
+ * a badge claiming there are none would be a claim this app cannot stand behind.
+ */
+export function hasSubtitles(item: Item) {
+  return mediaStreams(item).some((stream) => stream.Type === "Subtitle")
+}
+
 export function libraryItemTypes(collectionType?: string) {
   switch (collectionType) {
     case "movies":

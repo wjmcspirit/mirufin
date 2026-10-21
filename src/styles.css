@@ -2063,46 +2063,83 @@ select {
 .season-bar > span { display: block; height: 100%; background: var(--neon); }
 .season-block { display: grid; gap: 0; }
 .season-block .row-head { margin-bottom: 0; }
-/* The season selector: one line of chips across the top of the content area, above the banner.
-   Each chip carries the season's number, how much of it is watched and the same progress bar the
-   season's own card drew. The season's artwork is deliberately not repeated here - the banner
-   behind the chips is what shows the series' picture, and a second row of posters above it would
-   both compete with the episode row for the screen and cost the room that keeps the row above the
-   fold at 1080p. */
-.season-block .season-scroller { padding: 4px var(--strip-pad) 12px; }
-.season-card {
-  display: grid;
-  width: 200px;
-  padding: 10px 14px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.04);
-  text-align: left;
-}
-.season-card .card-copy { padding: 0; gap: 4px; }
-.season-card .card-title { color: #c9d2e0; }
+/* The show's seasons: a row of posters, one per season, in the strip every other row in the app
+   uses - so the remote walks it sideways, it scrolls to keep the focused poster on screen, and the
+   poster the viewer was last in carries a violet rule along its bottom edge. The season's artwork
+   is the point of this row: a season is chosen by recognising its picture, and a season the server
+   has no picture for borrows the show's own rather than showing a bare tile. */
+.season-block .season-scroller { align-items: start; }
+.season-card .card-copy { gap: 4px; }
 .season-card .card-sub { color: #9aa3b5; }
-/* How much of a season is watched, under its name - the same bar the season's own page drew, at
-   the size a chip's copy column can carry. */
+/* How much of a season is watched, under its name - the same bar the rest of the app draws on a
+   card, at the size a poster's copy column can carry. */
 .season-card .season-bar { height: 3px; margin-top: 2px; background: rgba(255, 255, 255, 0.14); }
-.season-card.on {
-  border-color: #3ec8ff;
-  background: rgba(62, 200, 255, 0.14);
+/* The season the viewer is in, marked the way the season selector marks it: a violet rule under
+   the poster rather than a second ring, so a focused card still reads as the focused one. */
+.season-card.on .card-art::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: var(--accent-2);
 }
 .season-card.on .card-title { color: #f4f7ff; }
-/* A chip is its own control, so it draws the ring itself: the shared card rule puts the ring on
-   `.card-art`, and a season chip has none. The focused season is obvious from the couch without
-   the selector turning into a row of glowing boxes. */
-.season-card:focus,
-.season-card:focus-visible,
-.season-card.dpad-focus {
-  outline: 3px solid #8ee6ff;
-  outline-offset: 3px;
-  background: rgba(62, 200, 255, 0.14);
+/* The season selector, on the season's own page: one line of tabs across the top of the content
+   area, the season being browsed underlined. It is a `.scroller` like every other strip, so the
+   remote walks it sideways and it scrolls when the focused tab reaches the edge - and it is not a
+   snap container for the same reason the episode row is not: the focus engine decides where a tab
+   rests, and a snap container it cannot satisfy is one whose behaviour differs by WebView.
+   The padding is stated against the strip's own class so it holds at every panel: the shared
+   `.scroller` padding is the room a poster's ring and lift are drawn into, which a line of tabs
+   neither needs nor can spare - at 2200 and 3200 pixels wide it is 56 and 68 units of the page. */
+.detail-body .season-tabs {
+  align-items: center;
+  gap: 28px;
+  scroll-snap-type: none;
+  padding: 4px var(--strip-pad) 12px;
+  scroll-padding-inline: var(--strip-pad);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
-.season-card:focus .card-title,
-.season-card:focus-visible .card-title,
-.season-card.dpad-focus .card-title { color: #fff; }
+.season-tab {
+  position: relative;
+  flex: 0 0 auto;
+  padding: 8px 2px 14px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+  white-space: nowrap;
+  transition: color 0.16s ease;
+}
+.season-tab.on { color: #fff; }
+/* The underline the reference marks the active season with, in the app's own violet. */
+.season-tab.on::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  height: 3px;
+  border-radius: 99px;
+  background: var(--accent-2);
+}
+.season-tab:hover { color: #e7ecf5; }
+.season-tab:focus,
+.season-tab:focus-visible,
+.season-tab.dpad-focus {
+  color: #fff;
+  outline: 3px solid var(--accent-2);
+  outline-offset: 4px;
+  border-radius: 8px;
+}
+/* The show's own head, and the room the season posters need: the banner steps down a little on the
+   show's page - it has no episode row under it to pay for - so the seasons row is on screen at
+   1080p rather than half of it below the fold. */
+.series-head { display: grid; gap: 0; }
+.series-head .browse-hero.stage-copy { min-height: calc(var(--app-height, 100dvh) * 0.34); }
+.series-head .episode-actions { margin-top: 14px; }
 /* The block that browses a season: the banner that describes the episode the remote is on, the
    row of stills, and the actions under the row. The block's own column is stated for the same
    reason the page's is - the banner carries a title and a line of facts, and the row must not take
@@ -2208,9 +2245,11 @@ select {
   background: rgba(217, 70, 239, 0.2);
   color: #f2ccff;
 }
-/* One focus state for an episode, the same as every other card in the app: the still lifts a
-   little and takes a thin cyan ring, so the focused episode is obvious from the couch without
-   the row turning into a row of glowing boxes. */
+/* One focus state for an episode: the still lifts a little and takes a ring in the app's own
+   violet - the second accent, the one the season selector's underline is drawn in - rather than the
+   cyan every other card wears. The episode row is the season screen's browse surface, so the ring
+   the remote travels along is the one the reference marks it with, and the focused episode is
+   obvious from the couch without the row turning into a row of glowing boxes. */
 .episode:focus,
 .episode:focus-visible,
 .episode.dpad-focus {
@@ -2221,7 +2260,7 @@ select {
 .episode:focus .episode-art,
 .episode:focus-visible .episode-art,
 .episode.dpad-focus .episode-art {
-  outline: 3px solid #8ee6ff;
+  outline: 3px solid var(--accent-2);
   outline-offset: 3px;
   box-shadow: 0 18px 38px rgba(0, 0, 0, 0.5);
 }

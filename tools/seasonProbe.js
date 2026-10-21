@@ -46,39 +46,23 @@
   }
 
   /**
-   * A season chip: the app's own `.season-card`, which carries the season's number, how much of
-   * it is watched and the progress bar - and no artwork, because the banner above it is what
-   * shows the series' picture.
+   * A season tab: the app's own `.season-tab`, one per season of the show, with the season being
+   * browsed carrying the underline. The tabs are what the remote walks to change season, and the
+   * strip scrolls under it when the focused tab reaches the edge.
    */
-  function seasonChip(index) {
+  function seasonTab(index) {
     var node = document.createElement("a")
-    node.className = index === 1 ? "card season-card on" : "card season-card"
+    node.className = index === 1 ? "season-tab on" : "season-tab"
     node.setAttribute("href", "#")
     node.setAttribute("data-card", String(index))
-    var copy = document.createElement("span")
-    copy.className = "card-copy"
-    var title = document.createElement("span")
-    title.className = "card-title"
-    title.textContent = "Season " + (index + 1)
-    var sub = document.createElement("span")
-    sub.className = "card-sub"
-    sub.textContent = "3 of 10 watched"
-    var bar = document.createElement("span")
-    bar.className = "season-bar"
-    var fill = document.createElement("span")
-    fill.style.width = "30%"
-    bar.appendChild(fill)
-    copy.appendChild(title)
-    copy.appendChild(sub)
-    copy.appendChild(bar)
-    node.appendChild(copy)
+    node.textContent = "Season " + (index + 1)
     return node
   }
 
   var episodes = document.getElementById("episode-strip")
   var seasons = document.getElementById("season-strip")
   for (var i = 0; i < 12; i += 1) episodes.appendChild(card("episode", i, "S2 E" + (i + 1)))
-  for (var j = 0; j < 9; j += 1) seasons.appendChild(seasonChip(j))
+  for (var j = 0; j < 9; j += 1) seasons.appendChild(seasonTab(j))
 
   /*
    * The worst case the banner has to hold: an episode whose name runs long, and a title with more
@@ -157,7 +141,7 @@
       return Math.round((px / zoom) * 10) / 10
     }
     var banner = document.querySelector(".browse-hero")
-    var seasonBlock = document.querySelector(".season-block")
+    var seasonBlock = document.querySelector(".season-tabs")
     var block = document.querySelector(".episode-block")
     var actions = document.querySelector(".episode-actions")
     var pristineArt = cards[0].querySelector(".episode-art").getBoundingClientRect()
@@ -169,15 +153,29 @@
       /** The copy the banner carries: it has to fit inside the banner rather than be clipped by it. */
       copy: { top: design(copyBox.top), bottom: design(copyBox.bottom), height: design(copyBox.height) },
       season: { top: design(seasonBlock.getBoundingClientRect().top), bottom: design(seasonBlock.getBoundingClientRect().bottom) },
+      /** What the season selector's own box is made of, so a strip that grows can be explained. */
+      seasonBox: (function () {
+        var first = seasons.querySelector(".season-tab, .season-card")
+        var box = first.getBoundingClientRect()
+        var style = getComputedStyle(seasonBlock)
+        return {
+          height: design(seasonBlock.getBoundingClientRect().height),
+          tab: { width: design(box.width), height: design(box.height) },
+          padding: style.padding,
+          gap: style.gap,
+          font: getComputedStyle(first).fontSize + "/" + getComputedStyle(first).lineHeight,
+          wrap: style.flexWrap,
+        }
+      })(),
       block: { top: design(block.getBoundingClientRect().top) },
       row: { top: design(episodes.getBoundingClientRect().top), bottom: design(episodes.getBoundingClientRect().bottom) },
       art: { top: design(pristineArt.top), bottom: design(pristineArt.bottom), width: design(pristineArt.width), height: design(pristineArt.height) },
       actions: { top: design(actions.getBoundingClientRect().top) },
-      /* The one content boundary: the banner's copy, the season selector's first chip, the row's
+      /* The one content boundary: the banner's copy, the season selector's first tab, the row's
          first still and the actions under the row all begin on it. */
       edges: {
         copy: design(document.querySelector(".hero-copy .eyebrow").getBoundingClientRect().left),
-        season: design(seasons.querySelector(".season-card").getBoundingClientRect().left),
+        season: design(seasons.querySelector(".season-tab").getBoundingClientRect().left),
         row: design(cards[0].getBoundingClientRect().left),
         actions: design(actions.firstElementChild.getBoundingClientRect().left),
       },
@@ -207,9 +205,9 @@
     var atStart = look(episodes, document.activeElement, episodes.scrollLeft)
     var pageTopBack = pageMain.scrollTop
 
-    // The season row above it is walked the same way, so both rows are measured doing the thing
-    // the viewer complained about rather than one of them sitting at offset zero.
-    var seasonCards = [].slice.call(seasons.querySelectorAll(".season-card"))
+    // The season selector above it is walked the same way, so both strips are measured doing the
+    // thing the viewer complained about rather than one of them sitting at offset zero.
+    var seasonCards = [].slice.call(seasons.querySelectorAll(".season-tab"))
     remote.placeFocus(seasonCards[0])
     await nextFrame()
     for (var seasonStep = 1; seasonStep < seasonCards.length; seasonStep += 1) {

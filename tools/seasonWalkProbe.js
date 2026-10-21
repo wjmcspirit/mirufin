@@ -55,8 +55,10 @@
     return node
   }
 
+  /** A season poster on the show's page: the season's artwork, its name, its length and its bar. */
   function seasonCard(index) {
-    var node = element("a", "card season-card", "season-" + (index + 1))
+    var node = element("a", index === 1 ? "card poster season-card on" : "card poster season-card", "season-" + (index + 1))
+    node.appendChild(art("card-art"))
     var copy = element("span", "card-copy", "")
     var title = element("span", "card-title", "")
     title.textContent = "Season " + (index + 1)
@@ -70,6 +72,13 @@
     copy.appendChild(sub)
     copy.appendChild(bar)
     node.appendChild(copy)
+    return node
+  }
+
+  /** A season tab in the season selector: the season's name, the one being browsed underlined. */
+  function seasonTab(index) {
+    var node = element("a", index === 1 ? "season-tab on" : "season-tab", "season-" + (index + 1))
+    node.textContent = "Season " + (index + 1)
     return node
   }
 
@@ -115,11 +124,26 @@
   var detail = element("div", "detail browse-page", "detail")
   var body = element("div", "detail-body", "body")
   var seasonCards = []
+  var seasonTabs = []
   if (shape === "series") {
-    var seasons = rowSection("season-block", "Seasons")
-    seasons.section.className = "season-block"
-    seasonCards = fill(seasons.strip, 9, seasonCard)
-    body.appendChild(seasons.section)
+    // The show's page: the seasons as posters, under the show's own banner and actions. There is
+    // no episode row here - browsing a season is the season's own page - so what the walk from
+    // this row finds below it is the cast.
+    var seasons = element("section", "season-block", "season-block")
+    var seasonHead = element("div", "row-head", "")
+    var seasonTitle = element("h2", "", "")
+    seasonTitle.textContent = "Seasons (9)"
+    seasonHead.appendChild(seasonTitle)
+    var seasonStrip = element("div", "scroller season-scroller", "season-strip")
+    seasons.appendChild(seasonHead)
+    seasons.appendChild(seasonStrip)
+    seasonCards = fill(seasonStrip, 9, seasonCard)
+    body.appendChild(seasons)
+  } else {
+    // The season's page: the season selector across the top, above the banner it belongs to.
+    seasonStrip = element("nav", "scroller season-tabs", "season-tabs")
+    seasonTabs = fill(seasonStrip, 9, seasonTab)
+    body.appendChild(seasonStrip)
   }
 
   // The episode block: the cinematic banner that describes the episode the remote is on, the row
@@ -173,14 +197,28 @@
   var media = element("button", "btn icon-btn", "media-info")
   media.textContent = "Media info"
   actionButtons.push(media)
-  var episodeWatched = element("button", "btn icon-btn", "episode-watched")
-  episodeWatched.textContent = "Mark episode watched"
-  actionButtons.push(episodeWatched)
+  // The focused episode's watched toggle belongs to a page that browses a season: the show's own
+  // page has no episode to mark, and drawing the control there would put an episode's action under
+  // a page that is about the show.
+  if (shape !== "series") {
+    var episodeWatched = element("button", "btn icon-btn", "episode-watched")
+    episodeWatched.textContent = "Mark episode watched"
+    actionButtons.push(episodeWatched)
+  }
   for (var b = 0; b < actionButtons.length; b += 1) actions.appendChild(actionButtons[b])
-  block.appendChild(banner)
-  block.appendChild(strip)
-  block.appendChild(actions)
-  body.appendChild(block)
+  if (shape === "series") {
+    // The show's own head: the banner and the show's actions under it, then the seasons row the
+    // page was built with.
+    var head = element("section", "series-head", "series-head")
+    head.appendChild(banner)
+    head.appendChild(actions)
+    body.insertBefore(head, body.firstChild)
+  } else {
+    block.appendChild(banner)
+    block.appendChild(strip)
+    block.appendChild(actions)
+    body.appendChild(block)
+  }
 
   var cast = rowSection("cast-row", "Cast")
   cast.section.className = "row size-medium people-row"
@@ -208,6 +246,7 @@
     if (node.closest(".episode-scroller")) return "episodes"
     if (node.closest(".episode-actions")) return "actions"
     if (node.closest(".people-row")) return "cast"
+    if (node.closest(".season-tabs")) return "seasons"
     if (node.closest(".season-block")) return "seasons"
     if (node.closest(".side")) return "rail"
     return "other"
@@ -245,15 +284,15 @@
 
   // The page as it opens, before the remote has touched it: every row is at its own beginning,
   // so a row's first card is a measurement of the page's layout rather than of a scroll. The
-  // banner's own copy, the season selector's first chip, the row's first still and the actions
+  // banner's own copy, the season selector's first control, the row's first still and the actions
   // under the row all have to begin on the application's one content boundary.
   var pristineArt = episodeCards[0].querySelector(".episode-art").getBoundingClientRect()
   var before = {
     edges: {
       copy: edgeOf(eyebrow),
       title: edgeOf(title),
-      season: shape === "series" ? edgeOf(seasonCards[0]) : -1,
-      row: edgeOf(episodeCards[0]),
+      season: shape === "series" ? edgeOf(seasonCards[0]) : edgeOf(seasonTabs[0]),
+      row: shape === "series" ? -1 : edgeOf(episodeCards[0]),
       actions: edgeOf(actions.firstElementChild),
       castHeading: edgeOf(cast.section.querySelector("h2")),
       castCard: edgeOf(castCards[0]),
@@ -268,9 +307,18 @@
     await nextFrame()
     var fromRail = await walk(["ArrowDown"])
 
-    // Down from the season selector on a series page: the banner's own controls first - the
+    // Down from the season selector on the season's page: the banner's own controls first - the
     // title's fact links, which are part of the banner - and the episode row under them. The cast
-    // is never what this press reaches.
+    // is never what this press reaches, so the row is not skipped on the way down the page.
+    var fromTabs = []
+    if (shape !== "series") {
+      remote.placeFocus(seasonTabs[1])
+      await nextFrame()
+      fromTabs = await walk(["ArrowDown", "ArrowDown"])
+    }
+
+    // Down from the seasons row on the show's page: this page has no episode row, so the cast is
+    // its next step - and the press must not land on the rail or on nothing.
     var fromSeasons = []
     if (shape === "series") {
       remote.placeFocus(seasonCards[1])
@@ -283,20 +331,28 @@
     await nextFrame()
     var fromHero = await walk(["ArrowDown", "ArrowDown"])
 
-    // Along the row, then down out of it and back up again.
-    remote.placeFocus(episodeCards[0])
-    await nextFrame()
-    var across = await walk(["ArrowRight", "ArrowRight", "ArrowRight"])
-    var rowDown = await walk(["ArrowDown", "ArrowDown"])
-    var backUp = await walk(["ArrowUp", "ArrowUp", "ArrowUp"])
+    // Along the row, then down out of it and back up again. A show's page has no row to walk: the
+    // stills belong to the season's page.
+    var across = []
+    var rowDown = []
+    var backUp = []
+    var rowUp = []
+    if (shape !== "series") {
+      remote.placeFocus(episodeCards[0])
+      await nextFrame()
+      across = await walk(["ArrowRight", "ArrowRight", "ArrowRight"])
+      rowDown = await walk(["ArrowDown", "ArrowDown"])
+      backUp = await walk(["ArrowUp", "ArrowUp", "ArrowUp"])
+      remote.placeFocus(episodeCards[2])
+      await nextFrame()
+      rowUp = await walk(["ArrowUp"])
+    }
 
-    // Up from the cast, and up from the row: both have to find the page's own step above.
+    // Up from the cast: on a season's page it has to find the row above it, and on a show's page
+    // the seasons it was browsing from.
     remote.placeFocus(castCards[3])
     await nextFrame()
     var castUp = await walk(["ArrowUp", "ArrowUp"])
-    remote.placeFocus(episodeCards[2])
-    await nextFrame()
-    var rowUp = await walk(["ArrowUp"])
 
     // The page as the viewer leaves it after walking down it: the rail again, from below.
     remote.placeFocus(document.querySelector(".side-nav .nav"))
@@ -305,9 +361,27 @@
 
     var stripBox = strip.getBoundingClientRect()
     var firstArt = episodeCards[0].querySelector(".episode-art").getBoundingClientRect()
+    // The show's own page: where the seasons row and its first poster sit, in design units, before
+    // anything was walked. The row is this page's browse surface, so the poster has to be on screen
+    // at 1080p rather than half of it below the fold.
+    var seasonRow = null
+    if (shape === "series") {
+      var rowBox = seasonStrip.getBoundingClientRect()
+      var cardBox = seasonCards[0].getBoundingClientRect()
+      var cardArt = seasonCards[0].querySelector(".card-art").getBoundingClientRect()
+      seasonRow = {
+        fold: design(height),
+        top: design(rowBox.top),
+        bottom: design(rowBox.bottom),
+        cardTop: design(cardBox.top),
+        cardBottom: design(cardBox.bottom),
+        artBottom: design(cardArt.bottom),
+      }
+    }
     document.getElementById("probe").textContent = JSON.stringify({
       shape: shape,
       fromRail: fromRail,
+      fromTabs: fromTabs,
       fromSeasons: fromSeasons,
       fromHero: fromHero,
       across: across,
@@ -327,6 +401,7 @@
          begin on it. */
       edges: before.edges,
       rowArt: before.art,
+      seasonRow: seasonRow,
     })
   })()
 })()

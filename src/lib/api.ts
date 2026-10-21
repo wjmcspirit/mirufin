@@ -565,10 +565,18 @@ export function seasons(userId: string, seriesId: string) {
   return jf<ItemList>(`/Shows/${seriesId}/Seasons?${params}`)
 }
 
+/**
+ * One season's episodes, in Jellyfin's own order.
+ *
+ * The streams come with them, so the banner above the row can say what an episode is without a
+ * second request per episode: the resolution, the video and audio codecs, and whether there are
+ * subtitles are what the viewer checks before pressing Play, and a season's worth of streams is
+ * one modest answer rather than one per card.
+ */
 export function episodes(userId: string, seriesId: string, seasonId?: string) {
   const params = new URLSearchParams({
     userId,
-    Fields: "Overview,UserData,ImageTags,RunTimeTicks,ParentIndexNumber,SeriesName,PremiereDate,SeasonId,ParentId",
+    Fields: "Overview,UserData,ImageTags,RunTimeTicks,ParentIndexNumber,SeriesName,PremiereDate,SeasonId,ParentId,MediaStreams",
   })
   if (seasonId) params.set("seasonId", seasonId)
   return jf<ItemList>(`/Shows/${seriesId}/Episodes?${params}`)

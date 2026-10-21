@@ -16,10 +16,10 @@
       reasoned about: with the remote moving right along the row, does the row follow?
 
       The structure is the real one - the shell's rail, the scrolling main, the detail body, the
-      season selector's chips, and the episode block (the cinematic banner, the row of stills and
-      the actions under it) - and the cards are the app's own `.episode` cards, twelve of them,
-      which is more than any television shows at once. `tools/foldCheck.ts` drives this page in a
-      headless browser at 1080p, 1440p and 4K and asserts what comes back.
+      season selector's tabs across the top, and the episode block (the cinematic banner, the row of
+      stills and the actions under it) - and the cards are the app's own `.episode` cards, twelve of
+      them, which is more than any television shows at once. `tools/foldCheck.ts` drives this page in
+      a headless browser at 1080p, 1440p and 4K and asserts what comes back.
     -->
     <div class="shell">
       <header class="side">
@@ -35,10 +35,7 @@
       <div class="main" id="main">
         <div class="detail browse-page">
           <div class="detail-body">
-            <section class="season-block">
-              <div class="row-head"><h2>Seasons</h2></div>
-              <div class="scroller season-scroller" id="season-strip"></div>
-            </section>
+            <nav class="scroller season-tabs" id="season-strip" aria-label="Seasons"></nav>
             <section class="episode-block">
               <header class="hero stage-copy browse-hero">
                 <div class="hero-copy">

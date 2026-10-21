@@ -290,6 +290,9 @@ interface BrowseShape {
 interface SeasonWalkReport {
   shape: "season" | "series"
   fromRail: WalkStep[]
+  /** Down from the season selector on the season's page. */
+  fromTabs: WalkStep[]
+  /** Down from the seasons row on the show's page, which has no episode row to reach. */
   fromSeasons: WalkStep[]
   fromHero: WalkStep[]
   across: WalkStep[]
@@ -308,6 +311,8 @@ interface SeasonWalkReport {
   edges: { copy: number; title: number; season: number; row: number; actions: number; castHeading: number; castCard: number }
   /** The same measurement taken before the remote touched the page. */
   rowArt: { width: number; height: number }
+  /** On a show's page: where the seasons row and its first poster sit, in design units. */
+  seasonRow: { fold: number; top: number; bottom: number; cardTop: number; cardBottom: number; artBottom: number } | null
 }
 
 /** Where one press of the library walk left the remote, and which group of the page that is. */
@@ -355,7 +360,8 @@ interface SeasonReport {
   snapType: string
   /** Where the page column sat while the remote walked the row, top edge. */
   pageScrollTop: { before: number; atStart: number; atEnd: number; back: number }
-  /** The browse page's own shape - the season selector, the banner and the row - before the walk. */
+  /** The season selector's own box, and what it is made of: a strip that grows needs explaining. */
+  seasonBox: { height: number; tab: { width: number; height: number }; padding: string; gap: string; font: string; wrap: string }
   pristine: BrowseShape
   seasonStrip: { clientWidth: number; scrollWidth: number; scrollLeft: number; left: number; right: number; cardIndex: number; cardInside: boolean }
 }
@@ -767,7 +773,9 @@ for (const { panel, report } of await measureSeason(browser, seasonProbe, PANELS
     `     seasons ${shape.season.top}..${shape.season.bottom}  banner ${shape.banner.top}..${shape.banner.bottom} ` +
       `(${shape.bannerHeight} tall)  row ${shape.row.top}..${shape.row.bottom}  still ${shape.art.top}..${shape.art.bottom} ` +
       `of the ${shape.fold}-unit canvas\n` +
-      `     edges copy/season/row/actions ${shape.edges.copy}/${shape.edges.season}/${shape.edges.row}/${shape.edges.actions}`,
+      `     edges copy/season/row/actions ${shape.edges.copy}/${shape.edges.season}/${shape.edges.row}/${shape.edges.actions}\n` +
+      `     selector ${shape.seasonBox.height} tall, tab ${shape.seasonBox.tab.width}x${shape.seasonBox.tab.height}, ` +
+      `padding ${shape.seasonBox.padding}, gap ${shape.seasonBox.gap}, font ${shape.seasonBox.font}, wrap ${shape.seasonBox.wrap}`,
   )
   check(
     `${panel.name}: the season selector is above the banner, and the banner above the episode row`,
@@ -1271,51 +1279,85 @@ for (const { shape } of WALK_SHAPES) {
     )
     check(
       `${panel.name} (${shape}): the episode still is the size the row is designed at`,
-      report.rowArt.width === 360 && report.rowArt.height === 202.5 && report.cardWidth === 360,
+      shape === "series" || (report.rowArt.width === 360 && report.rowArt.height === 202.5 && report.cardWidth === 360),
       `${report.rowArt.width}x${report.rowArt.height} still, card ${report.cardWidth}`,
     )
     check(
       `${panel.name} (${shape}): and it keeps the 16:9 shape of the artwork rather than stretching it`,
-      Math.abs(report.rowArt.width / report.rowArt.height - 16 / 9) < 0.01,
+      shape === "series" || Math.abs(report.rowArt.width / report.rowArt.height - 16 / 9) < 0.01,
       `${report.rowArt.width}x${report.rowArt.height}`,
     )
+    // Down from the banner's own controls: on a season's page the episode row is the page's next
+    // step, and on a show's page the show's own actions come first - they are part of its head -
+    // and the seasons row is the row under them.
     check(
-      `${panel.name} (${shape}): Down from the banner's own controls reaches the episode row`,
-      report.fromHero[0]?.group === "episodes",
+      `${panel.name} (${shape}): Down from the banner's own controls reaches the page's next row`,
+      shape === "series"
+        ? report.fromHero[0]?.group === "actions" && report.fromHero[1]?.group === "seasons"
+        : report.fromHero[0]?.group === "episodes",
       landed(report.fromHero),
     )
     check(
       `${panel.name} (${shape}): Right and Left walk the row, and the row follows`,
-      report.across.length > 0 && report.across.every((step) => step.group === "episodes" && step.inRow) && report.rowScrollLeft > 0,
+      shape === "series" ||
+        (report.across.length > 0 && report.across.every((step) => step.group === "episodes" && step.inRow) && report.rowScrollLeft > 0),
       `${landed(report.across)}, scrolled ${report.rowScrollLeft}`,
     )
     check(
       `${panel.name} (${shape}): Down from the episode row reaches the actions under it and then the cast`,
-      report.rowDown[0]?.group === "actions" && report.rowDown[1]?.group === "cast",
+      shape === "series" || (report.rowDown[0]?.group === "actions" && report.rowDown[1]?.group === "cast"),
       landed(report.rowDown),
     )
+    // Up from the cast: on a season's page it has to find the row above it - never the rail - and on
+    // a show's page the seasons it was browsing from.
     check(
-      `${panel.name} (${shape}): Up from the cast returns to the episode row`,
-      report.castUp.some((step) => step.group === "episodes" && step.inRow),
+      `${panel.name} (${shape}): Up from the cast returns to the page's own content above it`,
+      shape === "series" ? report.castUp[0]?.group === "seasons" : report.castUp.some((step) => step.group === "episodes" && step.inRow),
       landed(report.castUp),
     )
     check(
       `${panel.name} (${shape}): Up from the episode row returns to the banner above it, not to the rail`,
-      report.rowUp[0]?.group === "hero",
+      shape === "series" || report.rowUp[0]?.group === "hero",
       landed(report.rowUp),
     )
-    // A series page's season selector is the page's own first step, and Down from it is a request
-    // for the episodes: the banner's own controls come first - they are part of the banner the
-    // season selector stands above - and the row is the next step under them. The cast is never
-    // what either press reaches, so the row is not skipped on the way down the page.
-    if (shape === "series") {
+    // The show's page exists to open a season from, so its season posters have to be on the screen
+    // the page opens on rather than half of them below the fold - the defect that had the row
+    // removed from this page in the first place, measured rather than argued about.
+    if (shape === "series" && report.seasonRow) {
+      const row = report.seasonRow
+      console.log(
+        `     seasons row ${row.top}..${row.bottom}, first poster ${row.cardTop}..${row.cardBottom} ` +
+          `(art to ${row.artBottom}) of the ${row.fold}-unit canvas`,
+      )
       check(
-        `${panel.name} (series): Down from the season selector walks the banner and then reaches the episode row`,
-        report.fromSeasons[0]?.group === "hero" && report.fromSeasons[1]?.group === "episodes",
-        landed(report.fromSeasons),
+        `${panel.name} (series): the seasons row and its first poster are on screen without a scroll`,
+        row.top < row.fold && row.artBottom <= row.fold,
+        `row at ${row.top}, poster art ends at ${row.artBottom}, of ${row.fold}`,
       )
     }
-    const walked = [...report.fromHero, ...report.across, ...report.rowDown, ...report.castUp, ...report.rowUp, ...report.fromSeasons]
+    // The season selector on the season's page is the page's own first step, and Down from it is a
+    // request for the episodes: the banner's own controls come first - they are part of the banner
+    // the selector stands above - and the row is the next step under them. The cast is never what
+    // either press reaches, so the row is not skipped on the way down the page. On the show's page
+    // the seasons row is the page's last browse surface, and Down from it reaches the cast.
+    check(
+      shape === "series"
+        ? `${panel.name} (series): Down from the seasons row reaches the cast, the page's next step`
+        : `${panel.name} (season): Down from the season selector walks the banner and then reaches the episode row`,
+      shape === "series"
+        ? report.fromSeasons[0]?.group === "cast"
+        : report.fromTabs[0]?.group === "hero" && report.fromTabs[1]?.group === "episodes",
+      shape === "series" ? landed(report.fromSeasons) : landed(report.fromTabs),
+    )
+    const walked = [
+      ...report.fromHero,
+      ...report.across,
+      ...report.rowDown,
+      ...report.castUp,
+      ...report.rowUp,
+      ...report.fromTabs,
+      ...report.fromSeasons,
+    ]
     check(
       `${panel.name} (${shape}): no press of the walk fell back to the navigation rail`,
       !walked.some((step) => step.group === "rail"),

@@ -374,7 +374,11 @@ check(
     page.includes('<p className="overview clamp">'),
   "Item.tsx",
 )
-check("the series is the title the banner names", page.includes("<TitleLogo item={series || item} />"), "Item.tsx")
+check(
+  "the show is the title the banner names, from the show's own record or from the season's",
+  page.includes('{series ? <TitleLogo item={series} /> : <h1>{season?.SeriesName || item.Name || "Untitled"}</h1>}'),
+  "Item.tsx",
+)
 check(
   "the line above it states the season the row is browsing, and how much of it is watched",
   page.includes("seasonLineText(season, progress)"),
@@ -382,8 +386,23 @@ check(
 )
 check(
   "the episode the remote is on is the banner's own line, with its number, its facts and its synopsis",
-  page.includes("{episode?.Name || \"\"}") && page.includes("<MetaLine item={subject} lead={code} />") && page.includes("subject.Overview"),
+  page.includes('{episode.Name || ""}') && page.includes("<MetaLine item={subject} lead={code} />") && page.includes("subject.Overview"),
   "Item.tsx",
+)
+check(
+  "and the line is not drawn at all for a show or a season, which has no episode of its own",
+  page.includes("{episode && (") && page.includes('<p className="hero-episode">'),
+  "Item.tsx",
+)
+check(
+  "what the episode is made of is said beside its facts: resolution, codecs and subtitles",
+  page.includes('[...techChips(subject), ...(hasSubtitles(subject) ? ["Subtitles"] : [])]') && page.includes('<p className="chips">'),
+  "Item.tsx",
+)
+check(
+  "and the streams are asked for with the season's episodes rather than per episode",
+  /Fields: "[^"]*MediaStreams/.test(readFileSync("src/lib/api.ts", "utf8")),
+  "api.ts",
 )
 check(
   "and the facts line begins with the season and episode number",
@@ -419,15 +438,121 @@ check(
   /\.browse-hero\.stage-copy::before\s*\{[^}]*display:\s*block[^}]*linear-gradient\(90deg/.test(css),
   "styles.css",
 )
+/* The show's page and the season's page, told apart by what each one draws. The show's page is the
+   overview: its own banner, its own actions, and the seasons as posters. The season's page is the
+   browser: the season selector across the top, the banner, the row of stills, and the actions under
+   them. The season selector on the browser is not a substitute for the posters on the overview -
+   the viewer picks a season by recognising its picture there, and moves between seasons by pressing
+   a tab here - and neither screen draws the other's browse surface. Each function's own source is
+   read out of the page so a check can say what that screen draws, rather than what the file
+   contains somewhere. */
+function sourceOf(name: string, until: string) {
+  const from = page.indexOf(`function ${name}(`)
+  if (from < 0) return ""
+  const to = page.indexOf(`function ${until}(`, from)
+  return page.slice(from, to < 0 ? undefined : to)
+}
+const seriesScreen = sourceOf("SeriesBody", "EpisodeList")
+const seasonScreen = sourceOf("SeasonBody", "SeriesBody")
+const episodeRow = sourceOf("EpisodeList", "BrowseHero")
+const seasonCard = sourceOf("SeasonCard", "SeriesBody")
 check(
-  "the season selector above it is a line of chips, and each keeps the season's watched progress",
-  /\.season-card\s*\{[^}]*border-radius:\s*14px/.test(css) && /\.season-card \.season-bar\s*\{/.test(css),
+  "the show's page draws the seasons as posters, with the season's own artwork",
+  seriesScreen.includes("<SeasonCard") &&
+    seasonCard.includes('className={current ? "card poster season-card on" : "card poster season-card"}') &&
+    seasonCard.includes("<MediaImage src={seasonArtSrc(season, series)}") &&
+    seasonCard.includes('<span className="card-art">'),
+  "Item.tsx",
+)
+check(
+  "and a season the server has no poster for borrows the show's own rather than a bare tile",
+  seasonCard.includes("seasonArtSrc(season, series)") && seasonCard.includes('fallback={primarySrc(series, artWidth("poster"))}'),
+  "Item.tsx",
+)
+check("the show's page is labelled with how many seasons it holds", seriesScreen.includes("{`Seasons (${seasons.length})`}"), "Item.tsx")
+check(
+  "and it draws no episode row of its own: browsing a season is the season's own page",
+  seriesScreen.length > 0 && !seriesScreen.includes("EpisodeList") && seriesScreen.includes("<SeasonCard"),
+  "Item.tsx",
+)
+check(
+  "the season's page draws the season selector above its banner and its row",
+  seasonScreen.indexOf("<SeasonTabs") >= 0 &&
+    seasonScreen.indexOf("<SeasonTabs") < seasonScreen.indexOf('<section className="episode-block">') &&
+    seasonScreen.includes("<EpisodeList"),
+  "Item.tsx",
+)
+check(
+  "and its own banner, row and actions are the episode row's, not a second composition",
+  episodeRow.includes("<BrowseHero item={item} series={series} season={season} episode={spot}") &&
+    episodeRow.includes('<div className="scroller episode-scroller">') &&
+    episodeRow.includes('<div className="actions episode-actions">'),
+  "Item.tsx",
+)
+check(
+  "a season poster opens that season's own page",
+  seasonCard.includes("to={`/item/${season.Id}`}"),
+  "Item.tsx",
+)
+check(
+  "and opening one notes the season as the viewer's place in the show",
+  seasonCard.includes("onClick={() => rememberSeason(series.Id, season.Id)}"),
+  "Item.tsx",
+)
+check(
+  "a season tab replaces the page it is on, so Back leaves for the show in one press",
+  /<Link\s+key=\{season\.Id\}\s+replace/.test(seasonScreen),
+  "Item.tsx",
+)
+check(
+  "the season being browsed is the one in the address, and a season that has not arrived yet is not shown",
+  page.includes('const { id: routeSeasonId = "" } = useParams()') &&
+    page.includes("const pending = Boolean(routeSeasonId) && routeSeasonId !== season.Id") &&
+    page.includes("const browsed = wanted || (pending ? null : season)"),
+  "Item.tsx",
+)
+check(
+  "and the row never shows one season's episodes under another season's banner",
+  page.includes("const episodes = listed && listed.key === listKey ? listed.items : null"),
+  "Item.tsx",
+)
+check(
+  "the season posters keep the app's progress bar and mark the season the viewer is in",
+  /\.season-card \.season-bar\s*\{/.test(css) && /\.season-card\.on \.card-art::after\s*\{[^}]*background:\s*var\(--accent-2\)/.test(css),
   "styles.css",
 )
 check(
-  "and the chips draw their own focus ring, since they carry no artwork for the shared one",
-  /\.season-card:focus,[\s\S]{0,120}?outline:\s*3px solid #8ee6ff/.test(css),
+  "the season selector is a scrolled strip, not a snap container the engine cannot satisfy",
+  /\.season-tabs\s*\{[^}]*scroll-snap-type:\s*none/.test(css) && /\.season-tab\.on::after\s*\{[^}]*background:\s*var\(--accent-2\)/.test(css),
   "styles.css",
+)
+check(
+  "and the focused tab takes the app's violet ring",
+  /\.season-tab:focus,[\s\S]{0,140}?outline:\s*3px solid var\(--accent-2\)/.test(css),
+  "styles.css",
+)
+check(
+  "an episode's own focus ring is that violet too, on the row the remote walks",
+  /\.episode:focus \.episode-art,[\s\S]{0,140}?outline:\s*3px solid var\(--accent-2\)/.test(css),
+  "styles.css",
+)
+check(
+  "and the show's banner steps down to pay for the season posters on the show's page",
+  /\.series-head \.browse-hero\.stage-copy\s*\{[^}]*min-height:\s*calc\(var\(--app-height[^}]*0\.34\)/.test(css),
+  "styles.css",
+)
+/* The picture behind a season page is the show's own. A season has no backdrop of its own on most
+   servers, so the page rests on the item it is about - the season - and the season's own record
+   carries the show's backdrop; the logo comes from the show the page reads. Both are what keeps the
+   show's identity on screen while its episodes are browsed. */
+check(
+  "a season page rests on the show's own backdrop, borrowed from the season's parent",
+  page.includes("usePinnedArt(") &&
+    /ITEM_FIELDS = \[[\s\S]*?"ParentBackdropItemId"[\s\S]*?"ParentBackdropImageTags"/.test(readFileSync("src/lib/api.ts", "utf8")) &&
+    /function backdropUrl\(item: Item, maxWidth: number\) \{\s*return ownBackdropUrl\(item, maxWidth\) \|\| parentBackdropUrl\(item, maxWidth\)/.test(
+      readFileSync("src/lib/images.ts", "utf8"),
+    ),
+  "Item.tsx, api.ts and images.ts",
 )
 check(
   "the stills keep the size and shape the row is designed at",
