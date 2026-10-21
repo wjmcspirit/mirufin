@@ -839,17 +839,16 @@ for (const size of LIBRARY_SIZES) {
  * The viewer's complaint was that a press of Down on this page skipped the episode row and landed
  * on the cast, and that Up from the cast did not come back to the row. Both are measured here at
  * every panel size, from a real layout and the app's own navigation engine: Down from the head
- * enters the row, the row is walked sideways and scrolls, Down from the row reaches the cast, Up
- * from the cast returns to the row, Up from the row returns to the head, and no press of any of
- * it falls back to the navigation rail.
+ * enters the row, the row is walked sideways and scrolls, Down from the row reaches the actions
+ * under it and then the cast, Up from the cast returns through the actions to the row, Up from the
+ * row returns to the head, and no press of any of it falls back to the navigation rail.
  *
  * The season's own page and the series page's shape are both walked: the series page carries the
- * seasons row between its head and its episode row, and the title's own actions in the band under
- * the row, so the same walk has to reach the row through the seasons and reach the cast through
- * the actions.
+ * seasons row between its head and its episode row, and both pages carry their title's actions and
+ * the focused episode's watched toggle in the band under the row.
  */
 const WALK_SHAPES: { shape: "season" | "series"; above: string; below: string; rowAt: number }[] = [
-  { shape: "season", above: "hero", below: "cast", rowAt: 0 },
+  { shape: "season", above: "hero", below: "actions", rowAt: 0 },
   { shape: "series", above: "seasons", below: "actions", rowAt: 1 },
 ]
 
@@ -903,8 +902,8 @@ for (const { shape, above, below, rowAt } of WALK_SHAPES) {
       `${landed(report.across)}, scrolled ${report.rowScrollLeft}`,
     )
     check(
-      `${panel.name} (${shape}): Down from the episode row reaches the cast`,
-      report.rowDown[0]?.group === below && report.rowDown[rowAt]?.group === "cast",
+      `${panel.name} (${shape}): Down from the episode row reaches the actions under it and then the cast`,
+      report.rowDown[0]?.group === below && report.rowDown[1]?.group === "cast",
       landed(report.rowDown),
     )
     check(

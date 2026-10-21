@@ -633,13 +633,13 @@ function episodeRow(main: El, count: number, withActions = true) {
 /**
  * The season page's own shape, as the app renders it: a head whose controls are the season's fact
  * links, then the episode block - the season heading, the episode the remote is on, the row of
- * stills and the band under it, which for a season holds no controls at all - then the cast, and
- * then what the viewer might watch next.
+ * stills and the band under it, which carries the season and focused-episode watched controls -
+ * then the cast, and then what the viewer might watch next.
  *
- * A season is not a title in its own right: there is no Play, no Favorite and no Mark watched on
- * it, so its action band is drawn with nothing in it. That is the shape the reported bug happened
- * in: with the fact links under the row instead of in the head, Down from the row reached a genre
- * label and Up from the cast reached a label rather than the row.
+ * A season is now a title that can be marked watched as a whole, and the band also offers the
+ * watched toggle for the episode the row is on. That is the shape the reported bug happened in:
+ * with the fact links under the row instead of in the head, Down from the row reached a genre label
+ * and Up from the cast reached a label rather than the row.
  */
 function seasonPage(main: El) {
   const hero = new El("header", "detail-hero stage-copy")
@@ -655,9 +655,9 @@ function seasonPage(main: El) {
   hero.add(links)
   main.add(hero)
 
-  // The row and the band under it. A season's own band holds no controls, so it is drawn empty -
-  // which is why the row's next step down the page is the cast.
-  const block = episodeRow(main, 12, false)
+  // The row and the band under it. The band carries the season and focused-episode watched
+  // controls, so the row's next step down the page is that band and then the cast.
+  const block = episodeRow(main, 12, true)
   const cast = people(main, ["P1", "P2", "P3", "P4", "P5", "P6"], "Cast", 1200)
   const similar = row(main, "If you liked this", ["/item/S1", "/item/S2", "/item/S3"])
   similar.scroller.place(1500, 0, 1600, 300)
@@ -1072,9 +1072,9 @@ function testSeasonWalk() {
  * The season page with the remote: the moves the viewer reported broken.
  *
  * Down from the head enters the episode row, Right and Left walk it, Down from the row reaches
- * the cast, Up from the cast comes back to the row, and Up from the row returns to the head. None
- * of it may fall back to the navigation rail while the page has a step of its own in that
- * direction.
+ * the actions under it and then the cast, Up from the cast comes back through the actions to the
+ * row, and Up from the row returns to the head. None of it may fall back to the navigation rail
+ * while the page has a step of its own in that direction.
  */
 function testSeasonPageWalk() {
   clearSeats()
@@ -1094,20 +1094,20 @@ function testSeasonPageWalk() {
   check("and Left walks it back", active === season.block.cards[0], label(active))
 
   moveFocus("ArrowDown")
-  check("Down from the episode row reaches the cast", active !== null && season.cast.links.includes(active), label(active))
+  check("Down from the episode row reaches the actions under it", active === season.block.play, label(active))
+
+  moveFocus("ArrowDown")
+  check("Down again reaches the cast", active !== null && season.cast.links.includes(active), label(active))
 
   moveFocus("ArrowUp")
-  check("Up from the cast returns to the episode row", active !== null && season.block.cards.includes(active), label(active))
+  check("Up from the cast returns to the actions under the row", active === season.block.play, label(active))
+
+  moveFocus("ArrowUp")
+  check("Up again returns to the episode row", active !== null && season.block.cards.includes(active), label(active))
 
   moveFocus("ArrowUp")
   check("Up from the episode row returns to the head", active !== null && season.pills.includes(active), label(active))
   check("and not to the navigation rail", !(active instanceof El) || !active.closest(".side"), label(active))
-
-  // The season's own band under the row holds no controls, so it is not a stop on the way: the
-  // viewer never lands in an empty band, and the row's next step down is the cast.
-  placeFocus(season.block.cards[0])
-  moveFocus("ArrowDown")
-  check("the empty band under the row is never a stop", active !== null && season.cast.links.includes(active), label(active))
 }
 
 /**

@@ -21,7 +21,7 @@ import { loadPrefs, savePrefs } from "../src/lib/storage"
 import { libraryToolNeighbor, libraryTools } from "../src/lib/toolMenu"
 import { rowSize } from "../src/lib/homeLayout"
 import { moveFocus, ownArrows } from "../src/lib/remote"
-import { canFavorite } from "../src/lib/format"
+import { canFavorite, canMarkWatched } from "../src/lib/format"
 import { audioOptions, subtitleOptions } from "../src/lib/playerMenu"
 import type { Item, LibraryView, Preferences } from "../src/lib/types"
 
@@ -294,6 +294,23 @@ function checkFavoritePages() {
 }
 
 /**
+ * Which pages offer the watched toggle. A film or an episode is one playable thing; a series
+ * and a season are folders whose mark is applied to every episode beneath them by Jellyfin. A
+ * collection, a person, a playlist and an untitled item are not watched at all.
+ */
+function checkWatchedPages() {
+  const view = (Type: string): Item => ({ Id: "x", Name: "x", Type })
+  same("a film's page offers the watched toggle", canMarkWatched(view("Movie")), true)
+  same("an episode's page offers it", canMarkWatched(view("Episode")), true)
+  same("a series' page offers it for the whole show", canMarkWatched(view("Series")), true)
+  same("a season's page offers it for the whole season", canMarkWatched(view("Season")), true)
+  same("a person's page does not", canMarkWatched(view("Person")), false)
+  same("a collection's page does not", canMarkWatched(view("BoxSet")), false)
+  same("a playlist's page does not", canMarkWatched(view("Playlist")), false)
+  same("and a title the server did not type does not", canMarkWatched({ Id: "x" }), false)
+}
+
+/**
  * What the player's subtitle and audio popups offer, in the order the remote walks them.
  *
  * The subtitle menu is the one the viewer uses to choose a language or turn captions off, so Off
@@ -365,6 +382,7 @@ checkPersistence()
 checkOpeningView()
 checkMenuOwnsTheSidewaysPress()
 checkFavoritePages()
+checkWatchedPages()
 checkPlayerMenus()
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`)
 if (failures > 0) throw new Error(`${failures} check(s) failed`)

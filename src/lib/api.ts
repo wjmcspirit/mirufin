@@ -792,6 +792,13 @@ export function setFavorite(userId: string, itemId: string, favorite: boolean) {
   return jf(`/Users/${userId}/FavoriteItems/${itemId}`, { method: favorite ? "POST" : "DELETE" })
 }
 
+/**
+ * Mark one item played or unplayed.
+ *
+ * Jellyfin applies this to a folder's descendants too: a series or season is marked by writing
+ * every episode beneath it, and unmarking it clears them all. That is what lets one control on a
+ * show or season page settle the whole container.
+ */
 export function setPlayed(userId: string, itemId: string, played: boolean) {
   return jf(`/Users/${userId}/PlayedItems/${itemId}`, { method: played ? "POST" : "DELETE" })
 }

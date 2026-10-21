@@ -5,7 +5,8 @@
  *
  * `?shape=season` draws the season page (its head, then the episode block, then the cast), and
  * `?shape=series` draws the series page's shape (the same head and episode block with the seasons
- * row between them, and the title's own actions in the band under the row).
+ * row between them, and the title's own actions plus the focused episode's watched toggle in the
+ * band under the row).
  *
  * `tools/foldCheck.ts` drives this page in a headless browser and asserts what comes back.
  */
@@ -157,18 +158,26 @@
   spot.appendChild(spotOverview)
   var strip = element("div", "scroller episode-scroller", "episode-strip")
   var episodeCards = fill(strip, 12, episodeCard)
-  // A season's own actions are empty - it is not a title that plays, is favorited or is marked
-  // watched on its own - so the band is drawn with nothing in it, exactly as the page draws it.
-  // A series is a title, and its band carries the controls the remote can reach from the row.
+  // The band under the row carries the title's own actions and the focused episode's watched
+  // toggle. A season is now a title that can be marked watched as a whole; a series carries its
+  // own Play and watched controls too. The buttons are the same shape the page draws, so the
+  // walk and the left edge are measured against the real band rather than an empty one.
   var actions = element("div", "actions episode-actions", "episode-actions")
   var actionButtons = []
   if (shape === "series") {
     actionButtons.push(element("a", "btn btn-primary", "play"))
     actionButtons[0].textContent = "Play"
-    actionButtons.push(element("a", "btn", "media-info"))
-    actionButtons[1].textContent = "Media info"
-    for (var b = 0; b < actionButtons.length; b += 1) actions.appendChild(actionButtons[b])
   }
+  var watched = element("button", "btn icon-btn", shape === "series" ? "show-watched" : "season-watched")
+  watched.textContent = shape === "series" ? "Mark show watched" : "Mark season watched"
+  actionButtons.push(watched)
+  var media = element("button", "btn icon-btn", "media-info")
+  media.textContent = "Media info"
+  actionButtons.push(media)
+  var episodeWatched = element("button", "btn icon-btn", "episode-watched")
+  episodeWatched.textContent = "Mark episode watched"
+  actionButtons.push(episodeWatched)
+  for (var b = 0; b < actionButtons.length; b += 1) actions.appendChild(actionButtons[b])
   block.appendChild(blockHead)
   block.appendChild(spot)
   block.appendChild(strip)

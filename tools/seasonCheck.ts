@@ -285,15 +285,27 @@ check("and it always goes through the app's player", episodePlayHref(episode("e3
 
 /* The season page's action band, read from the page's own source - it is the wiring that decides
    this, and a wiring check is the only thing that can hold it. The band under the episode row is
-   the title's own actions and nothing else: the control that played the whole season from there
-   is gone rather than hidden, so a later change cannot bring it back by accident. What an
-   episode's own page offers - a Play that carries on through the season - is a different page's
-   control, and is untouched. */
+   the title's own actions plus the focused episode's watched toggle: the control that played the
+   whole season from there is gone rather than hidden, so a later change cannot bring it back by
+   accident. What an episode's own page offers - a Play that carries on through the season - is a
+   different page's control, and is untouched. */
 const page = readFileSync("src/pages/Item.tsx", "utf8")
 check("the season page has no Play season control of its own", !page.includes("SeasonPlay"), "Item.tsx")
 check(
-  "and the band under its episode row is the title's own actions, with nothing appended",
-  page.includes('const band = actions && <div className="actions episode-actions">{actions}</div>'),
+  "the band under its episode row holds the title's actions and the focused episode's watched toggle",
+  page.includes('className="actions episode-actions"') &&
+    page.includes("toggleEpisodePlayed") &&
+    page.includes("Mark episode watched"),
+  "Item.tsx",
+)
+check(
+  "and a season can be marked watched or unwatched as a whole",
+  page.includes("{canMarkWatched(item) && (") && page.includes("Mark season watched") && page.includes("Mark season unwatched"),
+  "Item.tsx",
+)
+check(
+  "a show can be marked watched or unwatched as a whole",
+  page.includes("Mark show watched") && page.includes("Mark show unwatched"),
   "Item.tsx",
 )
 /* The season's fact links belong in its head, with every other title's: the head is the page's

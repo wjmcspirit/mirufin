@@ -14,7 +14,7 @@ import * as api from "../lib/api"
 import { collectionSizeLabel, collectionStageItem, collectionsLibrary, loadCollections } from "../lib/collections"
 import { creditsOf, filmographyRows, type Credit } from "../lib/people"
 import { genreLinks, studioLinks } from "../lib/discovery"
-import { canFavorite, canPlayDirectly, episodeCode, formatRuntime, isInProgress, metaLine, personFacts, progressPct, techChips } from "../lib/format"
+import { canFavorite, canMarkWatched, canPlayDirectly, episodeCode, formatRuntime, isInProgress, metaLine, personFacts, progressPct, techChips } from "../lib/format"
 import { hasMediaInfo } from "../lib/mediaInfo"
 import { episodePlayHref, lastSeason, rememberSeason, resolveSeason, seasonLineText, seasonProgress, seasonProgressBySeason, seasonStart, type SeasonProgress } from "../lib/seasons"
 import { knownFor, type KnownWork } from "../lib/knownFor"
@@ -31,6 +31,10 @@ export function ItemPage() {
   const [error, setError] = useState("")
   const [busy, setBusy] = useState("")
   const [infoOpen, setInfoOpen] = useState(false)
+  // Bumped when a show or season is marked watched or unwatched: their episodes live in the
+  // body below, so the row and the season progress have to read them again rather than keep the
+  // state from before the folder was toggled.
+  const [playStateVersion, setPlayStateVersion] = useState(0)
   // What the season page's header says about the season: read from the episodes the row below
   // loaded, so the count above and the stills under it can never disagree.
   const [seasonWatch, setSeasonWatch] = useState<SeasonProgress | null>(null)
@@ -43,6 +47,7 @@ export function ItemPage() {
     setStatus("loading")
     setSeasonWatch(null)
     setBodyItems(null)
+    setPlayStateVersion(0)
     api
       .item(userId, id)
       .then((next) => {
@@ -87,18 +92,41 @@ export function ItemPage() {
   async function togglePlayed() {
     if (!item) return
     const next = !item.UserData?.Played
+    const folder = item.Type === "Series" || item.Type === "Season"
     setBusy("played")
+    setError("")
     try {
       await api.setPlayed(userId, item.Id, next)
       setItem({
         ...item,
-        UserData: { ...item.UserData, Played: next, PlaybackPositionTicks: next ? item.RunTimeTicks : 0, PlayedPercentage: next ? 100 : 0 },
+        UserData: {
+          ...item.UserData,
+          Played: next,
+          PlaybackPositionTicks: next ? item.RunTimeTicks : 0,
+          PlayedPercentage: next ? 100 : 0,
+          // A folder's unplayed count is every episode beneath it. Marking the folder played
+          // leaves none; unmarking it puts them all back.
+          ...(folder ? { UnplayedItemCount: next ? 0 : item.RecursiveItemCount ?? item.ChildCount ?? 0 } : {}),
+        },
       })
+      // The body's episode row and season cards are separate readings of the server. A folder
+      // toggle changes all of them, so ask them to read again instead of leaving stale checks.
+      if (folder) setPlayStateVersion((version) => version + 1)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not update played state.")
     } finally {
       setBusy("")
     }
+  }
+
+  /** Read this page's own item again after an episode toggle changed what its folder reports. */
+  function refreshItem() {
+    api
+      .item(userId, id)
+      .then((next) => setItem(next))
+      .catch(() => {
+        // The episode itself was updated; a failed refresh only leaves the folder summary stale.
+      })
   }
 
   if (status === "loading") return <Loading label="Loading title" />
@@ -120,6 +148,19 @@ export function ItemPage() {
   // An episode's panel is a 16:9 still, never a portrait poster stretched into it.
   const panelArt = episode ? episodeWideStill(item, 1600) : item.Type === "Person" ? poster : poster || backdropSrc(item)
   const progress = progressPct(item)
+  const watched = Boolean(item.UserData?.Played)
+  // A folder's button says what it will settle: a whole show or season, not just the page.
+  const watchedLabel = watched
+    ? item.Type === "Series"
+      ? "Mark show unwatched"
+      : item.Type === "Season"
+        ? "Mark season unwatched"
+        : "Mark unwatched"
+    : item.Type === "Series"
+      ? "Mark show watched"
+      : item.Type === "Season"
+        ? "Mark season watched"
+        : "Mark watched"
   const chips = techChips(item)
   const facts = item.Type === "Person" ? personFacts(item) : metaLine(item, prefs.ratings)
   const layout = ["detail-layout", episode ? "episode-layout" : "", item.Type === "Person" ? "align-start" : ""].filter(Boolean).join(" ")
@@ -142,17 +183,23 @@ export function ItemPage() {
   // that browse a season the band belongs under the episode row, where the reference puts
   // it, so it is built here and handed to the body to place - one band either way, never two.
   const actionBand = (
-    <div className="actions detail-actions">
+    <>
       <PlayActions item={item} progress={progress} />
       {/* An episode offers the trailer action only when the server has one that plays. */}
       {(item.Type === "Movie" || item.Type === "Series" || episode) && (
         <TrailerButton item={item} onlyWhenAvailable={episode} />
       )}
       {canFavorite(item) && favoriteAction}
-      {canPlayDirectly(item) && (
-        <button className={`btn icon-btn ${item.UserData?.Played ? "on" : ""}`} type="button" onClick={() => void togglePlayed()} disabled={busy === "played"}>
+      {canMarkWatched(item) && (
+        <button
+          className={`btn icon-btn ${watched ? "on" : ""}`}
+          type="button"
+          onClick={() => void togglePlayed()}
+          disabled={busy === "played"}
+          aria-pressed={watched}
+        >
           <CheckIcon size={16} />
-          {item.UserData?.Played ? "Watched" : "Mark watched"}
+          {watchedLabel}
         </button>
       )}
       {hasMediaInfo(item) && (
@@ -161,7 +208,7 @@ export function ItemPage() {
           Media info
         </button>
       )}
-    </div>
+    </>
   )
 
   return (
@@ -217,11 +264,18 @@ export function ItemPage() {
             page has none of them once Favorite sits with the biography, so the band
             is left out rather than left behind as an empty stop for the remote, and a
             page that browses a season carries the band under its episode row instead. */}
-        {!browsePage && (item.Type !== "Person" || hasMediaInfo(item)) && actionBand}
+        {!browsePage && (item.Type !== "Person" || hasMediaInfo(item)) && <div className="actions detail-actions">{actionBand}</div>}
         {error && <p className="error">{error}</p>}
       </header>
       {infoOpen && <MediaInfo item={item} onClose={() => setInfoOpen(false)} />}
-      <ItemBody item={item} actions={browsePage ? actionBand : null} onSeasonProgress={setSeasonWatch} onChildren={setBodyItems} />
+      <ItemBody
+        item={item}
+        actions={browsePage ? actionBand : null}
+        refreshKey={playStateVersion}
+        onPlayedChange={refreshItem}
+        onSeasonProgress={setSeasonWatch}
+        onChildren={setBodyItems}
+      />
     </article>
   )
 }
@@ -335,18 +389,28 @@ function SeriesPlay({ series }: { series: Item }) {
 function ItemBody({
   item,
   actions,
+  refreshKey = 0,
+  onPlayedChange,
   onSeasonProgress,
   onChildren,
 }: {
   item: Item
   actions?: ReactNode
+  /** Changes when a show or season's played state changed, so its episode body reads again. */
+  refreshKey?: number
+  /** Told after an episode's own played state changed, so the page can reread its folder. */
+  onPlayedChange?: () => void
   /** Told the season's own watched count, for the line under its title. */
   onSeasonProgress?: (progress: SeasonProgress | null) => void
   /** Told what a collection holds, for its count and for the art its page rests on. */
   onChildren?: (items: Item[]) => void
 }) {
-  if (item.Type === "Series") return <SeriesBody series={item} actions={actions} />
-  if (item.Type === "Season" && item.SeriesId) return <SeasonBody season={item} actions={actions} onProgress={onSeasonProgress} />
+  if (item.Type === "Series") {
+    return <SeriesBody series={item} actions={actions} refreshKey={refreshKey} onPlayedChange={onPlayedChange} />
+  }
+  if (item.Type === "Season" && item.SeriesId) {
+    return <SeasonBody season={item} actions={actions} refreshKey={refreshKey} onPlayedChange={onPlayedChange} onProgress={onSeasonProgress} />
+  }
   if (item.Type === "Person") return <PersonBody person={item} />
   if (item.Type === "BoxSet") return <CollectionBody item={item} onLoaded={onChildren} />
   if (item.Type === "MusicAlbum" || item.Type === "Playlist" || item.Type === "Folder" || item.Type === "PhotoAlbum" || item.Type === "CollectionFolder") {
@@ -533,10 +597,16 @@ function seasonSubtitle(count: number | undefined, progress: SeasonProgress | un
 function SeasonBody({
   season,
   actions,
+  refreshKey = 0,
+  onPlayedChange,
   onProgress,
 }: {
   season: Item
   actions?: ReactNode
+  /** Bumped when the season itself was toggled, so the row reads its episodes again. */
+  refreshKey?: number
+  /** Told after one episode was toggled, so the page can reread the season's folder state. */
+  onPlayedChange?: () => void
   onProgress?: (progress: SeasonProgress | null) => void
 }) {
   const { userId } = useSession()
@@ -574,6 +644,8 @@ function SeasonBody({
           seasonId={season.Id}
           series={series}
           actions={actions}
+          refreshKey={refreshKey}
+          onPlayedChange={onPlayedChange}
           onLoaded={(episodes) => onProgress?.(episodes.length > 0 ? seasonProgress(episodes) : null)}
         />
       </section>
@@ -586,7 +658,19 @@ function SeasonBody({
   )
 }
 
-function SeriesBody({ series, actions }: { series: Item; actions?: ReactNode }) {
+function SeriesBody({
+  series,
+  actions,
+  refreshKey = 0,
+  onPlayedChange,
+}: {
+  series: Item
+  actions?: ReactNode
+  /** Bumped when the show itself was toggled, so its seasons and episode row read again. */
+  refreshKey?: number
+  /** Told after one episode was toggled, so the page can reread the show's folder state. */
+  onPlayedChange?: () => void
+}) {
   const { userId } = useSession()
   const [params] = useSearchParams()
   const seasonId = params.get("season") || ""
@@ -616,7 +700,7 @@ function SeriesBody({ series, actions }: { series: Item; actions?: ReactNode }) 
     return () => {
       cancel = true
     }
-  }, [series.Id, userId])
+  }, [series.Id, userId, refreshKey])
 
   // The season the page browses: the one in the address, then the season the viewer last
   // opened from this row, and otherwise the first the server reports. A season card opens that
@@ -674,6 +758,7 @@ function SeriesBody({ series, actions }: { series: Item; actions?: ReactNode }) 
           </div>
         </section>
       )}
+      {seasons && seasons.length === 0 && actions && <div className="actions episode-actions">{actions}</div>}
       {selected && (
         <section className="episode-block">
           <div className="row-head">
@@ -685,6 +770,16 @@ function SeriesBody({ series, actions }: { series: Item; actions?: ReactNode }) 
             nextId={nextEpisode?.Id || ""}
             series={series}
             actions={actions}
+            refreshKey={refreshKey}
+            onPlayedChange={onPlayedChange}
+            onLoaded={(episodes) => {
+              if (!selected) return
+              setProgress((current) => {
+                const next = new Map(current)
+                next.set(selected, seasonProgress(episodes))
+                return next
+              })
+            }}
           />
         </section>
       )}
@@ -700,7 +795,7 @@ function SeriesBody({ series, actions }: { series: Item; actions?: ReactNode }) 
 
 /**
  * One season's episodes: the row of landscape stills the viewer browses, the compact details
- * of the episode the remote is on, and the title's actions under the row.
+ * of the episode the remote is on, and the actions under the row.
  *
  * The row is a strip rather than the vertical list it used to be, so several episodes are on
  * screen at once and the remote walks it sideways while Up and Down leave it. The details
@@ -711,7 +806,8 @@ function SeriesBody({ series, actions }: { series: Item; actions?: ReactNode }) 
  * Only the episodes the server returned for this season are listed, in the order it returned
  * them, which is Jellyfin's own episode order. Nothing here reads anything while the remote
  * moves: the list is fetched once per season, and the details above the row are drawn from the
- * list already in hand.
+ * list already in hand. The watched toggle in the band acts on the episode the details are
+ * about, so one episode can be settled without leaving the row.
  */
 function EpisodeList({
   seriesId,
@@ -719,6 +815,8 @@ function EpisodeList({
   nextId = "",
   series = null,
   actions = null,
+  refreshKey = 0,
+  onPlayedChange,
   onLoaded,
 }: {
   seriesId: string
@@ -726,14 +824,26 @@ function EpisodeList({
   nextId?: string
   series?: Item | null
   actions?: ReactNode
+  /** Changes when the show or season was toggled, so this row reads its episodes again. */
+  refreshKey?: number
+  /** Told after an episode's own played state changed, so the page can reread its folder. */
+  onPlayedChange?: () => void
   /** Told what this season's episode list came to, for the count above the row. */
   onLoaded?: (episodes: Item[]) => void
 }) {
   const { userId } = useSession()
   const [episodes, setEpisodes] = useState<Item[] | null>(null)
+  // The episode whose own watched state is being written, so only its button goes quiet.
+  const [playedBusy, setPlayedBusy] = useState("")
+  const [playError, setPlayError] = useState("")
   // The episode the details are about: whatever the remote is resting on, and until it rests
   // anywhere, the episode this season begins at.
   const [spotId, setSpotId] = useState("")
+  // What the list currently on screen is of. A show or season toggle bumps `refreshKey` and asks
+  // for the same list again; the row stays on screen while that read is in the air, rather than
+  // blinking out from under the remote that just pressed its watched toggle.
+  const listKey = `${seriesId}:${seasonId}:${userId}`
+  const shownKey = useRef(listKey)
   // Read by the fetch below rather than depended on by it: what the list is handed to is not
   // part of what the list is, and a page that re-renders for its own reasons must not make this
   // read the season again.
@@ -743,36 +853,42 @@ function EpisodeList({
 
   useEffect(() => {
     let cancel = false
-    setEpisodes(null)
-    setSpotId("")
+    const identityChanged = shownKey.current !== listKey
+    shownKey.current = listKey
+    if (identityChanged) {
+      setEpisodes(null)
+      setSpotId("")
+      setPlayedBusy("")
+      setPlayError("")
+    }
     api
       .episodes(userId, seriesId, seasonId)
       .then((result) => {
-        if (cancel) return
-        const list = result.Items || []
-        setEpisodes(list)
-        loaded.current?.(list)
+        if (!cancel) setEpisodes(result.Items || [])
       })
       .catch(() => {
-        if (cancel) return
-        setEpisodes([])
-        loaded.current?.([])
+        if (!cancel && identityChanged) setEpisodes([])
       })
     return () => {
       cancel = true
     }
-  }, [seasonId, seriesId, userId])
+  }, [seasonId, seriesId, userId, refreshKey, listKey])
 
-  // The actions belong to the season the row is showing, so they are drawn once the season's
+  // Every reading of the list is handed up once, whether it came from the fetch above or from a
+  // watched toggle below. The page's season count and cards follow the same list the row shows.
+  useEffect(() => {
+    if (episodes) loaded.current?.(episodes)
+  }, [episodes])
+
+  // The actions belong to the title the row is showing, so they are drawn once the season's
   // episodes are known - including when there are none, where they are the only thing on the
   // page and keep the remote somewhere to land. While the episodes are still on their way the
   // page waits for its own content rather than putting a button in front of the row the viewer
   // is about to browse: a button rendered first is the control a page lands on.
   //
-  // The band is the title's own actions and nothing else. It used to carry a second button that
-  // played the whole season from here; that button is gone, and the band is one row of controls
-  // rather than a row with a gap in it.
-  const band = actions && <div className="actions episode-actions">{actions}</div>
+  // The band holds the title's own actions and the focused episode's watched toggle. It used to
+  // carry a second button that played the whole season from here; that button is gone, and the
+  // band is one row of controls rather than a row with a gap in it.
 
   if (!episodes) return <Loading label="Loading episodes" />
 
@@ -780,9 +896,46 @@ function EpisodeList({
     return (
       <>
         <p className="hint">No episodes in this season.</p>
-        {band}
+        {actions && <div className="actions episode-actions">{actions}</div>}
       </>
     )
+  }
+
+  /**
+   * Write one episode's own watched state. Jellyfin stores it on the episode, so a season or
+   * show's folder summary is reread by the page afterwards; the row itself is updated here so
+   * the still's check and the details above it change as soon as the request succeeds.
+   */
+  async function toggleEpisodePlayed(target: Item) {
+    if (!episodes) return
+    const next = !target.UserData?.Played
+    setPlayedBusy(target.Id)
+    setPlayError("")
+    try {
+      await api.setPlayed(userId, target.Id, next)
+      setEpisodes((current) =>
+        current
+          ? current.map((entry) =>
+              entry.Id === target.Id
+                ? {
+                    ...entry,
+                    UserData: {
+                      ...entry.UserData,
+                      Played: next,
+                      PlaybackPositionTicks: next ? entry.RunTimeTicks : 0,
+                      PlayedPercentage: next ? 100 : 0,
+                    },
+                  }
+                : entry,
+            )
+          : current,
+      )
+      onPlayedChange?.()
+    } catch (caught) {
+      setPlayError(caught instanceof Error ? caught.message : "Could not update the episode's watched state.")
+    } finally {
+      setPlayedBusy("")
+    }
   }
 
   /**
@@ -792,8 +945,26 @@ function EpisodeList({
    * season follows, so the episode the row opens on and the episode the button under it plays
    * can never be two different answers.
    */
-  const anchorId = episodes.some((episode) => episode.Id === nextId) ? nextId : seasonStart(episodes)?.episode.Id || ""
+  const nextIsUnplayed = episodes.some((episode) => episode.Id === nextId && !episode.UserData?.Played)
+  const anchorId = nextIsUnplayed ? nextId : seasonStart(episodes)?.episode.Id || ""
   const spot = episodes.find((episode) => episode.Id === spotId) || episodes.find((episode) => episode.Id === anchorId) || episodes[0]
+  const band = (
+    <div className="actions episode-actions">
+      {actions}
+      <button
+        className={`btn icon-btn ${spot.UserData?.Played ? "on" : ""}`}
+        type="button"
+        onClick={() => void toggleEpisodePlayed(spot)}
+        disabled={playedBusy === spot.Id}
+        aria-pressed={Boolean(spot.UserData?.Played)}
+        aria-label={`${spot.UserData?.Played ? "Mark episode unwatched" : "Mark episode watched"}: ${episodeCode(spot) || spot.Name || "episode"}`}
+      >
+        <CheckIcon size={16} />
+        {spot.UserData?.Played ? "Mark episode unwatched" : "Mark episode watched"}
+      </button>
+      {playError && <span className="error" role="alert">{playError}</span>}
+    </div>
+  )
 
   return (
     <>

@@ -525,6 +525,19 @@ export function canPlayDirectly(item: Item) {
 }
 
 /**
+ * Whether a title's own page offers the watched toggle.
+ *
+ * A film or an episode is one playable thing, so its watched state is its own. A series and a
+ * season are folders: Jellyfin marks every episode beneath them as played or unplayed when the
+ * folder is toggled, so the same button can settle a whole show or season without walking its
+ * episodes one at a time. The pages that are not titles at all - a person, a collection, a
+ * playlist, an untyped item - are left out.
+ */
+export function canMarkWatched(item: Item) {
+  return canPlayDirectly(item) || item.Type === "Series" || item.Type === "Season"
+}
+
+/**
  * Whether a title's own page offers the Favorite action.
  *
  * Favorite marks a title the viewer keeps, so it belongs to the two pages that are a title in
