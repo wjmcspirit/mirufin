@@ -1303,13 +1303,15 @@ function testLibraryToolbarShapes() {
 
 /**
  * The Favorites page as the app draws it: the hero at the top with its Play, Details, Favorite and
- * Trailers actions, the heading beside the All/Movies/TV Shows filter row, and the poster board
- * under both.
+ * Trailers actions, the heading beside the row of categories - All, Movies, TV Shows, Episodes,
+ * Collections and People - and the poster board under both.
  *
- * The filters sit at the right of the heading, as they do on the television, so their column is
- * nothing like the hero's: a press answered by the nearest control would put the remote on a filter
- * chosen by where the hero button happened to be. Both rows are marked as stacks, which is what
- * makes them one vertical order - Down walks each row a control at a time, and leaves it at its end.
+ * The categories sit at the right of the heading, as they do on the television, so their column is
+ * nothing like the hero's: a press answered by the nearest control would put the remote on a
+ * category chosen by where the hero button happened to be. The hero's own actions are a stack, so
+ * Down walks them a control at a time and leaves the row at its end. The categories are an ordinary
+ * strip on purpose, which is what makes Down from one of them a request for the posters under it
+ * rather than a step along the row - see `testFavoritesWalk`.
  */
 function favoritesPage(main: El, columns = 6, rows = 3, cardWidth = 168) {
   const cardHeight = Math.round(cardWidth * 1.5)
@@ -1337,12 +1339,12 @@ function favoritesPage(main: El, columns = 6, rows = 3, cardWidth = 168) {
 
   const head = new El("header", "page-head favorites-head")
   head.place(600, 0, 1920, 96)
-  const filterRow = new El("div", "filter-row").attr("data-nav-flow", "stack")
-  filterRow.place(620, 1350, 430, 44)
-  const filters = ["All", "Movies", "TV Shows"].map((label, index) => {
+  const filterRow = new El("div", "filter-row")
+  filterRow.place(620, 1000, 840, 44)
+  const filters = ["All", "Movies", "TV Shows", "Episodes", "Collections", "People"].map((label, index) => {
     const button = new El("button", "").attr("aria-pressed", index === 0 ? "true" : "false")
     button.text = label
-    button.place(626, 1360 + index * 140, 120, 32)
+    button.place(626, 1000 + index * 140, 120, 32)
     filterRow.add(button)
     return button
   })
@@ -1365,12 +1367,17 @@ function favoritesPage(main: El, columns = 6, rows = 3, cardWidth = 168) {
 
 /**
  * The Favorites page walked with the remote: Down from Play goes through the hero's own actions,
- * then the filter row, then the first poster of the grid - and Up climbs back the same way.
+ * then into the categories, and from any category into the first poster of the grid - and Up
+ * climbs back the same way.
  *
- * This is the reported defect: the filter row was not a band the navigation engine knew, so Down
- * from Trailers answered with the first poster directly, and a fix that treats the row as an
- * ordinary strip lands on the filter in the hero button's column - TV Shows - instead of on All.
- * Both ends of both stacks are checked, along with the sideways presses that must not change.
+ * Two things are being held here. The first is the reported defect: the row of categories was not a
+ * band the navigation engine knew, so Down from Trailers answered with the first poster directly,
+ * and a fix that treats the row as an ordinary strip lands on the category in the hero button's
+ * column - People - instead of on All. The second is what the row is now for: Left and Right walk
+ * the categories one at a time and stop at each end, Down from *any* of them is a request for the
+ * posters under it rather than a step to the next category or a jump to the far-right poster, and
+ * Up from the first poster row comes back to the category the viewer left - not to the first one,
+ * and not to the last.
  */
 function testFavoritesWalk() {
   clearSeats()
@@ -1379,24 +1386,25 @@ function testFavoritesWalk() {
   const favorites = favoritesPage(page.main)
   noteRoute("/favorites")
   const [play, details, favorite, trailers] = favorites.controls
-  const [all, movies, shows] = favorites.filters
+  const [all, movies, shows, episodes, collections, people] = favorites.filters
   const first = favorites.cards[0]
+  const farRight = favorites.cards[5]
 
-  // The page opens on the hero's Play, and Down walks the order the page is built in.
+  // The page opens on the hero's Play, and Down walks the order the page is built in: the hero's
+  // own actions, then the category the page is showing, then the posters under it.
   placeFocus(play)
   const down: [string, El][] = [
     ["Details", details],
     ["Favorite", favorite],
     ["Trailers", trailers],
     ["All", all],
-    ["Movies", movies],
-    ["TV Shows", shows],
     ["the first poster at the left of the first row", first],
   ]
   for (const [name, expected] of down) {
     moveFocus("ArrowDown")
     check(`Down reaches ${name}`, active === expected, label(active))
   }
+  check("and never the poster at the far right of that row", active !== farRight, label(active))
 
   // The grid keeps the navigation it always had: sideways along a row, and a row at a time.
   moveFocus("ArrowRight")
@@ -1415,39 +1423,62 @@ function testFavoritesWalk() {
   moveFocus("ArrowLeft")
   check("Left walks it back to its first poster", active === first, label(active))
 
-  // Up from the first poster returns to the last filter, then up the filter row, then to the hero
-  // action the viewer came down from.
+  // Up from the first poster returns to the category the viewer left it from - All, the one the
+  // page is showing - and then up the page the way it came down.
   moveFocus("ArrowUp")
-  check("Up from the first poster returns to TV Shows", active === shows, label(active))
-  moveFocus("ArrowUp")
-  check("Up from TV Shows returns to Movies", active === movies, label(active))
-  moveFocus("ArrowUp")
-  check("Up from Movies returns to All", active === all, label(active))
+  check("Up from the first poster returns to All", active === all, label(active))
   moveFocus("ArrowUp")
   check("Up from All returns to the hero's last action", active === trailers, label(active))
   moveFocus("ArrowUp")
   check("and Up from there walks the hero's actions back", active === favorite, label(active))
 
-  // Sideways inside both stacks remains the ordinary row movement.
+  // Sideways inside both rows remains the ordinary row movement.
   placeFocus(play)
   moveFocus("ArrowRight")
   check("Right walks the hero's actions", active === details, label(active))
   moveFocus("ArrowLeft")
   check("and Left walks them back", active === play, label(active))
-  placeFocus(all)
-  moveFocus("ArrowRight")
-  moveFocus("ArrowRight")
-  check("Right walks the filters to TV Shows", active === shows, label(active))
-  moveFocus("ArrowRight")
-  check("and stops at the end of the filter row", active === shows, label(active))
-  moveFocus("ArrowLeft")
-  check("Left walks the filters back", active === movies, label(active))
 
-  // The exact transition the report named, on its own: from Trailers, Down is All and nothing else.
+  // Every category, in the order the page draws them, without skipping one.
+  placeFocus(all)
+  for (const [name, expected] of [
+    ["Movies", movies],
+    ["TV Shows", shows],
+    ["Episodes", episodes],
+    ["Collections", collections],
+    ["People", people],
+  ] as [string, El][]) {
+    moveFocus("ArrowRight")
+    check(`Right walks the categories to ${name}`, active === expected, label(active))
+  }
+  moveFocus("ArrowRight")
+  check("and stops at the end of the category row", active === people, label(active))
+  moveFocus("ArrowLeft")
+  check("Left walks the categories back", active === collections, label(active))
+
+  // Down from a category that is not the last one is the viewer asking for the posters under it:
+  // the first poster of the first row, never the next category and never the far-right poster.
+  for (const [name, tab] of [
+    ["Movies", movies],
+    ["Episodes", episodes],
+    ["People", people],
+  ] as [string, El][]) {
+    placeFocus(tab)
+    moveFocus("ArrowDown")
+    check(`Down from ${name} selects the first poster on the left`, active === first, label(active))
+    check(`and not the poster at the far right of the row`, active !== farRight, label(active))
+    moveFocus("ArrowUp")
+    check(`and Up returns to ${name}`, active === tab, label(active))
+  }
+
+  // The exact transition the report named, on its own: a page whose category row has not been
+  // walked yet enters it at the category it is showing - All - and never at the one under the hero
+  // button the viewer came down from, which is People.
+  resetFocusState()
   placeFocus(trailers)
   moveFocus("ArrowDown")
   check("Down from Trailers focuses All", active === all, label(active))
-  check("not TV Shows", active !== shows, label(active))
+  check("not People", active !== people, label(active))
   check("and not a poster", active !== null && !favorites.cards.includes(active), label(active))
 
   // A page the viewer has scrolled enters the grid at its first visible row, still at the left.
@@ -1460,9 +1491,9 @@ function testFavoritesWalk() {
   placeFocus(lower.filters[2])
   moveFocus("ArrowDown")
   const expected = lower.cards.find((card) => card.rect.bottom > 8 && card.rect.top < 1080 - 8)
-  check("Down from the last filter enters a scrolled grid at its first visible poster", active === expected, label(active))
+  check("Down from a category enters a scrolled grid at its first visible poster", active === expected, label(active))
   moveFocus("ArrowUp")
-  check("and Up from it returns to the last filter", active === lower.filters[2], label(active))
+  check("and Up from it returns to the category the viewer left", active === lower.filters[2], label(active))
 }
 
 

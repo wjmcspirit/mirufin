@@ -1,3 +1,4 @@
+import { canPlayDirectly } from "./format"
 import { ownBackdropSrc } from "./images"
 import type { Item } from "./types"
 
@@ -188,9 +189,13 @@ export function recentlyAddedCollections(collections: Item[], limit = 12) {
  * viewer last left the page, and a visit that would open on it again is swapped with another
  * slide, so coming back twice in a row does not feature the same title first. A shelf holding one
  * favorite still features it.
+ *
+ * Only the favorites a hero may feature are sampled (`canFeatureFavorite`), so the shelf a
+ * category narrows is the shelf its hero turns through - a category holding nothing a hero can
+ * feature is drawn without a hero rather than with a slide that leads nowhere.
  */
 export function favoriteHeroDeck(favorites: Item[], limit = HERO_DECK_LIMIT, avoid = "") {
-  const shuffled = shuffle(oneOfEach(favorites))
+  const shuffled = shuffle(oneOfEach(favorites.filter(canFeatureFavorite)))
   if (avoid && shuffled.length > 1 && shuffled[0].Id === avoid) {
     const swap = 1 + Math.floor(Math.random() * (shuffled.length - 1))
     const first = shuffled[0]
@@ -200,27 +205,109 @@ export function favoriteHeroDeck(favorites: Item[], limit = HERO_DECK_LIMIT, avo
   return shuffled.slice(0, limit)
 }
 
-/** Which favorites a filter shows. */
-export type FavoriteFilter = "all" | "movies" | "shows"
-
-/** The filters a Favorites page offers, in the order the remote walks them. */
-export const FAVORITE_FILTERS: { id: FavoriteFilter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "movies", label: "Movies" },
-  { id: "shows", label: "TV Shows" },
-]
+/**
+ * Whether a hero may feature this favorite.
+ *
+ * A hero names one title, shows its artwork and offers to play or open it, so a favorite the app
+ * has no such page for is left out: a person is not a title - it is a credit on the titles that
+ * hold it, and its page is a filmography rather than something to play - so a hero offering to
+ * play one would be offering something that leads nowhere. Everything else the server can send as
+ * a favorite is a title with a page of its own.
+ */
+export function canFeatureFavorite(item: Item) {
+  return Boolean(item.Id) && item.Type !== "Person"
+}
 
 /**
- * The favorites a filter shows.
+ * What the hero's primary action does for a favorite, where the hero's own answer is wrong.
  *
- * The filter narrows what is drawn and nothing else: it never changes an item's favorite state and
- * never drops an item from the list the server sent - an episode the viewer favorited in its own
- * right is a favorite of its own, and is shown as one.
+ * The hero plays what it is featuring, and for a film, an episode, a video or a series that is
+ * exactly right - it answers for itself, resume included, and is given `null` here. A collection,
+ * an album, a playlist and a folder are not played but opened, and the action says what it opens.
+ * The page hands this back to the hero as its `playHref` and `playLabel`.
  */
-export function filterFavorites(favorites: Item[], filter: FavoriteFilter) {
-  if (filter === "movies") return favorites.filter((item) => item.Type === "Movie")
-  if (filter === "shows") return favorites.filter((item) => item.Type === "Series")
-  return favorites
+export function favoriteHeroAction(item: Item): { href: string; label: string } | null {
+  if (canPlayDirectly(item) || item.Type === "Series") return null
+  return { href: `/item/${item.Id}`, label: favoriteOpenLabel(item.Type) }
+}
+
+/** What a favorite that is not played is opened as, in the words the rest of the app uses. */
+function favoriteOpenLabel(type?: string) {
+  if (type === "BoxSet") return "View collection"
+  if (type === "MusicAlbum") return "Open album"
+  if (type === "Playlist") return "Open playlist"
+  if (type === "PhotoAlbum") return "View photos"
+  return "Open"
+}
+
+/** Which favorites a category shows. */
+export type FavoriteCategory = "all" | "movies" | "shows" | "episodes" | "collections" | "people"
+
+/**
+ * The categories a Favorites page offers, in the order the remote walks them.
+ *
+ * All comes first, and is what the page opens on: a category narrows the shelf the viewer is
+ * looking at rather than dividing it, so the one that shows everything is the one a page that has
+ * just opened is showing. The five after it are the kinds of thing Jellyfin keeps a favorite flag
+ * on and this app draws a page for: a film, a series, an episode, a collection, a person. Each
+ * carries the words its own count is stated in, so a category's line says "4 episodes" rather than
+ * calling everything a title.
+ */
+export const FAVORITE_CATEGORIES: { id: FavoriteCategory; label: string; noun: [string, string] }[] = [
+  { id: "all", label: "All", noun: ["title", "titles"] },
+  { id: "movies", label: "Movies", noun: ["film", "films"] },
+  { id: "shows", label: "TV Shows", noun: ["show", "shows"] },
+  { id: "episodes", label: "Episodes", noun: ["episode", "episodes"] },
+  { id: "collections", label: "Collections", noun: ["collection", "collections"] },
+  { id: "people", label: "People", noun: ["person", "people"] },
+]
+
+/** The Jellyfin item type each category holds. All holds every kind, so it states none. */
+const CATEGORY_TYPES: Partial<Record<FavoriteCategory, string>> = {
+  movies: "Movie",
+  shows: "Series",
+  episodes: "Episode",
+  collections: "BoxSet",
+  people: "Person",
+}
+
+/**
+ * The favorites a category shows.
+ *
+ * A category narrows what is drawn and nothing else: it never changes an item's favorite state and
+ * never drops an item from the list the server sent - an episode the viewer favorited in its own
+ * right is a favorite of its own, and is shown as one under Episodes as well as under All.
+ */
+export function favoritesInCategory(favorites: Item[], category: FavoriteCategory) {
+  const type = CATEGORY_TYPES[category]
+  return type ? favorites.filter((item) => item.Type === type) : favorites
+}
+
+/**
+ * The categories a server's shelf can be browsed by.
+ *
+ * People are answered for by an endpoint of their own, and a server that cannot answer for them -
+ * one older than Jellyfin 10.9 - is offered no People category rather than a category that can
+ * never hold anything. See `api.favorites`.
+ */
+export function favoriteCategories(hasPeople: boolean) {
+  return FAVORITE_CATEGORIES.filter((option) => option.id !== "people" || hasPeople)
+}
+
+/**
+ * The category a page is showing.
+ *
+ * The one the viewer chose, or All when the shelf no longer offers it - which is what a reload
+ * that came back without people does to a page the viewer had left on People.
+ */
+export function favoriteCategory(hasPeople: boolean, chosen: FavoriteCategory): FavoriteCategory {
+  return chosen === "people" && !hasPeople ? "all" : chosen
+}
+
+/** How many favorites a category is holding, in the words that category uses. */
+export function favoriteCountLabel(category: FavoriteCategory, count: number) {
+  const noun = FAVORITE_CATEGORIES.find((option) => option.id === category)?.noun || ["title", "titles"]
+  return count === 1 ? `1 ${noun[0]}` : `${count} ${noun[1]}`
 }
 
 /** A list in a fresh order, by a Fisher-Yates pass. */

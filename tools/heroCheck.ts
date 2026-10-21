@@ -14,15 +14,20 @@
  */
 import { readFileSync } from "node:fs"
 import {
-  FAVORITE_FILTERS,
+  FAVORITE_CATEGORIES,
   HERO_CANDIDATE_LIMIT,
   HERO_DECK_LIMIT,
   addedAt,
+  canFeatureFavorite,
   collectionHeroDeck,
   datedNewestFirst,
   deckFrom,
+  favoriteCategories,
+  favoriteCategory,
+  favoriteCountLabel,
+  favoriteHeroAction,
   favoriteHeroDeck,
-  filterFavorites,
+  favoritesInCategory,
   movieHeroDeck,
   newestFirst,
   nextSlide,
@@ -90,6 +95,10 @@ function boxset(id: string, name: string, patch: Partial<Item> = {}): Item {
 
 function episode(id: string, seriesId: string, patch: Partial<Item> = {}): Item {
   return { Id: id, Name: `Episode ${id}`, Type: "Episode", SeriesId: seriesId, ...patch }
+}
+
+function person(id: string, name: string, patch: Partial<Item> = {}): Item {
+  return { Id: id, Name: name, Type: "Person", ...patch }
 }
 
 // --------------------------------------------------------------------------- one of each
@@ -210,18 +219,86 @@ same(
   ["m", "s"],
 )
 same("and is capped", favoriteHeroDeck(Array.from({ length: 30 }, (_, index) => movie(`m${index}`, `M${index}`))).length, HERO_DECK_LIMIT)
-same("the filters offered are All, Movies and TV Shows", FAVORITE_FILTERS.map((entry) => entry.label), ["All", "Movies", "TV Shows"])
+same(
+  "the categories offered are All, Movies, TV Shows, Episodes, Collections and People",
+  FAVORITE_CATEGORIES.map((entry) => entry.label),
+  ["All", "Movies", "TV Shows", "Episodes", "Collections", "People"],
+)
+same(
+  "and they are the order the remote walks them in",
+  FAVORITE_CATEGORIES.map((entry) => entry.id),
+  ["all", "movies", "shows", "episodes", "collections", "people"],
+)
 
-const saved = [movie("m1", "Film"), series("s1", "Show"), episode("e1", "s1"), movie("m2", "Film two")]
-same("All shows every favorite", filterFavorites(saved, "all").map((i) => i.Id), ["m1", "s1", "e1", "m2"])
-same("Movies shows the films", filterFavorites(saved, "movies").map((i) => i.Id), ["m1", "m2"])
-same("TV Shows shows the series", filterFavorites(saved, "shows").map((i) => i.Id), ["s1"])
+const saved = [
+  movie("m1", "Film"),
+  series("s1", "Show"),
+  episode("e1", "s1"),
+  movie("m2", "Film two"),
+  boxset("b1", "A collection"),
+  person("p1", "An actor"),
+]
+same("All shows every favorite", favoritesInCategory(saved, "all").map((i) => i.Id), ["m1", "s1", "e1", "m2", "b1", "p1"])
+same("Movies shows the films", favoritesInCategory(saved, "movies").map((i) => i.Id), ["m1", "m2"])
+same("TV Shows shows the series", favoritesInCategory(saved, "shows").map((i) => i.Id), ["s1"])
+same("Episodes shows the episodes the viewer hearted", favoritesInCategory(saved, "episodes").map((i) => i.Id), ["e1"])
+same("Collections shows the collections", favoritesInCategory(saved, "collections").map((i) => i.Id), ["b1"])
+same("People shows the people", favoritesInCategory(saved, "people").map((i) => i.Id), ["p1"])
 same(
   "a favorited episode is its own favorite, not part of its series",
-  filterFavorites(saved, "all").map((i) => i.Type),
-  ["Movie", "Series", "Episode", "Movie"],
+  favoritesInCategory(saved, "all").map((i) => i.Type),
+  ["Movie", "Series", "Episode", "Movie", "BoxSet", "Person"],
 )
-same("and filtering an empty shelf is still empty", filterFavorites([], "movies"), [])
+same("and filtering an empty shelf is still empty", favoritesInCategory([], "movies"), [])
+same("and a category holding nothing shows nothing", favoritesInCategory(saved, "people").length, 1)
+
+/* A server answers for people on an endpoint of its own, and one that cannot - older than Jellyfin
+   10.9 - is offered no People category rather than one that can never hold anything. The count a
+   category states is in its own words, so "4 episodes" is not called four titles. */
+same(
+  "a server that answered for people is offered the People category",
+  favoriteCategories(true).map((entry) => entry.id),
+  ["all", "movies", "shows", "episodes", "collections", "people"],
+)
+same(
+  "and a server that could not answer for them is not",
+  favoriteCategories(false).map((entry) => entry.id),
+  ["all", "movies", "shows", "episodes", "collections"],
+)
+same("a shelf left on People falls back to All when people go away", favoriteCategory(false, "people"), "all")
+same("and every other choice is left alone", favoriteCategory(false, "episodes"), "episodes")
+same("with people to offer, the choice stands", favoriteCategory(true, "people"), "people")
+same("a count is stated in the category's own words", favoriteCountLabel("episodes", 4), "4 episodes")
+same("and one of them is not one of thems", favoriteCountLabel("movies", 1), "1 film")
+same("All still counts titles", favoriteCountLabel("all", 12), "12 titles")
+same("and a person is a person", favoriteCountLabel("people", 3), "3 people")
+
+/* The hero features a title, and a person is not one: a hero offering to play a person would be
+   offering something that leads nowhere. Everything else the server can send is featured, and the
+   action it offers follows from what the favorite is - played where the app plays it, opened where
+   it does not. */
+check("a film may be featured", canFeatureFavorite(movie("m", "M")))
+check("and so may a series, an episode and a collection", [
+  canFeatureFavorite(series("s", "S")),
+  canFeatureFavorite(episode("e", "s")),
+  canFeatureFavorite(boxset("b", "B")),
+].every(Boolean))
+check("a person is not featured", !canFeatureFavorite(person("p", "P")))
+check("and a favorite with no id is never featured", !canFeatureFavorite({ Name: "No id", Type: "Movie" }))
+same("a film's action is the hero's own Play", favoriteHeroAction(movie("m", "M")), null)
+same("and so is a series' and an episode's", [favoriteHeroAction(series("s", "S")), favoriteHeroAction(episode("e", "s"))], [null, null])
+same("a collection is opened rather than played", favoriteHeroAction(boxset("b", "B")), {
+  href: "/item/b",
+  label: "View collection",
+})
+same("and an album is opened too", favoriteHeroAction({ Id: "a", Type: "MusicAlbum" }), {
+  href: "/item/a",
+  label: "Open album",
+})
+check(
+  "a collection's action opens the collection rather than the player",
+  (favoriteHeroAction(boxset("b", "B"))?.href || "").startsWith("/item/"),
+)
 
 /* The featured favorite: a random sample of the shelf the filter is showing, not its first title,
    and a page the viewer returns to that does not open on the one they just left. */
@@ -242,18 +319,18 @@ check(
   new Set(favoriteDeck.map((item) => item.Id)).size === HERO_DECK_LIMIT && favoriteDeck.length === HERO_DECK_LIMIT,
   `${new Set(favoriteDeck.map((item) => item.Id)).size} of ${favoriteDeck.length}`,
 )
-for (const option of FAVORITE_FILTERS) {
-  const pool = filterFavorites(SAVED, option.id)
+for (const option of FAVORITE_CATEGORIES) {
+  const pool = favoritesInCategory(SAVED, option.id)
   const deck = favoriteHeroDeck(pool)
   check(
-    `a ${option.label} hero draws only from what that filter shows`,
+    `a ${option.label} hero draws only from what that category shows`,
     deck.length === Math.min(pool.length, HERO_DECK_LIMIT) && deck.every((item) => pool.some((entry) => entry.Id === item.Id)),
     `${deck.length} slides from ${pool.length}`,
   )
 }
 const movieOpenings = new Set<string>()
-for (let pass = 0; pass < 40; pass += 1) movieOpenings.add(favoriteHeroDeck(filterFavorites(SAVED, "movies"))[0]?.Id || "")
-check("and a filtered hero samples that filter's shelf too", movieOpenings.size > 1, `${movieOpenings.size} different openings in 40 builds`)
+for (let pass = 0; pass < 40; pass += 1) movieOpenings.add(favoriteHeroDeck(favoritesInCategory(SAVED, "movies"))[0]?.Id || "")
+check("and a category's hero samples that category's shelf too", movieOpenings.size > 1, `${movieOpenings.size} different openings in 40 builds`)
 const leftOn = favoriteHeroDeck(SAVED)[0].Id
 const revisits = Array.from({ length: 40 }, () => favoriteHeroDeck(SAVED, HERO_DECK_LIMIT, leftOn))
 check(
@@ -610,17 +687,18 @@ check(
   "Library.tsx",
 )
 
-/* Favorites: the filters narrow the grid, the grid draws what the filter chose, and an empty shelf
-   is a line of its own rather than a broken hero. */
+/* Favorites: the categories narrow the grid, the grid draws what the category chose, and an empty
+   shelf is a line of its own rather than a broken hero. The row of categories is a page's own
+   control, so the wiring that builds it, counts it and samples the hero from it is read here. */
 check(
-  "Favorites filters the shelf it is showing rather than the list the server sent",
-  /filterFavorites\(items, filter\)/.test(favorites) && /FAVORITE_FILTERS\.map/.test(favorites),
+  "Favorites narrows the shelf it is showing rather than the list the server sent",
+  /favoritesInCategory\(items, category\)/.test(favorites) && /categories\.map/.test(favorites),
   "Favorites.tsx",
 )
-check("and the grid draws what the filter chose", /shown\.map\(/.test(favorites), "Favorites.tsx")
+check("and the grid draws what the category chose", /shown\.map\(/.test(favorites), "Favorites.tsx")
 check(
-  "Favorites samples the filtered shelf for its hero rather than the server's own order",
-  /const shown = useMemo\(\(\) => filterFavorites\(items, filter\), \[items, filter\]\)/.test(favorites) &&
+  "Favorites samples the narrowed shelf for its hero rather than the server's own order",
+  /const shown = useMemo\(\(\) => favoritesInCategory\(items, category\), \[items, category\]\)/.test(favorites) &&
     /favoriteHeroDeck\(shown, HERO_DECK_LIMIT, lastFavoriteHero\)/.test(favorites),
   "Favorites.tsx",
 )
@@ -635,13 +713,49 @@ check(
   "Favorites.tsx",
 )
 check(
-  "the hero's actions and the filter row are marked as the page's vertical focus order",
-  /<Hero item=\{heroItem\}[^>]*flow="stack"/.test(favorites) &&
-    /className="filter-row"[^>]*data-nav-flow="stack"/.test(favorites) &&
+  "the hero's actions are marked as the page's vertical focus order",
+  /<Hero[\s\S]{0,500}?flow="stack"/.test(favorites) &&
     /data-nav-flow=\{flow\}/.test(hero) &&
     /band\.getAttribute\("data-nav-flow"\) === "stack"/.test(remote) &&
     /stacked\(band\)/.test(remote),
   "Favorites.tsx, Hero.tsx and remote.ts",
+)
+/* The categories are deliberately not a stack: a stack is entered at one of its ends and walked a
+   control at a time, which would make Down from the first category land on the next category
+   rather than on the posters the viewer asked for. As an ordinary strip the row is entered at the
+   lane the viewer left it in and left at once for the grid, which is what makes Down a request for
+   the first poster on the left and Up a return to the category they came from. */
+check(
+  "and the row of categories is not one, so Down from a category reaches the posters under it",
+  /className="filter-row" role="group" aria-label="Favorite categories">/.test(favorites) && !/filter-row"[^>]*data-nav-flow/.test(favorites),
+  "Favorites.tsx",
+)
+check(
+  "the categories offered are the ones this server can fill",
+  /favoriteCategories\(people\)/.test(favorites) && /favoriteCategory\(people, chosen\)/.test(favorites),
+  "Favorites.tsx",
+)
+check(
+  "the count states the category on screen in its own words",
+  /favoriteCountLabel\(category, shown\.length\)/.test(favorites),
+  "Favorites.tsx",
+)
+check(
+  "and the hero's one action follows from the favorite it is showing",
+  /favoriteHeroAction\(heroItem\)/.test(favorites) && /playHref=\{heroAction\?\.href\}/.test(favorites) && /playLabel=\{heroAction\?\.label\}/.test(favorites),
+  "Favorites.tsx",
+)
+check(
+  "Favorites reads the shelf from the API rather than inferring it from the grid",
+  /api\s*\n?\s*\.favorites\(userId\)/.test(favorites) && !/IsFavorite/.test(favorites),
+  "Favorites.tsx",
+)
+/* A category is a view of the shelf, not a setting: choosing one must not write anything the viewer
+   saved, so a poster size or a library view chosen elsewhere survives a walk along the row. */
+check(
+  "and choosing a category writes nothing to the viewer's saved settings",
+  /usePrefs\(\)/.test(favorites) && !/savePrefs|setPrefs|saveView/.test(favorites),
+  "Favorites.tsx",
 )
 check(
   "and an empty shelf is a useful line rather than an empty hero",
@@ -650,7 +764,10 @@ check(
 )
 check(
   "and the favorite state is the server's own: the request asks for favorited items and nothing else",
-  /Filters: "IsFavorite"/.test(api) && /IncludeItemTypes: "Movie,Series,Episode,Video,MusicAlbum,Audio"/.test(api),
+  /Filters: "IsFavorite"/.test(api) &&
+    /IncludeItemTypes: "Movie,Series,Episode,BoxSet,Video,MusicAlbum,Audio"/.test(api) &&
+    /isFavorite: "true"/.test(api) &&
+    /jf<ItemList>\(`\/Persons\?\$\{params\}`\)/.test(api),
   "api.ts",
 )
 check("and favoriting is never a side effect of filtering or browsing", !/setFavorite/.test(favorites) && !/setFavorite/.test(deck), "Favorites.tsx and heroDeck.ts")
@@ -659,7 +776,7 @@ check("and favoriting is never a side effect of filtering or browsing", !/setFav
    rotation is on, and its Details button is dropped when the primary action already opens it. */
 check(
   "the hero's actions all belong to the title it is showing",
-  /<Hero item=\{heroItem\}/.test(favorites) && /<Hero\s+item=\{showHeroItem\}/.test(library) && /<Hero\s+item=\{rotatingCollection\}/.test(library),
+  /<Hero\s+item=\{heroItem\}/.test(favorites) && /<Hero\s+item=\{showHeroItem\}/.test(library) && /<Hero\s+item=\{rotatingCollection\}/.test(library),
   "Favorites.tsx and Library.tsx",
 )
 check("and Details is not offered twice when the primary action already opens the title", /href !== detailsTo && \(/.test(hero), "Hero.tsx")

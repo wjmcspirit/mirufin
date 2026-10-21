@@ -929,6 +929,154 @@ for (const size of LIBRARY_SIZES) {
   }
 }
 
+/** Where one press of the Favorites walk left the remote, named by the control it landed on. */
+interface FavoritesStep {
+  name: string
+  inRow: boolean
+  inGrid: boolean
+  inRail: boolean
+}
+
+/** One box of the Favorites page, in the design units the layout is drawn in. */
+interface FavoritesBox {
+  top: number
+  bottom: number
+  left: number
+  right: number
+  width: number
+  height: number
+}
+
+/** The Favorites page's own shape, measured before the remote touched it. */
+interface FavoritesShape {
+  fold: number
+  hero: FavoritesBox
+  head: FavoritesBox
+  row: FavoritesBox
+  tabs: FavoritesBox[]
+  board: FavoritesBox
+  firstCard: FavoritesBox
+  /** The first poster's own artwork, which is what has to be on the screen - the caption under it
+      is below the fold on a library's first row at 1080p too, and is reached by pressing Down. */
+  firstArt: FavoritesBox
+  lastCard: FavoritesBox
+  page: FavoritesBox
+  /** The one content boundary: the hero's copy, the heading and the first poster begin on it, and
+      the row of categories ends where the grid's own last poster ends. */
+  edges: { copy: number; heading: number; poster: number; row: number; grid: number }
+  /** Whether all six categories are on one line rather than wrapped onto a second. */
+  tabsOnOneLine: boolean
+}
+
+/** The Favorites page walked with the remote: where each press of the walk landed. */
+interface FavoritesReport {
+  shape: FavoritesShape
+  fromHero: FavoritesStep[]
+  fromCategory: { tab: number; landed: FavoritesStep }[]
+  backToCategory: { tab: number; landed: FavoritesStep }[]
+  across: FavoritesStep[]
+  back: FavoritesStep[]
+  pageTop: number
+  pageLeft: number
+}
+
+/**
+ * The Favorites page walked with the remote, measured from a real layout and the app's own
+ * navigation engine.
+ *
+ * What is asserted here is the page the category row is for. The row is the page's own control, and
+ * the press the viewer makes from it is a request for the posters under it: Down from *any*
+ * category - not only the last one, and never a step to the next category - selects the first
+ * poster at the left of the first visible row, and Up from it comes back to the category the viewer
+ * left rather than to the first or the last. Right and Left walk the six categories one at a time
+ * and stop at each end. No press of the walk falls back to the navigation rail, and the row, its
+ * tabs and the first poster row are all on the screen the viewer opens the page on.
+ */
+const favoritesWalkProbe = pathToFileURL(resolve("tools/favoritesWalkProbe.html")).href
+console.log("\nThe Favorites page walked with the remote: the categories, and the posters under them\n")
+
+const FAVORITE_TAB_NAMES = ["all", "movies", "tv-shows", "episodes", "collections", "people"]
+
+for (const { panel, report } of await measurePage<FavoritesReport>(browser, favoritesWalkProbe, PANELS)) {
+  const shape = report.shape
+  const landed = (step: FavoritesStep) => `${step.name}${step.inGrid ? " (grid)" : ""}${step.inRow ? " (row)" : ""}`
+  console.log(`${panel.name} - ${panel.width}x${panel.height}`)
+  console.log(
+    `     hero ends ${shape.hero.bottom}  head ${shape.head.top}..${shape.head.bottom}  ` +
+      `categories ${shape.row.top}..${shape.row.bottom} (${shape.row.width} wide, ${shape.tabs.length} tabs)\n` +
+      `     grid starts ${shape.board.top}  first poster ${shape.firstArt.top}..${shape.firstArt.bottom} of the ${shape.fold}-unit canvas  ` +
+      `edges ${shape.edges.copy}/${shape.edges.heading}/${shape.edges.poster} and ${shape.edges.row}/${shape.edges.grid}\n` +
+      `     from the hero: ${report.fromHero.map(landed).join(" -> ")}   ` +
+      `across: ${report.across.map((step) => step.name).join(" -> ")}   back: ${report.back.map((step) => step.name).join(" -> ")}`,
+  )
+  check(
+    `${panel.name}: the row of categories is between the hero and the grid, and all six are on one line`,
+    shape.row.top >= shape.hero.bottom - 1 && shape.row.bottom <= shape.board.top + 1 && shape.tabs.length === 6 && shape.tabsOnOneLine,
+    `row ${shape.row.top}..${shape.row.bottom}, hero ends ${shape.hero.bottom}, grid starts ${shape.board.top}, one line ${shape.tabsOnOneLine}`,
+  )
+  check(
+    `${panel.name}: and the row stays inside the page's own column`,
+    shape.row.left >= shape.page.left - 0.5 && shape.row.right <= shape.page.right + 0.5,
+    `row ${shape.row.left}..${shape.row.right} against the page's ${shape.page.left}..${shape.page.right}`,
+  )
+  check(
+    `${panel.name}: the grid starts on the screen, with its first row of posters under the categories`,
+    shape.board.top <= shape.fold && shape.firstArt.top >= shape.row.bottom - 1 && shape.firstArt.bottom <= shape.fold,
+    `grid starts ${shape.board.top}, artwork ${shape.firstArt.top}..${shape.firstArt.bottom} of ${shape.fold}, categories end at ${shape.row.bottom}`,
+  )
+  check(
+    `${panel.name}: the hero's copy, the heading and the first poster share one left edge`,
+    Math.abs(shape.edges.copy - shape.edges.heading) <= 1 && Math.abs(shape.edges.heading - shape.edges.poster) <= 1,
+    `copy ${shape.edges.copy}, heading ${shape.edges.heading}, poster ${shape.edges.poster}`,
+  )
+  check(
+    `${panel.name}: and the row of categories ends where the grid's own posters end`,
+    Math.abs(shape.edges.row - shape.edges.grid) <= 1,
+    `row ends at ${shape.edges.row}, the grid's last poster at ${shape.edges.grid}`,
+  )
+  check(
+    `${panel.name}: Down from the hero's own last action enters the categories, not the grid`,
+    report.fromHero[0] !== undefined && report.fromHero[0].inRow,
+    report.fromHero.map(landed).join(" -> ") || "nothing",
+  )
+  check(
+    `${panel.name}: Right walks the six categories in order, one at a time, and stops at the end`,
+    report.across.map((step) => step.name).join(",") ===
+      "category-movies,category-tv-shows,category-episodes,category-collections,category-people,category-people",
+    report.across.map((step) => step.name).join(", "),
+  )
+  check(
+    `${panel.name}: and Left walks them back`,
+    report.back.map((step) => step.name).join(",") === "category-collections,category-episodes",
+    report.back.map((step) => step.name).join(", "),
+  )
+  check(
+    `${panel.name}: Down from every category reaches the first poster of the grid, never the far-right one`,
+    report.fromCategory.length === 4 && report.fromCategory.every((step) => step.landed.inGrid && step.landed.name === "poster-1"),
+    report.fromCategory.map((step) => `${step.tab}: ${landed(step.landed)}`).join(", "),
+  )
+  check(
+    `${panel.name}: and Up from that poster returns to the category the viewer left`,
+    report.backToCategory.length === 4 &&
+      report.backToCategory.every((step) => step.landed.inRow && step.landed.name === `category-${FAVORITE_TAB_NAMES[step.tab]}`),
+    report.backToCategory.map((step) => `${step.tab}: ${landed(step.landed)}`).join(", "),
+  )
+  const walked = [
+    ...report.fromHero,
+    ...report.fromCategory.map((step) => step.landed),
+    ...report.backToCategory.map((step) => step.landed),
+    ...report.across,
+    ...report.back,
+  ]
+  check(
+    `${panel.name}: no press of the walk fell back to the navigation rail`,
+    !walked.some((step) => step.inRail),
+    walked.filter((step) => step.inRail).map((step) => step.name).join(", "),
+  )
+  check(`${panel.name}: and none of it scrolled the page sideways`, report.pageLeft === 0, `page scrolled ${report.pageLeft}`)
+  console.log("")
+}
+
 /**
  * The season page walked with the remote, measured the same way.
  *

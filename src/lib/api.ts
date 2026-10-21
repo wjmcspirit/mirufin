@@ -1,4 +1,4 @@
-import type { AuthResult, Item, ItemList, MediaSegment, MediaSource, PlaybackInfo, PublicInfo, PublicUser } from "./types"
+import type { AuthResult, Favorites, Item, ItemList, MediaSegment, MediaSource, PlaybackInfo, PublicInfo, PublicUser } from "./types"
 import { jellyfinFetchUrl, mediaUrl, playbackUrl } from "./media"
 import { getDeviceId, getToken, loadPrefs } from "./storage"
 import { APP_VERSION } from "./version"
@@ -724,19 +724,56 @@ export function search(userId: string, term: string) {
   return jf<ItemList>(`/Users/${userId}/Items?${params}`)
 }
 
-export function favorites(userId: string) {
+/**
+ * The viewer's favorites, and whether the server answered for the people among them.
+ *
+ * Jellyfin keeps a favorite flag on the items in its libraries, and a person is not one of those: a
+ * person is a credit on the titles that hold them, and the people a viewer has favorited are
+ * answered by the endpoint that knows what a person is rather than by the item list. So the shelf
+ * is two requests, and the second is allowed to fail - a server that cannot answer for people is a
+ * server whose viewer is offered no People category, rather than one whose whole shelf is lost.
+ *
+ * A collection is an item like any other and takes the same filter, so it is asked for here.
+ * People are listed after the titles, each kind in the server's own order, so the shelf reads as
+ * the library does: what is watched first, and the people who are in it after.
+ */
+export async function favorites(userId: string): Promise<Favorites> {
   const params = new URLSearchParams({
     Filters: "IsFavorite",
     Recursive: "true",
-    IncludeItemTypes: "Movie,Series,Episode,Video,MusicAlbum,Audio",
+    IncludeItemTypes: "Movie,Series,Episode,BoxSet,Video,MusicAlbum,Audio",
     SortBy: "SeriesName,ParentIndexNumber,IndexNumber,SortName",
     SortOrder: "Ascending",
     Limit: "80",
-    Fields: `${CARD_FIELDS},BackdropImageTags,ParentBackdropItemId,ParentBackdropImageTags`,
+    Fields: `${CARD_FIELDS},ChildCount,BackdropImageTags,ParentBackdropItemId,ParentBackdropImageTags`,
     EnableImageTypes: CARD_IMAGES,
     ImageTypeLimit: "1",
   })
-  return jf<ItemList>(`/Users/${userId}/Items?${params}`)
+  const [items, people] = await Promise.all([
+    jf<ItemList>(`/Users/${userId}/Items?${params}`),
+    favoritePeople(userId).catch(() => null),
+  ])
+  return { Items: [...(items.Items || []), ...(people?.Items || [])], people: people !== null }
+}
+
+/**
+ * The people the viewer has favorited.
+ *
+ * `/Persons` is the endpoint that knows what a person is: it answers for the people credited on
+ * the library's items, takes the same `IsFavorite` filter the item list takes, and returns each
+ * one with the user data that says so. It is Jellyfin 10.9 and later - an older server answers
+ * with an error, which `favorites` reads as "this server has no people to offer".
+ */
+export function favoritePeople(userId: string) {
+  const params = new URLSearchParams({
+    userId,
+    isFavorite: "true",
+    Limit: "80",
+    Fields: CARD_FIELDS,
+    EnableImageTypes: CARD_IMAGES,
+    ImageTypeLimit: "1",
+  })
+  return jf<ItemList>(`/Persons?${params}`)
 }
 
 export function randomBackdrops(userId: string) {

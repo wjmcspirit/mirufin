@@ -1744,9 +1744,14 @@ html:not(.remote) .nav:hover .nav-label {
   pointer-events: none;
 }
 .library-hero.collapsed > .hero { min-height: 0; }
-.library-head { align-items: center; margin: 0 0 12px; }
-.library-head h1 { font-size: 32px; }
-.library-head .eyebrow { margin: 0; }
+/* A page whose grid is the page: the heading is a caption over it rather than a title, and the
+   page's own controls sit on the same row. A library and Favorites are the same shape - the shared
+   hero, then a heading with a count and a row of controls, then the grid - so the two state it
+   once between them, and the smaller heading is what keeps the first row of posters on the screen
+   under it at 1080p. */
+.library-head, .favorites-head { align-items: center; margin: 0 0 12px; }
+.library-head h1, .favorites-head h1 { font-size: 32px; }
+.library-head .eyebrow, .favorites-head .eyebrow { margin: 0; }
 /* One content boundary for the whole application.
    Every page's headings, text, grids, poster rows' headings, control rows and detail panels begin
    on the same left edge - the edge the logo begins on and the header's controls end on. It is the
@@ -1772,7 +1777,6 @@ html:not(.remote) .nav:hover .nav-label {
 /* The heading, its count and its filters sit close to the grid under them: the page has a hero, a
    heading and a row of posters to fit on one screen, so the space between them is what it needs
    and no more. */
-.favorites-head { align-items: center; margin: 0 0 12px; }
 .count-line { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
 .library-icons { display: flex; gap: 6px; }
 .tool { position: relative; }

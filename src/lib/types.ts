@@ -159,6 +159,15 @@ export interface ItemList {
   TotalRecordCount?: number
 }
 
+/**
+ * The viewer's favorites: every title they have hearted, and whether the server could answer for
+ * the people among them. See `api.favorites`.
+ */
+export interface Favorites {
+  Items: Item[]
+  people: boolean
+}
+
 export interface PublicUser {
   Id: string
   Name: string
