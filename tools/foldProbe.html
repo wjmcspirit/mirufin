@@ -242,13 +242,13 @@
                      opens the rest anywhere else - there is no rest. -->
                 <p class="overview">When human forces discover the existence of the Vampire and Lycan clans, a war erupts between the two species, and Selene - a death dealer who has spent six centuries hunting the Lycans - must escape both the pack that has turned on her and the humans who would put an end to every one of them, before the truth about her own bloodline is buried along with the last of the coven that made her.</p>
                 <!-- What the film is, as doors, in the app's own hierarchy: the genres as the page's
-                     primary chips, and the studios as the quieter, smaller group under them. Both
-                     groups hold more names than one row can take, so the wrapping is measured rather
-                     than assumed. -->
+                     primary chips, and the studios as the quieter, smaller group under them - one
+                     line that scrolls sideways rather than a block, so both the single row and the
+                     sideways offset are measured rather than assumed. The genre row still wraps. -->
                 <p class="meta-links genre-pills">
                   <a href="#">Action</a><a href="#">Fantasy</a><a href="#">Horror</a><a href="#">Science Fiction</a><a href="#">Thriller</a>
                 </p>
-                <p class="meta-links studio-pills">
+                <p class="meta-links studio-pills scroller">
                   <a href="#">Lakeshore Entertainment</a><a href="#">Screen Gems</a><a href="#">Sketch Films</a><a href="#">Saturn Films</a><a href="#">Wonderland Sound and Vision</a><a href="#">Constantin Film Produktion</a><a href="#">Lionsgate United Kingdom</a><a href="#">Village Roadshow Pictures</a><a href="#">Base Productions</a>
                 </p>
               </div>
@@ -260,64 +260,65 @@
               <button class="btn" type="button">Trailers</button>
             </div>
           </header>
-          <div class="detail-body">
-            <section class="episode-block">
-              <div class="row-head">
-                <h2>Cast</h2>
-              </div>
-              <div class="scroller" id="detail-row">
-                <a class="card poster labeled" href="#">
-                  <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='252'%3E%3C/svg%3E" alt="" /></span>
-                  <span class="card-copy">
-                    <span class="card-title">Kate Beckinsale</span>
-                    <span class="card-sub">Selene</span>
-                  </span>
-                </a>
-                <a class="card poster labeled" href="#">
-                  <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='252'%3E%3C/svg%3E" alt="" /></span>
-                  <span class="card-copy">
-                    <span class="card-title">Stephen Rea</span>
-                    <span class="card-sub">Dr. Jacob Lane</span>
-                  </span>
-                </a>
-                <a class="card poster labeled" href="#">
-                  <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='252'%3E%3C/svg%3E" alt="" /></span>
-                  <span class="card-copy">
-                    <span class="card-title">Michael Ealy</span>
-                    <span class="card-sub">Detective Sebastian</span>
-                  </span>
-                </a>
-              </div>
-            </section>
-            <section class="season-block">
-              <div class="row-head">
-                <h2>More like this</h2>
-              </div>
-              <div class="grid poster size-medium" id="detail-grid">
-                <a class="card poster labeled" href="#">
-                  <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='252'%3E%3C/svg%3E" alt="" /></span>
-                  <span class="card-copy">
-                    <span class="card-title">Underworld</span>
-                    <span class="card-sub">2003  ·  2h 1m  ·  R</span>
-                  </span>
-                </a>
-                <a class="card poster labeled" href="#">
-                  <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='252'%3E%3C/svg%3E" alt="" /></span>
-                  <span class="card-copy">
-                    <span class="card-title">Underworld: Evolution</span>
-                    <span class="card-sub">2006  ·  1h 46m  ·  R</span>
-                  </span>
-                </a>
-                <a class="card poster labeled" href="#">
-                  <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='252'%3E%3C/svg%3E" alt="" /></span>
-                  <span class="card-copy">
-                    <span class="card-title">Underworld: Blood Wars</span>
-                    <span class="card-sub">2016  ·  1h 31m  ·  R</span>
-                  </span>
-                </a>
-              </div>
-            </section>
-          </div>
+          <!-- A film's page draws its rows directly in the page's own block: the head's next sibling
+               is the first row, and the space between the action band that ends the head and that
+               row's heading is the page's own rhythm - which is what is measured here. -->
+          <section class="row size-medium people-row">
+            <div class="row-head">
+              <h2>Cast</h2>
+            </div>
+            <div class="scroller" id="detail-row">
+              <a class="card poster labeled" href="#">
+                <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='252'%3E%3C/svg%3E" alt="" /></span>
+                <span class="card-copy">
+                  <span class="card-title">Kate Beckinsale</span>
+                  <span class="card-sub">Selene</span>
+                </span>
+              </a>
+              <a class="card poster labeled" href="#">
+                <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='252'%3E%3C/svg%3E" alt="" /></span>
+                <span class="card-copy">
+                  <span class="card-title">Stephen Rea</span>
+                  <span class="card-sub">Dr. Jacob Lane</span>
+                </span>
+              </a>
+              <a class="card poster labeled" href="#">
+                <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='252'%3E%3C/svg%3E" alt="" /></span>
+                <span class="card-copy">
+                  <span class="card-title">Michael Ealy</span>
+                  <span class="card-sub">Detective Sebastian</span>
+                </span>
+              </a>
+            </div>
+          </section>
+          <section class="season-block">
+            <div class="row-head">
+              <h2>More like this</h2>
+            </div>
+            <div class="grid poster size-medium" id="detail-grid">
+              <a class="card poster labeled" href="#">
+                <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='252'%3E%3C/svg%3E" alt="" /></span>
+                <span class="card-copy">
+                  <span class="card-title">Underworld</span>
+                  <span class="card-sub">2003  ·  2h 1m  ·  R</span>
+                </span>
+              </a>
+              <a class="card poster labeled" href="#">
+                <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='252'%3E%3C/svg%3E" alt="" /></span>
+                <span class="card-copy">
+                  <span class="card-title">Underworld: Evolution</span>
+                  <span class="card-sub">2006  ·  1h 46m  ·  R</span>
+                </span>
+              </a>
+              <a class="card poster labeled" href="#">
+                <span class="card-art"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='252'%3E%3C/svg%3E" alt="" /></span>
+                <span class="card-copy">
+                  <span class="card-title">Underworld: Blood Wars</span>
+                  <span class="card-sub">2016  ·  1h 31m  ·  R</span>
+                </span>
+              </a>
+            </div>
+          </section>
         </article>
       </div>
     </div>
@@ -575,19 +576,24 @@
                 height: round(rect.height),
               }
             }
-            // A group of chips: how many doors it holds, how many rows they are drawn in, and how
-            // big each one is. A group that does not fit the copy's width wraps onto the next line,
-            // which is what a narrow panel or a long studio name asks for.
+            // A group of chips: how many doors it holds, how many rows they are drawn in, how big each
+            // one is, whether the group is one line that scrolls or a row that wraps, and what the
+            // chips are painted with. A group that does not fit the copy's width either wraps onto the
+            // next line (the genres) or scrolls sideways (the studios), and a chip that was squeezed
+            // to fit says so: its own text is wider than the box it was given.
             function group(row) {
               var chips = row ? Array.prototype.slice.call(row.children) : []
               var tops = []
               var widest = 0
+              var squashed = false
               for (var i = 0; i < chips.length; i += 1) {
                 var chip = units(chips[i])
                 if (tops.indexOf(Math.round(chip.top)) < 0) tops.push(Math.round(chip.top))
                 if (chip.right > widest) widest = chip.right
+                if (chips[i].scrollWidth > chips[i].clientWidth + 1) squashed = true
               }
               var boxed = box(row)
+              var paint = chips.length ? getComputedStyle(chips[0]) : null
               return {
                 count: chips.length,
                 rows: tops.length,
@@ -596,6 +602,13 @@
                 widest: round(widest),
                 top: boxed.top,
                 bottom: boxed.bottom,
+                nowrap: paint ? paint.flexWrap === "nowrap" : false,
+                scrolls: row ? row.scrollWidth > row.clientWidth + 1 : false,
+                squashed: squashed,
+                fill: paint ? paint.backgroundColor : "",
+                outline: paint ? paint.borderTopColor : "",
+                gradient: paint ? paint.backgroundImage : "",
+                text: paint ? paint.color : "",
               }
             }
             return {
@@ -614,6 +627,12 @@
               genres: group(copy.querySelector(".meta-links.genre-pills")),
               studios: group(copy.querySelector(".meta-links.studio-pills")),
               actions: box(actions),
+              // The space between the band of actions and the first heading the page draws under it,
+              // which is the page's own rhythm rather than the row's own margin.
+              castGap: round(units(detailShell.querySelector(".row-head h2")).top - units(actions).bottom),
+              // The primary action is the one thing here painted with the app's gradient; the chips
+              // are not, and this is what says so in the rendered page rather than in the stylesheet.
+              primaryGradient: getComputedStyle(detailShell.querySelector(".detail-actions .btn-primary")).backgroundImage,
             }
           })()
 

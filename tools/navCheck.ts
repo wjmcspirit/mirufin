@@ -2863,6 +2863,103 @@ function testFilmFactLinks() {
   )
 }
 
+/**
+ * A film's studio chips: one line that scrolls sideways.
+ *
+ * The row is the app's own strip - the same `.scroller` a poster row is - so the remote walks it
+ * exactly as it walks a row of stills: Right moves a chip at a time, the strip follows the remote
+ * when the chip it landed on is past what the copy is showing, and it stops at its own end rather
+ * than running past it. A studio row longer than the copy is therefore still one line the viewer can
+ * read and press, rather than a block that wraps the hero taller or a row of names squeezed to fit.
+ */
+function testStudioStrip() {
+  clearSeats()
+  resetFocusState()
+  const { main } = shell()
+  const head = new El("header", "detail-hero stage-copy")
+  head.place(60, 0, 1440, 420)
+  const copy = new El("div", "detail-copy")
+  // The strip as the stylesheet draws it: one line, the chips' own 8px apart, with the row's own
+  // padding inside it, and a copy narrower than the studios it holds.
+  const CHIP = 150
+  const GAP = 8
+  const PADDING = 7
+  const WIDTH = 720
+  const count = 8
+  const strip = new El("p", "meta-links studio-pills scroller")
+  strip.place(96, 400, WIDTH, 40)
+  strip.clientWidth = WIDTH
+  strip.clientHeight = 40
+  // The row's own content: the padding either side of the chips, the chips themselves and the gaps
+  // between them - the width the strip has to scroll, exactly as a poster row states its own.
+  strip.scrollWidth = PADDING * 2 + count * CHIP + (count - 1) * GAP
+  strip.scrollHeight = 40
+  strip.scrollTo = (options: { left?: number; top?: number } | number) => {
+    const left = typeof options === "number" ? options : options.left ?? strip.scrollLeft
+    strip.scrollLeft = Math.max(0, Math.min(strip.scrollWidth - strip.clientWidth, left))
+  }
+  const chips = Array.from({ length: count }, (_, index) => {
+    const chip = new El("a", "").attr("href", `/library/LIB?studio=S${index + 1}&studioName=Studio%20${index + 1}`)
+    chip.text = `Studio ${index + 1}`
+    chip.place(96 + PADDING, 400 + PADDING + index * (CHIP + GAP), CHIP, 26)
+    chip.offsetLeftOverride = PADDING + index * (CHIP + GAP)
+    strip.add(chip)
+    return chip
+  })
+  copy.add(strip)
+  const band = new El("div", "actions detail-actions")
+  const play = new El("a", "btn btn-primary").attr("href", "/play/MOVIE?resume=0")
+  play.text = "Play"
+  play.place(360, 400, 140, 44)
+  band.add(play)
+  head.add(copy, band)
+  main.add(head)
+  episodeRow(main, 12)
+  noteRoute("/item/MOVIE")
+
+  placeFocus(chips[0])
+  check("the studio row starts at its own beginning", strip.scrollLeft === 0, String(strip.scrollLeft))
+  check(
+    "the row is longer than the copy shows, so it has something to scroll",
+    strip.scrollWidth > strip.clientWidth,
+    `${strip.clientWidth} of ${strip.scrollWidth}`,
+  )
+
+  const missed: string[] = []
+  let scrolled = 0
+  for (let step = 1; step < chips.length; step += 1) {
+    const chip = chips[step]
+    const before = strip.scrollLeft
+    const wasInside = inWindow(strip, chip)
+    moveFocus("ArrowRight")
+    if (active !== chip) missed.push(`${step}: landed on ${label(active)}`)
+    if (!inWindow(strip, chip)) missed.push(`${step}: still outside what the row shows`)
+    if (!wasInside && strip.scrollLeft === before) missed.push(`${step}: the row did not follow`)
+    if (strip.scrollLeft !== before) scrolled += 1
+  }
+  check("Right walks the studio chips one at a time, each one inside the row", missed.length === 0, missed.join("; "))
+  check("and the row followed the remote as it went", scrolled > 0, `${scrolled} of ${chips.length - 1} presses moved it`)
+  check("the last studio the remote reached is inside the row", inWindow(strip, chips[count - 1]))
+
+  const back: string[] = []
+  for (let step = chips.length - 2; step >= 0; step -= 1) {
+    const chip = chips[step]
+    const before = strip.scrollLeft
+    const wasInside = inWindow(strip, chip)
+    moveFocus("ArrowLeft")
+    if (active !== chip) back.push(`${step}: landed on ${label(active)}`)
+    if (!inWindow(strip, chip)) back.push(`${step}: still outside what the row shows`)
+    if (!wasInside && strip.scrollLeft === before) back.push(`${step}: the row did not follow`)
+  }
+  check("Left walks them back the same way, each one inside the row", back.length === 0, back.join("; "))
+  check("and brings the row back to its own beginning", strip.scrollLeft === 0, String(strip.scrollLeft))
+  check(
+    "a studio chip is still the door a genre chip is: the library this film lives in, narrowed to that studio",
+    (chips[0].getAttribute("href") || "").includes("?studio=S1&studioName="),
+    chips[0].getAttribute("href") || "",
+  )
+}
+
 // ---------------------------------------------------------------------------
 // What the remote can reach has to be drawn when it is reached
 // ---------------------------------------------------------------------------
@@ -3202,6 +3299,7 @@ testCrewRow()
 testGenreDiscovery()
 testStudioDiscovery()
 testFilmFactLinks()
+testStudioStrip()
 testClearingAndOverlays()
 testFadedPanel()
 testFocusDeclarations()

@@ -1858,6 +1858,11 @@ function PhotoBody({ item }: { item: Item }) {
  * quieter half of it: the same pill shape, one size down and a step back in colour (`.studio-pills`
  * in the stylesheet), so the page reads genre first and studio second while a press on either one
  * behaves identically.
+ *
+ * The studios are one line rather than a block: a film with many of them keeps the hero's own height
+ * and the page reads as a film with a studio or two under its genres. The line is the app's own
+ * sideways strip (`scroller`), so a row longer than the copy scrolls by the remote's own press and
+ * brings the chip it landed on into view - the same movement, and the same engine, as a poster row.
  */
 function FactLinks({ item }: { item: Item }) {
   const { libraries } = useSession()
@@ -1888,7 +1893,7 @@ function FactLinks({ item }: { item: Item }) {
         </p>
       )}
       {studios.length > 0 && (
-        <p className="meta-links studio-pills">
+        <p className="meta-links studio-pills scroller">
           {studios.map((studio) =>
             libraryId && studio.id ? (
               <Link

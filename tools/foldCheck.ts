@@ -83,8 +83,10 @@ interface Box {
 }
 
 /**
- * A group of fact-link chips: how many doors it holds, how many rows they are drawn in, and how big
- * each one is. A group that does not fit the copy's width wraps onto the next line.
+ * A group of fact-link chips: how many doors it holds, how many rows they are drawn in, how big each
+ * one is, whether the group is one line that scrolls or a row that wraps, and what the chips are
+ * painted with. A group that does not fit the copy's width either wraps onto the next line (the
+ * genres) or scrolls sideways inside the strip (the studios).
  */
 interface ChipGroup {
   count: number
@@ -95,6 +97,16 @@ interface ChipGroup {
   widest: number
   top: number
   bottom: number
+  /** One line that does not wrap. */
+  nowrap: boolean
+  /** The group is longer than the box it is drawn in, so it scrolls sideways. */
+  scrolls: boolean
+  /** A chip whose own text is wider than the box it was given: text squeezed to fit. */
+  squashed: boolean
+  fill: string
+  outline: string
+  gradient: string
+  text: string
 }
 
 /**
@@ -120,6 +132,10 @@ interface DetailPage {
     genres: ChipGroup
     studios: ChipGroup
     actions: Box
+    /** The space between the band of actions and the first heading the page draws under it. */
+    castGap: number
+    /** What the page's primary action is painted with: the app's gradient, and nothing else here. */
+    primaryGradient: string
   }
 }
 
@@ -781,7 +797,10 @@ for (const { panel, report } of await measureAll(browser, probe, PANELS)) {
   console.log(
     `     film copy: description ${film.lines} lines (clamped ${film.clamped}, clipped ${film.clipped}, reveal ${film.reveal})  ` +
       `genres ${film.genres.count} in ${film.genres.rows} row(s) at ${film.genres.height}x${film.genres.font}  ` +
-      `studios ${film.studios.count} in ${film.studios.rows} row(s) at ${film.studios.height}x${film.studios.font}`,
+      `studios ${film.studios.count} in ${film.studios.rows} row(s) at ${film.studios.height}x${film.studios.font}` +
+      `${film.studios.scrolls ? " (the row scrolls)" : ""}\n` +
+      `     film page: ${film.castGap} between the action band and the CAST heading  ` +
+      `genres ${film.genres.fill} within ${film.genres.outline}, studios ${film.studios.text} within ${film.studios.outline}`,
   )
   check(
     `${panel.name} (${report.row}): a film's description is drawn in full, with nothing clamped off it and no control that opens the rest`,
@@ -798,12 +817,53 @@ for (const { panel, report } of await measureAll(browser, probe, PANELS)) {
     film.studios.count > 0 && film.studios.height < film.genres.height && film.studios.font < film.genres.font,
     `studios ${film.studios.height}x${film.studios.font}, genres ${film.genres.height}x${film.genres.font}`,
   )
+  /* The two groups of doors are drawn differently, and deliberately: a genre wraps inside the copy,
+     because every genre a title has is worth reading at once, while the studios are one line that
+     scrolls sideways inside the strip - the row is longer than the copy, and the remote's own press
+     is what brings a chip into view, exactly as it does a poster in a row. Neither group is squeezed
+     to fit: no chip's own text is wider than the box it was given, so a long studio name is read at
+     the size the group is set in rather than shrunk to whatever the copy has left. */
   check(
-    `${panel.name} (${report.row}): both groups wrap rather than running past the copy, when they hold more names than one row takes`,
-    film.studios.rows >= 2 &&
-      film.genres.widest <= film.copy.right + 0.5 &&
-      film.studios.widest <= film.copy.right + 0.5,
-    `genres ${film.genres.rows} row(s) to ${film.genres.widest}, studios ${film.studios.rows} row(s) to ${film.studios.widest}, copy ends ${film.copy.right}`,
+    `${panel.name} (${report.row}): the genres wrap inside the copy and the studios are one line that scrolls`,
+    film.genres.widest <= film.copy.right + 0.5 &&
+      !film.genres.squashed &&
+      film.studios.rows === 1 &&
+      film.studios.nowrap &&
+      film.studios.scrolls &&
+      !film.studios.squashed,
+    `genres ${film.genres.rows} row(s) to ${film.genres.widest}, studios ${film.studios.rows} row(s) to ${film.studios.widest} of the copy's ${film.copy.right}, ` +
+      `scrolls ${film.studios.scrolls}, squeezed ${film.genres.squashed}/${film.studios.squashed}`,
+  )
+  /* The page's own rhythm between its head and its rows: the action band ends the head, and the first
+     heading a film draws - CAST - stands a deliberate step under it, so the carousel below reads as
+     the next thing on the page rather than as part of the band. */
+  check(
+    `${panel.name} (${report.row}): the action band and the CAST heading stand a deliberate step apart`,
+    film.castGap >= 20 && film.castGap <= 24,
+    `${film.castGap} between the band and the heading`,
+  )
+  /* The colour hierarchy, read from the rendered page rather than from the stylesheet: a genre chip is
+     the app's own dark translucent fill with the accent's cyan outline and no gradient at all, a
+     studio chip is the muted grey-blue the quieter group is drawn in, and the app's gradient belongs
+     to the page's primary action and to nothing else on it. */
+  check(
+    `${panel.name} (${report.row}): a genre chip keeps the dark fill and the cyan outline, with no gradient`,
+    film.genres.gradient === "none" &&
+      film.genres.fill.includes("0, 0, 0") &&
+      film.genres.outline.includes("62, 200, 255"),
+    `fill ${film.genres.fill}, outline ${film.genres.outline}, background ${film.genres.gradient}`,
+  )
+  check(
+    `${panel.name} (${report.row}): a studio chip keeps the muted grey-blue of the quieter group, and no gradient either`,
+    film.studios.gradient === "none" &&
+      film.studios.text.includes("154, 163, 181") &&
+      film.studios.outline.includes("154, 163, 181"),
+    `text ${film.studios.text}, outline ${film.studios.outline}, background ${film.studios.gradient}`,
+  )
+  check(
+    `${panel.name} (${report.row}): and the app's gradient is the primary action's own`,
+    film.primaryGradient.includes("gradient"),
+    `the primary action is painted with ${film.primaryGradient}`,
   )
   check(
     `${panel.name} (${report.row}): and the description, the two groups and the action band follow one another without overlapping`,

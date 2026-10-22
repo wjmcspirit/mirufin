@@ -1235,6 +1235,26 @@ html:not(.remote) .nav:hover .nav-label {
   outline-offset: 3px;
   box-shadow: 0 0 0 6px rgba(62, 200, 255, 0.22);
 }
+/* The studio row is one line, and a line longer than the copy scrolls sideways rather than wrapping
+   onto a second: it is the app's own strip (`.scroller`), so the remote brings a focused chip into
+   view exactly as it does a poster in a row - the strip's sideways offset is the only thing that
+   moves, by the viewer's own press. It keeps the copy's insets rather than the strip's, so the first
+   chip begins on the edge the genre chips above it begin on, and the strip's own vertical padding is
+   the room the focus ring is drawn into (the strip clips on both axes, as every strip does).
+
+   A chip never shrinks: a long studio name keeps its own width and the row scrolls instead, which is
+   what keeps the name at the size this group is set in rather than squeezing it to fit. */
+.meta-links.studio-pills.scroller {
+  flex-wrap: nowrap;
+  gap: 8px;
+  padding: 7px 0;
+  scroll-padding-inline: 0;
+  scroll-snap-type: none;
+}
+.meta-links.studio-pills.scroller a,
+.meta-links.studio-pills.scroller span {
+  flex: 0 0 auto;
+}
 .hero-copy .overview,
 .detail-copy .overview {
   color: #d5dce8;
@@ -2055,6 +2075,13 @@ select {
 .more-sentinel { height: 1px; }
 
 .detail-hero { min-height: 0; display: grid; gap: 18px; align-content: start; padding-top: 8px; }
+/* The head ends with the title's own action band, and the rows of the page begin under it: the band
+   and the first heading a film draws - CAST - stand the page's own step apart rather than the 6px a
+   row's own margin leaves, so the carousel under the heading reads as the next thing on the page
+   instead of as part of the band. The step is the one a page's body already states between its
+   sections. The pages that carry a body block of their own - a show, a season, a person, a
+   collection - keep that block's spacing and are untouched by this. */
+.detail-hero.stage-copy + .row { margin-top: 22px; }
 /* Wrapping only happens when an episode's full action row cannot fit one line. */
 .detail-actions { flex-wrap: wrap; width: 100%; }
 .detail-layout {

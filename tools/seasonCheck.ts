@@ -797,7 +797,7 @@ check(
 )
 check(
   "while every other title keeps its studios, which are doors to browse the library by, drawn as the quieter group of chips under the genres",
-  page.includes('<p className="meta-links studio-pills">') && page.includes("studioName="),
+  page.includes('<p className="meta-links studio-pills scroller">') && page.includes("studioName="),
   "Item.tsx",
 )
 /* A title's own page is where the whole of its description is read. It is the plain `.overview` and
@@ -823,6 +823,42 @@ check(
     /\.meta-links\.genre-pills a\s*\{[^}]*min-height:\s*32px[^}]*font-size:\s*14px/.test(css) &&
     /\.meta-links\.studio-pills a:focus,[\s\S]{0,200}?outline:\s*3px solid #8ee6ff/.test(css) &&
     !/\.meta-links\.studio-pills[^{]*\{[^}]*var\(--accent\)/.test(css),
+  "styles.css",
+)
+/* The studios are one line rather than a block, so a film with many of them keeps the hero's own
+   height. The row is the app's own strip - the same `.scroller` a poster row is - so a row longer
+   than the copy scrolls sideways, by the remote's own press and through the same engine, rather than
+   wrapping onto a second line. Nothing in it shrinks: a long studio name keeps its own width and the
+   row scrolls instead, which is what keeps the name at the size this group is set in. */
+check(
+  "the studio chips are one line that scrolls sideways rather than a block that wraps",
+  page.includes('<p className="meta-links studio-pills scroller">') &&
+    /\.meta-links\.studio-pills\.scroller\s*\{[^}]*flex-wrap:\s*nowrap/.test(css) &&
+    /\.meta-links\.studio-pills\.scroller\s*\{[^}]*padding:\s*7px 0/.test(css) &&
+    /\.meta-links\.studio-pills\.scroller a,\s*\.meta-links\.studio-pills\.scroller span\s*\{\s*flex:\s*0 0 auto;\s*\}/.test(css) &&
+    /\.scroller\s*\{[^}]*overflow-x:\s*auto/.test(css),
+  "Item.tsx and styles.css",
+)
+/* The colour hierarchy of the two groups. A genre chip is the app's primary chip: the dark
+   translucent fill and the accent's cyan outline, and never the gradient - the gradient is the
+   primary action's own, which is where a viewer expects the app's colour to be loudest. The studios
+   take the app's muted colour and no gradient either. */
+check(
+  "a genre chip keeps the dark translucent fill and the cyan outline, and is never the gradient",
+  /\.meta-links\.genre-pills a\s*\{[^}]*border:\s*1px solid rgba\(62, 200, 255, 0\.45\)[^}]*background:\s*rgba\(0, 0, 0, 0\.34\)/.test(
+    css,
+  ) &&
+    !/\.meta-links\.genre-pills[^{]*\{[^}]*gradient/.test(css) &&
+    !/\.meta-links\.genre-pills[^{]*\{[^}]*var\(--neon\)/.test(css) &&
+    /\.btn-primary\s*\{[^}]*background:\s*var\(--neon\)/.test(css),
+  "styles.css",
+)
+/* The head ends with the title's action band, and the page's first row follows it: the band and the
+   heading under it stand the page's own step apart, so a film's CAST carousel reads as the next
+   thing on the page rather than as part of the band. */
+check(
+  "the action band and the first row of a film's page stand the page's own step apart",
+  /\.detail-hero\.stage-copy \+ \.row\s*\{\s*margin-top:\s*22px;\s*\}/.test(css),
   "styles.css",
 )
 
