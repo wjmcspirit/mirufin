@@ -8,6 +8,7 @@ import { useHeroStage, usePinnedArt, useStage } from "../components/Stage"
 import { useThemeSong } from "../components/Theme"
 import * as api from "../lib/api"
 import { comingUpEpisodes, continueWatching, resumeCardDetail, resumeCardTitle, upNextCardDetail, upNextCardTitle } from "../lib/format"
+import { itemCardHref } from "../lib/seasons"
 import { followingEpisodes } from "../lib/watch"
 import { HERO_CANDIDATE_LIMIT, HERO_DECK_LIMIT, topUpLimit } from "../lib/heroDeck"
 import { heroDeck, isShowLibrary, latestTitle, libraryRowId, mergeHomeRows, rowSize } from "../lib/homeLayout"
@@ -190,7 +191,7 @@ export function HomePage() {
           return (
             <Row key={section.id} className={`size-${size}`} title="Next up">
               {upcomingItems.map((item) => (
-                <PosterCard key={item.Id} item={item} layout={layout} size={size} href={`/item/${item.Id}`} />
+                <PosterCard key={item.Id} item={item} layout={layout} size={size} href={itemCardHref(item, "play")} />
               ))}
             </Row>
           )
@@ -219,7 +220,14 @@ export function HomePage() {
         return (
           <Row key={section.id} className={`size-${size}`} title={latestTitle(row.view)}>
             {row.items.map((item) => (
-              <PosterCard key={item.Id} item={item} layout={layout} size={size} seriesArt={seriesArt} href={`/item/${item.Id}`} />
+              <PosterCard
+                key={item.Id}
+                item={item}
+                layout={layout}
+                size={size}
+                seriesArt={seriesArt}
+                href={itemCardHref(item)}
+              />
             ))}
           </Row>
         )

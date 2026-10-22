@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import * as api from "../lib/api"
 import { episodeCode, progressPct } from "../lib/format"
+import { itemCardHref } from "../lib/seasons"
 import { useSession } from "../session"
 import type { Item } from "../lib/types"
 import { HeartIcon, InfoIcon, PlayIcon } from "./Icons"
@@ -118,7 +119,7 @@ function HeroCopy({ face, onTrailer }: { face: HeroFace; onTrailer: (open: boole
   const freshEpisode = presentation === "new-episode" && episode
   const href = playHref || (series ? `/item/${item.Id}` : `/play/${item.Id}?resume=1`)
   const label = playLabel || (series ? "View series" : progress > 1 ? "Resume" : "Play")
-  const detailsTo = freshEpisode && item.SeriesId ? `/item/${item.SeriesId}` : `/item/${item.Id}`
+  const detailsTo = item.Type === "Episode" ? itemCardHref(item) : `/item/${item.Id}`
   const episodeLine = [episodeCode(item), item.Name].filter(Boolean).join(" · ")
   // What the three lines under the title say. Each is always drawn, even when the server sent
   // nothing for it: Home's hero reserves their height, so the copy cannot change size between one

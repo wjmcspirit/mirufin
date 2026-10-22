@@ -11,6 +11,7 @@ import { usePinnedArt, useArtMotion, useHeroStage, useStage } from "../component
 import * as api from "../lib/api"
 import { collectionSizeLabel } from "../lib/collections"
 import { episodeCode, heroPlayTarget, libraryItemTypes, mergeAddedSeries, recentlyAddedSeries, seriesFallback, seriesFromAddedEpisodes, addedSeriesNote, type AddedSeries, type RecentSeries } from "../lib/format"
+import { itemCardHref } from "../lib/seasons"
 import { backdropSrc, loadImage, logoSrc, ownBackdropSrc, primarySrc, warmImage } from "../lib/images"
 import { HERO_DECK_LIMIT, collectionHeroDeck, deckFrom, movieHeroDeck, recentlyAddedCollections, shuffle, showHeroDeck } from "../lib/heroDeck"
 import { DEFAULT_LIBRARY_VIEW, EPISODE_SORT, LIBRARY_FILTERS, librarySorts, savedLibraryView } from "../lib/libraryView"
@@ -975,7 +976,7 @@ export function LibraryPage() {
               item={entry}
               layout="poster"
               size={size}
-              href={`/item/${entry.Id}`}
+              href={itemCardHref(entry)}
               note={collectionSizeLabel(entry.ChildCount)}
             />
           ))}
@@ -1014,7 +1015,7 @@ export function LibraryPage() {
       {live && saved.length > 0 && (
         <Row title="Recordings">
           {saved.map((entry) => (
-            <PosterCard key={entry.Id} item={entry} layout="wide" size="medium" href={`/item/${entry.Id}`} />
+            <PosterCard key={entry.Id} item={entry} layout="wide" size="medium" href={itemCardHref(entry)} />
           ))}
         </Row>
       )}
@@ -1030,7 +1031,7 @@ export function LibraryPage() {
               item={entry}
               layout={layout}
               size={size}
-              href={`/item/${entry.Id}`}
+              href={itemCardHref(entry)}
               note={onNow[entry.Id] || addedInfo[entry.Id]?.note || ""}
             />
           ))}

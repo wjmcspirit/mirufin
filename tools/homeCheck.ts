@@ -281,6 +281,12 @@ check(
 )
 check("and the row renders that list directly, with no filtering of its own", /inProgress\.map\(\(item\) => \(/.test(home), "Home.tsx")
 check("and each card still resumes the item it names", /href=\{`\/play\/\$\{item\.Id\}\?resume=1`\}/.test(home), "Home.tsx")
+check("Next up plays the episode rather than opening its portrait page", /itemCardHref\(item, "play"\)/.test(home), "Home.tsx")
+check(
+  "library rows never open a standalone episode page",
+  /itemCardHref\(item\)/.test(home) && !/seriesArt && href=\{`\/item\/\$\{item\.Id\}`\}/.test(home),
+  "Home.tsx",
+)
 
 // --------------------------------------------------------------------------- what is coming up
 

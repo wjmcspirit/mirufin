@@ -8,6 +8,7 @@ import { Loading, Problem } from "../components/Status"
 import * as api from "../lib/api"
 import { backdropSrc, primarySrc } from "../lib/images"
 import { placeFocus } from "../lib/remote"
+import { itemCardHref } from "../lib/seasons"
 import type { Item } from "../lib/types"
 import { askVoice, listenOnce } from "../lib/voice"
 import { usePrefs, useSession } from "../session"
@@ -325,7 +326,7 @@ export function SearchPage() {
             <h2>From your library</h2>
             <div className="search-picks" ref={picksRef} style={{ "--pick-cols": shownPicks.length } as CSSProperties}>
               {shownPicks.map((item) => (
-                <PosterCard key={item.Id} item={item} layout="poster" size={prefs.posterSize} href={`/item/${item.Id}`} art={false} />
+                <PosterCard key={item.Id} item={item} layout="poster" size={prefs.posterSize} href={itemCardHref(item)} art={false} />
               ))}
             </div>
           </section>
@@ -351,7 +352,7 @@ export function SearchPage() {
                       item={item}
                       layout={item.Type === "Episode" ? "wide" : "poster"}
                       size={prefs.posterSize}
-                      href={`/item/${item.Id}`}
+                      href={itemCardHref(item)}
                       art={false}
                     />
                   ))}

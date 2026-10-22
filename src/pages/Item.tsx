@@ -16,7 +16,8 @@ import { creditsOf, filmographyRows, type Credit } from "../lib/people"
 import { genreLinks, studioLinks } from "../lib/discovery"
 import { canFavorite, canMarkWatched, canPlayDirectly, episodeCode, formatRuntime, isInProgress, metaLine, personFacts, progressPct, techChips } from "../lib/format"
 import { hasMediaInfo } from "../lib/mediaInfo"
-import { episodePlayHref, lastSeason, rememberSeason, resolveSeason, seasonLineText, seasonProgress, seasonProgressBySeason, seasonStart, type SeasonProgress } from "../lib/seasons"
+import { placeFocus } from "../lib/remote"
+import { episodePlayHref, itemCardHref, lastSeason, rememberSeason, resolveSeason, seasonBrowseHref, seasonLineText, seasonProgress, seasonProgressBySeason, seasonStart, type SeasonProgress } from "../lib/seasons"
 import { knownFor, type KnownWork } from "../lib/knownFor"
 import { artWidth, backdropSrc, episodeStillSrc, episodeWideStill, FEATURED_ART_WIDTH, imageUrl, loadImage, primarySrc, seasonArtSrc, thumbSrc, warmImage, wideBackdrop } from "../lib/images"
 import type { Item } from "../lib/types"
@@ -24,6 +25,7 @@ import { usePrefs, useSession } from "../session"
 
 export function ItemPage() {
   const { id = "" } = useParams()
+  const navigate = useNavigate()
   const { userId } = useSession()
   const { prefs } = usePrefs()
   const [item, setItem] = useState<Item | null>(null)
@@ -62,6 +64,12 @@ export function ItemPage() {
       document.title = "Mirufin"
     }
   }, [id, userId])
+
+  useEffect(() => {
+    if (status !== "ready" || !item || item.Type !== "Episode") return
+    rememberSeason(item.SeriesId || "", item.SeasonId || "")
+    navigate(seasonBrowseHref(item), { replace: true })
+  }, [item, navigate, status])
 
   const personPage = item?.Type === "Person"
   // A collection rests on its own backdrop, and otherwise on the widest art among the titles it
@@ -129,6 +137,8 @@ export function ItemPage() {
   // The two used to be one line, and every page opened on "This title is unavailable." for as
   // long as its read took - the first paint of a destination, before any of its own content.
   if (status === "error") return <Problem message={error || "This title is unavailable."} />
+
+  if (status === "ready" && item?.Type === "Episode") return <Loading label="Opening season" />
 
   // A season page keeps its frame while the next season is read. The season selector belongs to the
   // show rather than to the season, so it is still the right selector, and the page below it says
@@ -512,7 +522,7 @@ function CollectionBody({ item, onLoaded }: { item: Item; onLoaded?: (items: Ite
           item={entry}
           layout={entry.Type === "Episode" || entry.Type === "Audio" ? "wide" : "poster"}
           size={prefs.posterSize}
-          href={`/item/${entry.Id}`}
+          href={itemCardHref(entry)}
         />
       ))}
     </div>
@@ -623,6 +633,8 @@ function SeasonBody({
 }) {
   const { userId } = useSession()
   const { id: routeSeasonId = "" } = useParams()
+  const [params] = useSearchParams()
+  const focusEpisodeId = params.get("episode") || ""
   const [series, setSeries] = useState<Item | null>(null)
   // The show's seasons, which is what the selector is drawn from. They are read once per show
   // rather than once per season, so switching seasons costs one request - the episodes - and never
@@ -668,6 +680,10 @@ function SeasonBody({
   const pending = Boolean(routeSeasonId) && routeSeasonId !== season.Id
   const browsed = wanted || (pending ? null : season)
 
+  useEffect(() => {
+    if (seriesId && browsed?.Id) rememberSeason(seriesId, browsed.Id)
+  }, [browsed?.Id, seriesId])
+
   return (
     <div className="detail-body">
       {browsed ? (
@@ -679,6 +695,7 @@ function SeasonBody({
             season={browsed}
             progress={pending ? null : progress}
             series={series}
+            focusEpisodeId={focusEpisodeId}
             actions={actions}
             // The season's own poster, at the head of the page, and the season selector on its own
             // row under the banner: the poster says which season is on screen before anything is
@@ -985,6 +1002,7 @@ function EpisodeList({
   refreshKey = 0,
   onPlayedChange,
   onLoaded,
+  focusEpisodeId = "",
 }: {
   /** The page's own item: the season this page was opened for. */
   item: Item
@@ -995,6 +1013,8 @@ function EpisodeList({
   season?: Item | null
   /** How much of the season is watched, for the banner's own line about it. */
   progress?: SeasonProgress | null
+  /** When the address names an episode, the row rests on it once the list is in hand. */
+  focusEpisodeId?: string
   actions?: ReactNode
   /** The season selector, when the page browsing this season draws one. */
   tabs?: ReactNode
@@ -1059,6 +1079,16 @@ function EpisodeList({
   useEffect(() => {
     if (episodes) loaded.current?.(episodes)
   }, [episodes])
+
+  useEffect(() => {
+    if (!focusEpisodeId || !episodes?.some((entry) => entry.Id === focusEpisodeId)) return
+    setSpotId(focusEpisodeId)
+    const frame = window.requestAnimationFrame(() => {
+      const node = document.querySelector<HTMLElement>(`[data-episode="${focusEpisodeId}"]`)
+      if (node) placeFocus(node)
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [episodes, focusEpisodeId])
 
   // The banner is drawn whether or not the episodes have arrived: it is the page's own head, and
   // a page that opened on a blank space while the server answered would read as a page with no
@@ -1141,8 +1171,13 @@ function EpisodeList({
    * That is the rule Next Up applies to a season, so the episode the row opens on is the one the
    * viewer would carry on with rather than the first of the season.
    */
-  const anchorId = seasonStart(episodes)?.episode.Id || ""
-  const spot = episodes.find((episode) => episode.Id === spotId) || episodes.find((episode) => episode.Id === anchorId) || episodes[0]
+  const defaultAnchor = seasonStart(episodes)?.episode.Id || ""
+  const anchorId =
+    focusEpisodeId && episodes.some((entry) => entry.Id === focusEpisodeId) ? focusEpisodeId : defaultAnchor
+  const spot =
+    episodes.find((episode) => episode.Id === spotId) ||
+    episodes.find((episode) => episode.Id === anchorId) ||
+    episodes[0]
 
   return (
     <>
@@ -1499,7 +1534,7 @@ function ChildrenBody({ item }: { item: Item }) {
           item={entry}
           layout={entry.Type === "Episode" || entry.Type === "Audio" ? "wide" : "poster"}
           size={prefs.posterSize}
-          href={`/item/${entry.Id}`}
+          href={itemCardHref(entry)}
         />
       ))}
     </div>
@@ -2007,7 +2042,7 @@ function Extras({ itemId }: { itemId: string }) {
       {keys.map((key) => (
         <Row key={key} title={EXTRA_LABELS[key] || "Extras"} className={`size-${prefs.posterSize}`}>
           {(groups.get(key) || []).map((extra) => (
-            <PosterCard key={extra.Id} item={extra} layout="wide" size={prefs.posterSize} href={`/item/${extra.Id}`} />
+            <PosterCard key={extra.Id} item={extra} layout="wide" size={prefs.posterSize} href={itemCardHref(extra)} />
           ))}
         </Row>
       ))}
@@ -2042,7 +2077,7 @@ function Similar({ item }: { item: Item }) {
   return (
     <Row title={`If you liked ${liked}`} className={`size-${prefs.posterSize}`}>
       {items.map((entry) => (
-        <PosterCard key={entry.Id} item={entry} layout="poster" size={prefs.posterSize} href={`/item/${entry.Id}`} />
+        <PosterCard key={entry.Id} item={entry} layout="poster" size={prefs.posterSize} href={itemCardHref(entry)} />
       ))}
     </Row>
   )

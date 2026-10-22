@@ -17,7 +17,7 @@
  */
 import { readFileSync } from "node:fs"
 import { artWidth } from "../src/lib/images"
-import { episodePlayHref, lastSeason, rememberSeason, resolveSeason, seasonLineText, seasonProgress, seasonProgressBySeason, seasonStart } from "../src/lib/seasons"
+import { episodePlayHref, itemCardHref, lastSeason, rememberSeason, resolveSeason, seasonBrowseHref, seasonLineText, seasonProgress, seasonProgressBySeason, seasonStart } from "../src/lib/seasons"
 import type { Item } from "../src/lib/types"
 
 let failures = 0
@@ -284,6 +284,13 @@ same(
 check("a card never sends the viewer to an episode's own page", !episodePlayHref(episode("e3", 3)).startsWith("/item/"))
 check("and it always goes through the app's player", episodePlayHref(episode("e3", 3)).startsWith("/play/"))
 
+const browseEpisode = { ...episode("e4", 4), SeasonId: "season-1", SeriesId: "series-1" }
+same("browsing opens the season that holds the episode", seasonBrowseHref(browseEpisode), "/item/season-1?episode=e4")
+check("browsing never opens the episode's own portrait page", !seasonBrowseHref(browseEpisode).startsWith("/item/e4"))
+same("a card that should play goes through the player", itemCardHref(browseEpisode, "play"), "/play/e4?resume=0")
+same("a card that should browse opens the season", itemCardHref(browseEpisode, "season"), "/item/season-1?episode=e4")
+same("a film is still opened on its own page", itemCardHref({ Id: "m1", Name: "Film", Type: "Movie" }), "/item/m1")
+
 /* The season page's two action rows, read from the page's own source - it is the wiring that decides
    this, and a wiring check is the only thing that can hold it. The band under the episode the page
    describes is the title's own actions, and the action that settles the episode the remote is on
@@ -347,6 +354,12 @@ check(
   "Item.tsx",
 )
 check("a season card still opens that season's own page", page.includes("to={`/item/${season.Id}`}"), "Item.tsx")
+check(
+  "an episode address is replaced by its season browse",
+  page.includes("seasonBrowseHref(item)") && page.includes('label="Opening season"'),
+  "Item.tsx",
+)
+check("cards across the app use the shared episode destination", page.includes("itemCardHref(entry)"), "Item.tsx")
 check("and a title's own Play still goes through the player", /to=\{`\/play\/\$\{item\.Id\}/.test(page), "Item.tsx")
 
 /* The page's banner, read from the page's own source and the stylesheet it is drawn with. The
@@ -526,7 +539,9 @@ check(
 )
 check(
   "moving along the row changes the episode the banner describes rather than taking it away",
-  page.includes("onPoint={() => setSpotId(episode.Id)}") && page.includes("episode={spot}") && page.includes("const spot = episodes.find"),
+  page.includes("onPoint={() => setSpotId(episode.Id)}") &&
+    page.includes("episode={spot}") &&
+    page.includes("episodes.find((episode) => episode.Id === spotId)"),
   "Item.tsx",
 )
 /* Focus alone never plays anything: a still's own focus handler reports which episode it is, and the
@@ -545,7 +560,8 @@ check(
 check(
   "and changing season re-reads the episodes and picks the new season's focused episode",
   page.includes('setSpotId("")') &&
-    page.includes("const spot = episodes.find((episode) => episode.Id === spotId) || episodes.find((episode) => episode.Id === anchorId) || episodes[0]"),
+    page.includes("episode.Id === spotId") &&
+    page.includes("episode.Id === anchorId"),
   "Item.tsx",
 )
 check(

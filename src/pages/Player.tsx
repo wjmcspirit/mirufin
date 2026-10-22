@@ -14,6 +14,7 @@ import { nativeEngine, nativePlayer } from "../lib/nativePlayer"
 import { isTrailerItem } from "../lib/trailer"
 import { pickTrickplay, segmentAt, segmentEnd, segmentKey, segmentLabel } from "../lib/segments"
 import { playbackStep, skipAction, skipMode, startTicks, type PlaybackMark } from "../lib/playback"
+import { itemCardHref } from "../lib/seasons"
 import type { Chapter, Item, MediaSegment, SegmentType, TrickplayInfo } from "../lib/types"
 import { usePrefs, useSession } from "../session"
 
@@ -658,7 +659,7 @@ export function PlayerPage() {
       navigate(-1)
       return
     }
-    if (item) navigate(`/item/${item.Id}`, { replace: true })
+    if (item) navigate(itemCardHref(item), { replace: true })
     else navigate("/", { replace: true })
   }
 

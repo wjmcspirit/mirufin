@@ -17,6 +17,7 @@ import {
   type FavoriteCategory,
 } from "../lib/heroDeck"
 import { ownBackdropSrc } from "../lib/images"
+import { itemCardHref } from "../lib/seasons"
 import type { Item } from "../lib/types"
 import { usePrefs, useSession } from "../session"
 
@@ -174,7 +175,7 @@ export function FavoritesPage() {
               item={item}
               layout={item.Type === "Episode" ? "wide" : "poster"}
               size={prefs.posterSize}
-              href={`/item/${item.Id}`}
+              href={itemCardHref(item)}
               detail={item.Type === "BoxSet" ? collectionSizeLabel(item.ChildCount) : undefined}
               art={false}
             />

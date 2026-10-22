@@ -54,6 +54,35 @@ export function episodePlayHref(episode: Item) {
   return `/play/${episode.Id}?resume=${isInProgress(episode) ? "1" : "0"}`
 }
 
+/** Whether a card should start playback or open the season the episode belongs to. */
+export type EpisodeSelectIntent = "play" | "season"
+
+/**
+ * Where browsing lands for an episode: its season's own page, with that episode named in the
+ * address so the row can rest on it. The portrait episode page is not a browse destination.
+ */
+export function seasonBrowseHref(episode: Item) {
+  const episodeId = episode.Id
+  const seasonId = episode.SeasonId
+  if (seasonId && episodeId) {
+    return `/item/${seasonId}?episode=${encodeURIComponent(episodeId)}`
+  }
+  const seriesId = episode.SeriesId
+  if (seriesId) return `/item/${seriesId}`
+  return episodePlayHref(episode)
+}
+
+/**
+ * What a card opens: a title's own page, straight into playback for an episode, or its season
+ * when the viewer is browsing.
+ */
+export function itemCardHref(item: Item, intent: EpisodeSelectIntent = "season") {
+  if (item.Type === "Episode") {
+    return intent === "play" ? episodePlayHref(item) : seasonBrowseHref(item)
+  }
+  return `/item/${item.Id}`
+}
+
 /** How much of one season the viewer has watched. */
 export interface SeasonProgress {
   /** Episodes of this season the viewer has finished. */
