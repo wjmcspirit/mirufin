@@ -200,9 +200,42 @@ check("and nothing in it is a placeholder", !/undefined|null|NaN|—|--/.test(me
 const meta = readFileSync("src/components/Meta.tsx", "utf8")
 const hero = readFileSync("src/components/Hero.tsx", "utf8")
 const itemPage = readFileSync("src/pages/Item.tsx", "utf8")
+const library = readFileSync("src/pages/Library.tsx", "utf8")
+/* The hero's own source with its JSX comments taken out. A note beside a line is not a change to
+   what the hero draws, and what the check below asks is where the line stands in the tree the hero
+   renders - directly under the episode's own line, as the viewer reads it. */
+const heroDrawn = hero.replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
 check("the line is one component, built from the shared fields", meta.includes("metaFields(item, prefs.ratings") && meta.includes("export function MetaLine("), "Meta.tsx")
-check("every hero draws it, directly under the title", hero.includes("<MetaLine item={item}") && /<p className="hero-episode">[\s\S]{0,80}<MetaLine item=\{item\}/.test(hero), "Hero.tsx")
+check("every hero draws it, directly under the title", heroDrawn.includes("<MetaLine item={item}") && /<p className="hero-episode">[\s\S]{0,80}<MetaLine item=\{item\}/.test(heroDrawn), "Hero.tsx")
 check("a title's own page draws it too", (itemPage.match(/<MetaLine item=\{/g) || []).length >= 2, "Item.tsx")
+/* What a title *is* is not stated in this line. Its genres are drawn as doors on the title's own
+   page, where each one opens the library narrowed to that genre, so the line carries the title's
+   own facts and nothing else - and because a hero is one component, Home's line and a library's say
+   the same thing about the title they feature rather than one of them ending in a genre list. */
+check(
+  "a hero's metadata line carries the title's own facts and never a list of its genres",
+  hero.includes("<MetaLine item={item} />") &&
+    !hero.includes("genres=") &&
+    !meta.includes("genres?: string") &&
+    !meta.includes("fields.push(genres)"),
+  "Hero.tsx and Meta.tsx",
+)
+check(
+  "while a title's own page keeps its genres as doors, and a library keeps filtering by them",
+  itemPage.includes('className="meta-links genre-pills"') &&
+    itemPage.includes("genreLinks(item)") &&
+    itemPage.includes("genreName=") &&
+    library.includes("All genres") &&
+    library.includes("chooseGenre"),
+  "Item.tsx and Library.tsx",
+)
+/* The line is what the server sent and nothing else: a film it described with a year alone states
+   its year alone, with no dot standing in front of a field that is not there. */
+same(
+  "a film the server sent only a year for states only that year, with no separator around nothing",
+  metaLine({ Id: "m", Name: "Film", Type: "Movie", ProductionYear: 2015 }, "both", at),
+  "2015",
+)
 check(
   "and it is read to the minute, not to the second",
   meta.includes("60_000 - (Date.now() % 60_000)") && !meta.includes("setInterval"),

@@ -158,7 +158,11 @@ function HeroCopy({ face, onTrailer }: { face: HeroFace; onTrailer: (open: boole
         <TitleLogo item={item} />
       </div>
       <p className="hero-episode">{under}</p>
-      <MetaLine item={item} genres={item.Genres?.slice(0, 3).join(", ") || ""} />
+      {/* The line states what the title is, not what it is like. Its genres are drawn as doors on
+          its own page, where each one opens the library narrowed to that genre, so a hero's line
+          carries the title's own facts and every hero - Home's and a library's alike, because they
+          are this one component - says the same thing about the title it features. */}
+      <MetaLine item={item} />
       <p className="overview clamp">{item.Overview || ""}</p>
       <div className="actions" data-nav-flow={flow}>
         <Link className="btn btn-primary" to={href}>

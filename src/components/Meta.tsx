@@ -75,17 +75,19 @@ function useMinute(active: boolean) {
  * an episode describes that episode, a series describes its run of years, and a collection says
  * what it holds rather than when it would end.
  *
- * `genres` are appended where a page wants them - a hero's line ends with what the title is - and
- * the line wraps rather than being clipped when a panel is too narrow for it.
+ * Nothing is appended to it. What a title *is* - its genres, and the studio behind it - is drawn on
+ * the title's own page, where each one opens the library narrowed to it (see `FactLinks`), so a
+ * hero states the title's own facts and never a list of its genres, which the same viewer can read
+ * and filter by one press away. A field the server did not send is left out, so the line never
+ * carries an empty field or a dot standing between two of them, and it wraps rather than being
+ * clipped when a panel is too narrow for it.
  */
 export function MetaLine({
   item,
-  genres = "",
   className = "kicker",
   lead = "",
 }: {
   item: Item
-  genres?: string
   className?: string
   /**
    * A field of the caller's own that comes before the item's: the season and episode number of
@@ -97,7 +99,6 @@ export function MetaLine({
   const { prefs } = usePrefs()
   const fields = metaFields(item, prefs.ratings, useMinute(true))
   if (lead) fields.unshift(lead)
-  if (genres) fields.push(genres)
   return (
     <p className={className}>
       {fields.map((text, index) => (

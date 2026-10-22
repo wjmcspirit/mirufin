@@ -1102,6 +1102,21 @@ html:not(.remote) .nav:hover .nav-label {
   -webkit-line-clamp: 2;
   min-height: 2.9em;
 }
+/* The description is the last of the copy's lines and the row of actions is what the viewer came
+   for, so the buttons stand a deliberate step below it rather than on the copy's own 6px rhythm. The
+   step is 10 of the app's own units, which with that rhythm is 16 between the two of them - the same
+   inset the copy itself is padded by. The copy is anchored to the bottom edge of a hero whose height
+   is a fixed share of the screen, so the step is taken out of the room the copy leaves above itself:
+   the description and the lines over it ride up by the same amount and the buttons, the hero's own
+   height and everything below it do not move. */
+.hero.stage-copy .overview + .actions { margin-top: 10px; }
+/* Nothing in the copy gives way to make room for that step. Every line the copy draws is a height the
+   composition reserves - the title's box, the facts' two rows, the description's two - so a copy
+   that is taller than the space it has overflows into the empty artwork above it rather than
+   shrinking the title's box out from under a logo or closing up the rows the line was measured
+   against. The hero's box is what clips, and the copy stays well inside it: see `tools/foldCheck.ts`,
+   which measures both. */
+.hero.stage-copy .hero-copy > * { flex-shrink: 0; }
 /* One row of actions, whatever the labels are: a second row would be a taller copy. */
 .hero.stage-copy .actions { flex-wrap: nowrap; }
 .hero-copy, .detail-copy { position: relative; z-index: 1; }

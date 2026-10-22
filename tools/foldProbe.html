@@ -51,7 +51,7 @@
               <p class="eyebrow">Series · S2 E4</p>
               <div class="hero-title"><h1>The Long Way Round And Back Again</h1></div>
               <p class="hero-episode">S2 E4 · A Rather Long Episode Name</p>
-              <p class="kicker">2019 · 1h 52m · Drama, Mystery, Science Fiction</p>
+              <p class="kicker">2015 · 1h 25m · Not Rated · 6.2 <span class="star" aria-hidden="true">★</span> · Ends at 10:12 AM</p>
               <p class="overview clamp">
                 A synopsis of the sort a server actually sends: two lines of it at this width, no
                 more, held to the space reserved for it whatever it says.
@@ -144,7 +144,7 @@
                   <p class="eyebrow"></p>
                   <div class="hero-title"><h1>Underworld Awakening</h1></div>
                   <p class="hero-episode"></p>
-                  <p class="kicker">2012 · 1h 28m · R · 6.3 <span class="star" aria-hidden="true">★</span> · Rotten 25% Critics · Action, Fantasy, Horror</p>
+                  <p class="kicker">2012 · 1h 28m · R · 6.3 <span class="star" aria-hidden="true">★</span> · Rotten 25% Critics</p>
                   <p class="overview clamp">
                     Having escaped years of imprisonment, vampire warrioress Selene finds herself in a
                     changed world where humans have discovered the existence of both Vampire and Lycan.
@@ -416,14 +416,18 @@
           copy: (function () {
             // The copy's own content, not its box: `.hero-copy` is pinned to the hero's height and
             // stacks its children up from the bottom edge, so what matters is where the first line
-            // starts and where the actions end.
+            // starts and where the actions end - and, between them, where the description ends and
+            // the row of buttons begins, which is the step this page states for itself.
             var content = units(document.querySelector(".hero .eyebrow"))
+            var synopsis = units(document.querySelector(".hero .overview"))
             var actions = units(document.querySelector(".hero .actions"))
             return {
               top: round(content.top),
               bottom: round(actions.bottom),
               height: round(actions.bottom - content.top),
               actionsBottom: round(actions.bottom),
+              synopsisBottom: round(synopsis.bottom),
+              actionsTop: round(actions.top),
             }
           })(),
           parts: (function () {
@@ -467,6 +471,24 @@
             gridTop: round(gridBox.top),
             art: { top: round(art.top), bottom: round(art.bottom), height: round(art.height) },
             caption: { top: round(caption.top), bottom: round(caption.bottom), height: round(caption.height) },
+            // The copy a library's hero carries, measured the way Home's is: where the description
+            // ends and the row of buttons begins, how tall the title's own box is drawn, and whether
+            // the whole of the copy stays inside the hero. A hero whose copy is taller than the room
+            // it has would show up here as a title box that gave way rather than as a page that only
+            // looks slightly different.
+            copy: (function () {
+              var eyebrow = units(libShell.querySelector(".hero .eyebrow"))
+              var description = units(libShell.querySelector(".hero .overview"))
+              var actions = units(libShell.querySelector(".hero .actions"))
+              return {
+                top: round(eyebrow.top),
+                bottom: round(actions.bottom),
+                height: round(actions.bottom - eyebrow.top),
+                synopsisBottom: round(description.bottom),
+                actionsTop: round(actions.top),
+                title: round(units(libShell.querySelector(".hero .hero-title")).height),
+              }
+            })(),
             // The library's own one left edge: the hero's title, the heading under it and the first
             // card in the grid are three different boxes, and they have to begin in the same place.
             lefts: {

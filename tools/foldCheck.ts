@@ -140,7 +140,7 @@ interface FoldReport {
   edges: { logo: number; group: number; strip: number }
   art: { top: number; bottom: number; height: number }
   caption: { top: number; bottom: number; height: number }
-  copy: { top: number; bottom: number; height: number; actionsBottom: number }
+  copy: { top: number; bottom: number; height: number; actionsBottom: number; synopsisBottom: number; actionsTop: number }
   parts: { eyebrow: number; "hero-title": number; "hero-episode": number; kicker: number; overview: number; actions: number }
   artInside: boolean
   captionInside: boolean
@@ -153,6 +153,8 @@ interface FoldReport {
     gridTop: number
     art: { top: number; bottom: number; height: number }
     caption: { top: number; bottom: number; height: number }
+    /** The copy the library's hero carries: the description, the buttons, and the title's own box. */
+    copy: { top: number; bottom: number; height: number; synopsisBottom: number; actionsTop: number; title: number }
     lefts: { hero: number; heading: number; card: number }
     edges: { logo: number; group: number; grid: number }
     headInside: boolean
@@ -574,6 +576,8 @@ for (const { panel, report } of await measureAll(browser, probe, PANELS)) {
   console.log(
     `     canvas ${report.fold} units  rail ${report.rail}  hero ${report.hero.top}..${report.hero.bottom}\n` +
       `     copy ${report.copy.top}..${report.copy.bottom} (${report.copy.height} tall, actions end ${report.copy.actionsBottom})\n` +
+      `     description ends ${report.copy.synopsisBottom}, the actions begin ${report.copy.actionsTop} - ` +
+      `a ${Math.round((report.copy.actionsTop - report.copy.synopsisBottom) * 10) / 10} step\n` +
       `     lines: eyebrow ${report.parts.eyebrow}  title ${report.parts["hero-title"]}  episode ${report.parts["hero-episode"]}  ` +
       `kicker ${report.parts.kicker}  synopsis ${report.parts.overview}  actions ${report.parts.actions}\n` +
       `     heading ends ${report.headingBottom}  art ${report.art.top}..${report.art.bottom} (${report.art.height} tall)  ` +
@@ -626,6 +630,22 @@ for (const { panel, report } of await measureAll(browser, probe, PANELS)) {
     `${panel.name} (${report.row}): the title, facts, synopsis and actions all fit inside the hero`,
     report.copy.top >= report.hero.top - 0.5 && report.copy.actionsBottom <= report.hero.bottom + 0.5,
     `copy ${report.copy.top}..${report.copy.actionsBottom} in hero ${report.hero.top}..${report.hero.bottom}`,
+  )
+  check(
+    `${panel.name} (${report.row}): and the title's own box is the height the composition reserves, not a box the copy squeezed`,
+    report.parts["hero-title"] >= 91.5 && report.parts["hero-title"] <= 92.5,
+    `title box ${report.parts["hero-title"]}`,
+  )
+  /* The description is the last of the copy's lines and the row of actions is what the viewer came
+     for, so the buttons stand a deliberate step below the description rather than on the copy's own
+     6px rhythm. The hero pays for that step out of the room it leaves above its copy - which is what
+     the check above measures - so the step can never push the title, the facts or the synopsis out
+     of the hero, and the hero's own height, the heading under it and the first row of posters are
+     untouched by it. */
+  check(
+    `${panel.name} (${report.row}): the description and the row of actions are set a deliberate step apart`,
+    report.copy.actionsTop - report.copy.synopsisBottom >= 12 && report.copy.actionsTop - report.copy.synopsisBottom <= 20,
+    `description ends ${report.copy.synopsisBottom}, actions begin ${report.copy.actionsTop}`,
   )
   /* The metadata line - the year, the runtime, what is left, the rating, the scores and the finish
      time - is held to the same two rows the synopsis beside it is: a longer line wraps inside the
@@ -681,6 +701,37 @@ for (const { panel, report } of await measureAll(browser, probe, PANELS)) {
     `${panel.name} (${report.row}): and the header lines up with the library's content too`,
     Math.abs(library.edges.logo - library.lefts.hero) <= 1 && Math.abs(library.edges.group - library.edges.grid) <= 1,
     `logo ${library.edges.logo}, hero ${library.lefts.hero}, group ends ${library.edges.group}, grid content ends ${library.edges.grid}`,
+  )
+  /* The copy a library's hero carries - the title, the facts, the description and the row of buttons
+     under it - measured the way Home's is. It is what the viewer reads before the grid, so the whole
+     of it has to stay inside the hero, the title's own box has to be the height the composition
+     reserves rather than a box the copy squeezed, and the buttons have to stand the deliberate step
+     below the description that the page states for itself. None of it may reach the heading, the
+     tools or the first row of posters under the hero. */
+  const libraryCopy = library.copy
+  console.log(
+    `     library copy: ${libraryCopy.top}..${libraryCopy.bottom} (${libraryCopy.height} tall, title box ${libraryCopy.title})  ` +
+      `description ends ${libraryCopy.synopsisBottom}, the actions begin ${libraryCopy.actionsTop}`,
+  )
+  check(
+    `${panel.name} (${report.row}): a library's hero copy stays inside the hero it is drawn in`,
+    libraryCopy.top >= library.hero.top - 0.5 && libraryCopy.bottom <= library.hero.bottom + 0.5,
+    `copy ${libraryCopy.top}..${libraryCopy.bottom} in hero ${library.hero.top}..${library.hero.bottom}`,
+  )
+  check(
+    `${panel.name} (${report.row}): and its title's own box is the height the composition reserves`,
+    libraryCopy.title >= 91.5 && libraryCopy.title <= 92.5,
+    `title box ${libraryCopy.title}`,
+  )
+  check(
+    `${panel.name} (${report.row}): its description and its row of buttons stand a deliberate step apart`,
+    libraryCopy.actionsTop - libraryCopy.synopsisBottom >= 12 && libraryCopy.actionsTop - libraryCopy.synopsisBottom <= 20,
+    `description ends ${libraryCopy.synopsisBottom}, actions begin ${libraryCopy.actionsTop}`,
+  )
+  check(
+    `${panel.name} (${report.row}): and nothing in the copy reaches the Movies heading under the hero`,
+    libraryCopy.bottom <= library.head.top - 8,
+    `copy ends ${libraryCopy.bottom}, the heading begins ${library.head.top}`,
   )
   /* A film's page - the page type that used to begin at the page's own edge, `--strip-pad` to the
      left of everything else and off the header's logo. Its hero is the compact `.detail-hero`, not a
