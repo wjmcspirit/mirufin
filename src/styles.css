@@ -1532,17 +1532,6 @@ html:not(.remote) .nav:hover .nav-label {
 .info-facts div { display: flex; gap: 8px; min-width: 0; }
 .info-facts dt { color: #8b93a3; }
 .info-facts dd { margin: 0; }
-/* A title's whole description, in the app's own overlay: the same sheet media info draws, with the
-   text set at a reading size rather than at the two-line preview a banner holds, and held to a
-   column that is read comfortably from across the room. */
-.description-sheet { width: min(880px, 92vw); }
-.description-text {
-  max-width: 68ch;
-  margin: 0;
-  color: #d5dce8;
-  font-size: 18px;
-  line-height: 1.6;
-}
 .trailer-backdrop {
   position: absolute;
   inset: 0;
@@ -2296,46 +2285,13 @@ select {
    and the show's fact links follow it as the page's own controls. */
 .browse-hero .hero-copy { gap: 7px; }
 .browse-hero .overview { margin-top: 3px; }
-/* The show's synopsis and the control that reveals the rest of it are one block: the preview, and
-   under it - only when the preview is cut short - the app's own reveal control. The block is what
-   the banner's rhythm spaces, so the show's fact links below stand the same distance from the
-   description whether or not the ellipsis is drawn, and the description and the genre chips under it
-   are no longer set one line apart, which is what read as cramped. The copy's own gap still spaces
-   everything else. */
+/* The description and the genre chips under it are set a step apart rather than one line apart,
+   which is what read as cramped, and the fact links below stand the same distance from the
+   description whether it is one line or ten. The copy's own gap still spaces everything else. */
 .browse-hero .hero-synopsis {
   display: grid;
   gap: 6px;
   margin-bottom: 9px;
-}
-/* The ellipsis under a description that is longer than the banner shows. It is a control the remote
-   lands on, so it is drawn as one - the genre pills' own outline and wash, at the size of the copy
-   around it - rather than as the plain text link a synopsis uses further down a page, and it is the
-   only thing on the banner that opens the full description: the text itself is not a control, so a
-   press that misses it does nothing. */
-.browse-hero .hero-more {
-  margin-top: 0;
-  min-width: 44px;
-  min-height: 34px;
-  padding: 4px 14px;
-  border: 1px solid rgba(62, 200, 255, 0.45);
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.34);
-  color: #d9e6f2;
-  font-size: 18px;
-  line-height: 1;
-  letter-spacing: 0.1em;
-}
-.browse-hero .hero-more:hover {
-  background: rgba(62, 200, 255, 0.16);
-  border-color: rgba(62, 200, 255, 0.75);
-  color: #fff;
-}
-/* The shared reveal control's focus ring is drawn on its own 8px radius; this one is a pill, and the
-   ring has to follow the shape it is drawn around. */
-.browse-hero .hero-more:focus,
-.browse-hero .hero-more:focus-visible,
-.browse-hero .hero-more.dpad-focus {
-  border-radius: 999px;
 }
 /* The title's box steps down with the banner: a logo is still read from across the room, and the
    room the copy gives back is what pays for the episode the remote is on and the season selector
@@ -2376,16 +2332,19 @@ select {
   min-height: 0;
   -webkit-line-clamp: 1;
 }
-/* The episode's own description is read in full where it stands. It is not the show's synopsis: the
-   banner is sized by the season's featured artwork and the season selector and the row of stills
-   follow the banner, so the text is free to wrap over as many lines as it needs and the page gives it
-   the room rather than cutting it to the two lines the banner holds for a show and hiding the rest
-   behind a control. The two-line floor the shared rule sets is kept, so a one-line description does
-   not let the show's fact links under it ride up, and `line-clamp` is stated as none here as well as
-   by the class the page does not add, so no engine can clamp this text. */
-.browse-hero .hero-episode-info .overview {
+/* The description the banner carries is read in full where it stands, on both pages this banner is
+   drawn on: the show's own synopsis on the show's page, and the episode the remote is on on the
+   season's. Neither is held to the two lines the shared hero composition reserves for Home's
+   rotating hero - this banner is a floor rather than a height, so it grows with the text the server
+   sent, and the genre chips, the show's actions and the season selector and posters under it follow
+   it rather than being overlapped by it - and nothing is hidden behind a control, because there is
+   no rest to reveal. The floor the shared rule sets is kept, so a one-line description does not let
+   the show's fact links under it ride up, and `line-clamp` is stated as none here as well as by the
+   class the page does not add, so no engine and no shared rule can clamp this text. */
+.browse-hero .hero-synopsis .overview {
   display: block;
   -webkit-line-clamp: none;
+  overflow: visible;
 }
 /* The page's own rhythm: the season selector sits close under the banner, the row follows the
    selector, and the band under the row settles the episode the banner describes. */

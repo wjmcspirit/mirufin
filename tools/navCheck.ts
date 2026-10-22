@@ -3183,12 +3183,12 @@ function testLandingPolicy() {
     landingControl(nodes([rail, selectedPill, firstPill, episode])) === (episode as unknown as HTMLElement),
     label(landingControl(nodes([rail, selectedPill, firstPill, episode])) as unknown as El),
   )
-  // The control that reveals the rest of a description is the description's own, so a page is never
-  // entered on it: the remote lands on the page's own content, and arriving somewhere cannot open an
-  // overlay the viewer did not ask for.
-  const more = box("button", "more-link hero-more", hero)
+  // A control that opens the rest of a description is the description's own, so a page is never
+  // entered on it: the remote lands on the page's own content, and arriving somewhere cannot open
+  // text the viewer did not ask for.
+  const more = box("button", "more-link", hero)
   check(
-    "and the ellipsis that reveals the rest of a description is not where a page lands either",
+    "and a description's own reveal control is not where a page lands either",
     landingControl(nodes([rail, more, episode])) === (episode as unknown as HTMLElement),
     label(landingControl(nodes([rail, more, episode])) as unknown as El),
   )
@@ -3223,29 +3223,26 @@ function testLandingPolicy() {
 }
 
 /**
- * The show's description, and the ellipsis that reveals the rest of it.
+ * The show's description, which the banner draws in full where it stands.
  *
- * A description longer than the lines the banner holds for it keeps its truncated preview and has the
- * app's own reveal control drawn under it. That control is the only thing that opens the full
- * description - the text itself is not a control, so a press on the description does nothing - and it
- * is reached with the remote like any other control: up from the genre chips under it, and back down
- * again. It is never where a page lands (see `testLandingPolicy`), so arriving at a show's page can
- * never open the overlay by itself.
+ * There is no truncated preview and no control under the description that opens the rest of it: the
+ * whole of the synopsis is drawn in the banner, so there is nothing to reveal and nothing to press.
+ * What is asserted here is that the description is not a control - the remote has nothing to land on
+ * in it, so a press that misses the genre chips under it does nothing - and that the banner's copy
+ * holds no reveal control at all. It is never where a page lands (see `testLandingPolicy`) either,
+ * because there is nothing there to land on.
  */
-function testSynopsisReveal() {
+function testSynopsisIsNotAControl() {
   clearSeats()
   resetFocusState()
   const { main } = shell()
   const hero = new El("header", "hero stage-copy browse-hero")
   hero.place(60, 0, 1920, 300)
   const synopsis = new El("div", "hero-synopsis")
-  const preview = new El("p", "overview clamp")
-  preview.text = "A description longer than the two lines this banner holds for it."
-  preview.place(120, 240, 720, 60)
-  const more = new El("button", "more-link hero-more").attr("type", "button")
-  more.text = "…"
-  more.place(188, 240, 44, 34)
-  synopsis.add(preview, more)
+  const written = new El("p", "overview")
+  written.text = "The whole of a description, drawn where it stands, however many lines it takes."
+  written.place(120, 240, 720, 60)
+  synopsis.add(written)
   const links = new El("p", "meta-links genre-pills")
   const chips = ["/library/L1?genre=Drama", "/library/L1?genre=Crime"].map((href, index) => {
     const chip = new El("a", "").attr("href", href)
@@ -3259,9 +3256,19 @@ function testSynopsisReveal() {
   episodeRow(main, 12)
   noteRoute("/item/SERIES")
 
+  check(
+    "the description the banner draws is not a control, so the remote has nothing to land on in it",
+    !focusables().includes(written as unknown as HTMLElement),
+    label(active),
+  )
+  check(
+    "and the banner's copy holds no control that opens the rest of a description",
+    hero.querySelectorAll(".hero-more, .more-link").length === 0,
+    label(active),
+  )
   placeFocus(chips[0])
   moveFocus("ArrowUp")
-  check("Up from the genre chips reaches the ellipsis the banner draws under the description", active === more, label(active))
+  check("and Up from the genre chips never lands on the description", active !== written, label(active))
   moveFocus("ArrowDown")
   check("and Down comes back to the chips", active === chips[0], label(active))
 }
@@ -3280,7 +3287,7 @@ testMissingTarget()
 testRailIsNotASeat()
 testSeasonWalk()
 testSeasonPageWalk()
-testSynopsisReveal()
+testSynopsisIsNotAControl()
 testRailEntry()
 testLibraryToolbar()
 testLibraryToolbarShapes()

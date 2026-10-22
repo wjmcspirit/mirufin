@@ -20,6 +20,20 @@
    * screen the page opens on - the largest most of all. Medium is what the app opens on.
    */
   var size = ["small", "medium", "large"].indexOf(params.get("size")) >= 0 ? params.get("size") : "medium"
+  /*
+   * Whether the probe is asked for the longest description a server sends. The show's own page draws
+   * the show's own synopsis in its banner, and the whole of it is drawn there: the longest one is what
+   * says whether the banner grows with the text and whether the band of the show's own actions and the
+   * row of seasons under it follow the banner rather than being overlapped by it.
+   */
+  var longSynopsis = params.get("synopsis") === "long"
+  var LONG_SYNOPSIS =
+    "A description of the sort a server actually sends, and then keeps sending: this one runs to " +
+    "several times the length of a usual one, so it is the tallest copy a show's own banner is ever " +
+    "drawn with. It is read in full where it stands - the banner is a floor rather than a height, so " +
+    "it grows with the text - and the show's own actions and the row of season posters under it follow " +
+    "the banner rather than being overlapped by it. There is no ellipsis under the description and no " +
+    "sheet behind it: the whole of the synopsis is drawn here, so there is nothing left to open."
   var width = window.innerWidth
   var height = window.innerHeight
   var scale = width / 1500
@@ -160,21 +174,20 @@
   var block = element("section", "episode-block", "episode-block")
   var banner = element("header", "hero stage-copy browse-hero", "banner")
   var copy = element("div", "hero-copy", "hero-copy")
-  // The banner's own copy, in the order the page draws it on the page that browses a season: the
-  // show's logo first, so its top is level with the season poster's own top edge, then the line that
-  // says which season is being browsed, then the show's own facts, then the episode the remote is on
-  // with its own facts and its synopsis, and then the show's fact links.
+  // The banner's own copy, in the order the page draws it. A season's page draws the show's logo first,
+  // so its top is level with the season poster's own top edge, then the line that says which season is
+  // being browsed, then the show's own facts, then the episode the remote is on with its own facts and
+  // its synopsis, and then the show's fact links. The show's own page draws its kind line above the logo
+  // instead - there is no season to name and no episode to describe there - and describes the show
+  // itself: the whole of the show's own synopsis, in the banner.
   var title = element("div", "hero-title", "hero-title")
   var logo = element("h1", "", "")
   logo.textContent = "Sheriff Country"
   title.appendChild(logo)
-  copy.appendChild(title)
   var eyebrow = element("p", "eyebrow", "hero-eyebrow")
-  eyebrow.textContent = "Season 2  ·  3 of 10 watched"
-  copy.appendChild(eyebrow)
+  eyebrow.textContent = shape === "series" ? "Series" : "Season 2  ·  3 of 10 watched"
   var factsLine = element("p", "kicker", "hero-facts")
   factsLine.textContent = "2019  ·  2 Seasons  ·  TV-14  ·  7.9"
-  copy.appendChild(factsLine)
   // The episode the remote is on, described in the banner under the show's logo: its own name with the
   // row's flags, its facts - which lead with its number - and what it is about. This is the block the
   // focus walk changes, and the block the season selector and the row of stills have to fit under.
@@ -191,11 +204,32 @@
   var overview = element("p", "overview", "hero-episode-overview")
   overview.textContent = "A description of the sort a server actually sends, read in full where it stands."
   spot.appendChild(overview)
-  copy.appendChild(spot)
+  // The show's own description, in the banner on the show's own page: the whole of it, read where it
+  // stands, with nothing clamped off it and no control under it that opens the rest - there is no rest.
+  // Asked for the longest description a server sends, it is several times the length of a usual one,
+  // which is the tallest copy this banner is ever drawn with.
+  var showSynopsis = null
+  if (shape === "series") {
+    copy.appendChild(eyebrow)
+    copy.appendChild(title)
+    copy.appendChild(factsLine)
+    var synopsisBlock = element("div", "hero-synopsis", "hero-synopsis")
+    showSynopsis = element("p", "overview", "hero-show-overview")
+    showSynopsis.textContent = longSynopsis
+      ? LONG_SYNOPSIS
+      : "A description of the sort a server actually sends, read in full where it stands."
+    synopsisBlock.appendChild(showSynopsis)
+    copy.appendChild(synopsisBlock)
+  } else {
+    copy.appendChild(title)
+    copy.appendChild(eyebrow)
+    copy.appendChild(factsLine)
+    copy.appendChild(spot)
+  }
   // The show's own fact links, where every other page keeps them: in the head, which here is the
-  // banner. The episode the remote is on is described above them, under the show's logo, and the room
-  // the copy gives back is what keeps that description, the selector and the row of stills on screen
-  // together.
+  // banner. On the season's page the episode the remote is on is described above them, under the show's
+  // logo, and the room the copy gives back is what keeps that description, the selector and the row of
+  // stills on screen together. On the show's page the whole of the show's description stands above them.
   var facts = element("p", "meta-links genre-pills", "hero-links")
   var pills = [element("a", "", "genre-drama"), element("a", "", "genre-crime")]
   pills[0].textContent = "Drama"
@@ -449,6 +483,35 @@
         artBottom: design(cardArt.bottom),
       }
     }
+    // The show's own page: the banner that describes the show, the band of the show's own actions under
+    // it and the row of seasons under that. The whole of the show's description is drawn in the banner,
+    // so what has to hold is that none of it is cut off, that the copy stays inside the banner, and that
+    // the actions and the seasons row follow the banner rather than being overlapped by it.
+    var showHead = null
+    if (shape === "series") {
+      var bannerBox = banner.getBoundingClientRect()
+      var copyBox = copy.getBoundingClientRect()
+      var synopsisBox = showSynopsis.getBoundingClientRect()
+      var synopsisStyle = getComputedStyle(showSynopsis)
+      var synopsisLine = parseFloat(synopsisStyle.lineHeight) || 0
+      var actionsBox = actions.getBoundingClientRect()
+      showHead = {
+        fold: design(height),
+        banner: { top: design(bannerBox.top), bottom: design(bannerBox.bottom), height: design(bannerBox.height) },
+        copy: { top: design(copyBox.top), bottom: design(copyBox.bottom) },
+        synopsis: {
+          top: design(synopsisBox.top),
+          bottom: design(synopsisBox.bottom),
+          height: design(synopsisBox.height),
+          lines: synopsisLine > 0 ? Math.round((synopsisBox.height / synopsisLine) * 10) / 10 : 0,
+          clamped: synopsisStyle.webkitLineClamp,
+          clipped: showSynopsis.scrollHeight > showSynopsis.clientHeight + 1,
+          reveal: banner.querySelectorAll(".hero-more, .more-link").length,
+        },
+        actions: { top: design(actionsBox.top), bottom: design(actionsBox.bottom) },
+        seasonRow: { top: design(seasonStrip.getBoundingClientRect().top) },
+      }
+    }
     document.getElementById("probe").textContent = JSON.stringify({
       shape: shape,
       fromRail: fromRail,
@@ -475,6 +538,7 @@
       edges: before.edges,
       rowArt: before.art,
       seasonRow: seasonRow,
+      showHead: showHead,
     })
   })()
 })()

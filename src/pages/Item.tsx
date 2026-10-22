@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react"
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { MediaImage, PosterCard } from "../components/Cards"
-import { DescriptionPopup } from "../components/DescriptionPopup"
 import { CheckIcon, HeartIcon, InfoIcon, PlayIcon, SeasonIcon } from "../components/Icons"
 import { TrailerButton } from "../components/TrailerButton"
 import { MediaInfo } from "../components/MediaInfo"
@@ -17,7 +16,6 @@ import { creditsOf, filmographyRows, type Credit } from "../lib/people"
 import { genreLinks, studioLinks } from "../lib/discovery"
 import { canFavorite, canMarkWatched, canPlayDirectly, episodeCode, formatRuntime, isInProgress, metaLine, personFacts, progressPct, techChips } from "../lib/format"
 import { hasMediaInfo } from "../lib/mediaInfo"
-import { placeFocus } from "../lib/remote"
 import { episodePlayHref, lastSeason, rememberSeason, resolveSeason, seasonLineText, seasonProgress, seasonProgressBySeason, seasonStart, type SeasonProgress } from "../lib/seasons"
 import { knownFor, type KnownWork } from "../lib/knownFor"
 import { artWidth, backdropSrc, episodeStillSrc, episodeWideStill, FEATURED_ART_WIDTH, imageUrl, loadImage, primarySrc, seasonArtSrc, thumbSrc, warmImage, wideBackdrop } from "../lib/images"
@@ -1255,51 +1253,28 @@ function BrowseHero({
   // the remote is on.
   const described = episode || (season ? null : subject)
   const context = season ? seasonLineText(season, progress) : kindLabel(item)
-  // What the description is: the whole of it, either way. An episode's is read in full where it
-  // stands - the banner is sized by the season's featured artwork and the row below follows the
-  // banner, so there is nothing to reveal and no control to press - while the show's own synopsis on
-  // the show's page keeps the truncated preview it has always drawn, with the ellipsis under it
-  // opening the whole of the text in the app's own overlay. Whether the show's preview is cut short
-  // is measured from the preview that is drawn (`useClamped`), so a synopsis that fits says nothing
-  // and draws no control at all.
-  const synopsis = useRef<HTMLParagraphElement>(null)
-  const reveal = useRef<HTMLButtonElement>(null)
-  const [reading, setReading] = useState(false)
+  // What the description is: the whole of it, on every page this banner is drawn on. The banner
+  // draws it in full where it stands - the show's own synopsis on the show's page, and the episode
+  // the remote is on on the page that browses a season - so there is no preview held to a couple of
+  // lines, nothing measured to see whether it was cut short, and no control under it that opens the
+  // rest of it anywhere else: there is no rest. The banner is a floor rather than a height (see
+  // `.browse-hero.stage-copy`), so it grows with the text the server sent, and the genre chips, the
+  // show's actions and the season selector and posters below follow it rather than being overlapped
+  // by it.
   const description = described?.Overview || ""
-  const clipped = useClamped(synopsis, description, !episode)
-  // Closing puts the remote back on the control the viewer opened the overlay with, which is what
-  // the app does wherever a menu closes over a page (`SettingsControls`): the press that closed it
-  // is answered by the page they were reading, not by the page body.
-  const closeReading = useCallback(() => {
-    setReading(false)
-    if (reveal.current) placeFocus(reveal.current)
-  }, [])
   // The season being browsed and how much of it is watched. It is the line above the title on every
   // page but this one: the page that browses a season draws the show's logo first, so the logo's top
   // is level with the season poster's own top edge, and the line that says which season the row
   // below belongs to follows it.
   const seasonLine = <p className="eyebrow">{context}</p>
-  // The description, and - for the show's synopsis alone - the control that reveals the rest of it,
-  // in one block so the banner's rhythm spaces them together and the fact links below stand the same
-  // distance from the description whether or not the ellipsis is drawn. The description itself is
-  // not a control: nothing opens the overlay but the ellipsis.
+  // The description, read in full where it stands. The block is what the banner's rhythm spaces, so
+  // the show's fact links below stand the same distance from the description on every page, and the
+  // description and the genre chips under it are a step apart rather than one line apart. The
+  // description itself is not a control: nothing on the banner opens it anywhere else.
   const synopsisBlock =
     described && description ? (
       <div className="hero-synopsis">
-        <p ref={synopsis} className={episode ? "overview" : "overview clamp"}>
-          {description}
-        </p>
-        {!episode && clipped && (
-          <button
-            ref={reveal}
-            className="more-link hero-more"
-            type="button"
-            onClick={() => setReading(true)}
-            aria-label={`Read the full description of ${described.Name || "this show"}`}
-          >
-            …
-          </button>
-        )}
+        <p className="overview">{description}</p>
       </div>
     ) : null
   return (
@@ -1340,9 +1315,6 @@ function BrowseHero({
             facts, and the episode row follows them. */}
         <FactLinks item={item} />
       </div>
-      {reading && described && (
-        <DescriptionPopup title={described.Name || "Description"} text={description} onClose={closeReading} />
-      )}
     </header>
   )
 }

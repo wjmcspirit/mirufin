@@ -449,6 +449,29 @@ interface SeasonWalkReport {
     art: { width: number; height: number }
     artBottom: number
   } | null
+  /**
+   * On a show's page: the show's own head - the banner that describes the show, the band of the show's
+   * own actions under it and the row of seasons under that - measured with the whole of the show's
+   * description drawn in the banner.
+   */
+  showHead: {
+    fold: number
+    banner: { top: number; bottom: number; height: number }
+    copy: { top: number; bottom: number }
+    /** The show's own description: the whole of it, how many lines it takes, and whether anything is
+        hidden. `reveal` counts the controls under it that open the rest of it, of which there are none. */
+    synopsis: {
+      top: number
+      bottom: number
+      height: number
+      lines: number
+      clamped: string
+      clipped: boolean
+      reveal: number
+    }
+    actions: { top: number; bottom: number }
+    seasonRow: { top: number }
+  } | null
 }
 
 /** Where one press of the library walk left the remote, and which group of the page that is. */
@@ -1941,6 +1964,52 @@ for (const { size, card, fits } of SEASON_SIZES) {
     }
     console.log("")
   }
+}
+
+/* The show's own page carries the whole of the show's description in its banner.
+ *
+ * A library's hero and a season's banner were both fixed for the same defect - a synopsis cut to a
+ * couple of lines with a control under it that opened the rest - and the show's own page kept it: the
+ * description was drawn through the shared hero composition's own two-line clamp, and an ellipsis
+ * under it opened the whole text on a sheet. The show's page draws the whole of it where it stands
+ * instead, so this measures the page as it is drawn with the longest description a server sends: the
+ * whole of it is in the banner, nothing is clamped off it, no control under it opens anything, and the
+ * band of the show's own actions and the row of seasons follow the banner rather than being overlapped
+ * by it. */
+console.log("\nThe show's own page with the whole of its description drawn in the banner\n")
+for (const { panel, report } of await measurePage<SeasonWalkReport>(browser, seasonWalkProbe, PANELS, "?shape=series&synopsis=long")) {
+  const head = report.showHead
+  console.log(
+    `     ${panel.name}: banner ${head ? `${head.banner.top}..${head.banner.bottom} (${head.banner.height} tall)` : "none"}, ` +
+      `description ${head ? `${head.synopsis.lines} lines ${head.synopsis.top}..${head.synopsis.bottom} ` +
+        `(clamped ${head.synopsis.clamped}, clipped ${head.synopsis.clipped}, reveal ${head.synopsis.reveal})` : "none"}\n` +
+      `     copy ${head ? `${head.copy.top}..${head.copy.bottom}` : "none"}, ` +
+      `actions ${head ? `${head.actions.top}..${head.actions.bottom}` : "none"}, ` +
+      `seasons row begins ${head ? head.seasonRow.top : -1} of ${head ? head.fold : -1}`,
+  )
+  check(
+    `${panel.name} (show, long description): the whole of the show's description is drawn in the banner, with nothing clamped off it`,
+    head !== null && head.synopsis.clipped === false && head.synopsis.clamped === "none" && head.synopsis.lines > 2,
+    head ? `${head.synopsis.lines} lines, clamped ${head.synopsis.clamped}, clipped ${head.synopsis.clipped}` : "no banner",
+  )
+  check(
+    `${panel.name} (show, long description): and no control under it opens the rest of it, because there is no rest`,
+    head !== null && head.synopsis.reveal === 0,
+    head ? `${head.synopsis.reveal} control(s) under the description` : "no banner",
+  )
+  check(
+    `${panel.name} (show, long description): and the copy the banner carries fits inside the banner rather than being clipped by it`,
+    head !== null && head.copy.top >= head.banner.top - 0.5 && head.copy.bottom <= head.banner.bottom + 0.5,
+    head ? `copy ${head.copy.top}..${head.copy.bottom} in banner ${head.banner.top}..${head.banner.bottom}` : "no banner",
+  )
+  check(
+    `${panel.name} (show, long description): and the show's actions and the row of seasons follow the banner rather than overlapping it`,
+    head !== null && head.actions.top >= head.banner.bottom - 1 && head.seasonRow.top >= head.actions.bottom - 1,
+    head
+      ? `banner ends ${head.banner.bottom}, actions ${head.actions.top}..${head.actions.bottom}, seasons row begins ${head.seasonRow.top}`
+      : "no banner",
+  )
+  console.log("")
 }
 
 console.log(failures === 0 ? "The layout checks hold at every panel size." : `${failures} check(s) failed.`)

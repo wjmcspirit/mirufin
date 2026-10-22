@@ -377,7 +377,7 @@ check(
   page.includes('<div className="hero-copy">') &&
     page.includes('<div className="hero-title">') &&
     page.includes("<MetaLine item={subject} />") &&
-    page.includes('"overview clamp"'),
+    page.includes('<p className="overview">{description}</p>'),
   "Item.tsx",
 )
 check(
@@ -385,8 +385,7 @@ check(
   page.includes("const subject = series || season || item") &&
     page.includes("const described = episode || (season ? null : subject)") &&
     page.includes("<MetaLine item={subject} />") &&
-    sourceOf("BrowseHero", "EpisodeWatched").includes('className={episode ? "overview" : "overview clamp"}') &&
-    sourceOf("BrowseHero", "EpisodeWatched").includes("{description}"),
+    sourceOf("BrowseHero", "EpisodeWatched").includes('<p className="overview">{description}</p>'),
   "Item.tsx",
 )
 check(
@@ -487,12 +486,12 @@ check(
   "Item.tsx",
 )
 check(
-  "and its description is drawn in full where it stands, with no clamp and no control of its own",
+  "and its description is drawn in full where it stands, with no clamp of its own and no control under it",
   page.includes("const description = described?.Overview || \"\"") &&
-    page.includes('className={episode ? "overview" : "overview clamp"}') &&
-    page.includes("useClamped(synopsis, description, !episode)") &&
-    page.includes("{!episode && clipped && (") &&
-    flat.includes(".browse-hero .hero-episode-info .overview { display: block; -webkit-line-clamp: none; }"),
+    page.includes('<p className="overview">{description}</p>') &&
+    !sourceOf("BrowseHero", "EpisodeWatched").includes("overview clamp") &&
+    !sourceOf("BrowseHero", "EpisodeWatched").includes("useClamped") &&
+    flat.includes(".browse-hero .hero-synopsis .overview { display: block; -webkit-line-clamp: none; overflow: visible; }"),
   "Item.tsx and styles.css",
 )
 check(
@@ -772,14 +771,13 @@ check(
    film's studio is untouched, because a film's studio is a door to browse the library by. The seasons
    are posters, so they are drawn at the app's one poster size - the same three widths every other
    strip and grid uses, with Medium the size the app opens on - rather than at a size of their own.
-   And the show's description keeps the truncated preview the banner has always drawn, with the app's
-   own control to read the rest of it drawn only when there is a rest to read, opening the whole text
-   in the app's own overlay instead of re-laying the page out under the viewer.
+   And the show's description is read in full where it stands, exactly as the season's page reads the
+   episode the remote is on: there is no truncated preview and no control under it that opens the
+   rest, in an overlay or anywhere else - there is no rest to open.
 
-   Everything here is read from the page, the stylesheet, the metadata module and the overlay itself;
-   what the line actually states is `tools/metaCheck.ts`'s to check, against the real `metaFields`. */
+   Everything here is read from the page and the stylesheet it is drawn with; what the line actually
+   states is `tools/metaCheck.ts`'s to check, against the real `metaFields`. */
 const format = readFileSync("src/lib/format.ts", "utf8")
-const popup = readFileSync("src/components/DescriptionPopup.tsx", "utf8")
 const banner = sourceOf("BrowseHero", "EpisodeWatched")
 
 check(
@@ -922,57 +920,29 @@ check(
   "styles.css",
 )
 check(
-  "the show's own synopsis on the show's page keeps the truncated preview it has always drawn",
-  banner.includes('className={episode ? "overview" : "overview clamp"}'),
+  "the show's own synopsis on the show's page is drawn in full where it stands",
+  banner.includes('<p className="overview">{description}</p>') && !banner.includes("overview clamp"),
   "Item.tsx",
 )
 check(
-  "and offers the rest of a description that does not fit, measured from the preview that is drawn",
-  banner.includes('const description = described?.Overview || ""') &&
-    banner.includes("const clipped = useClamped(synopsis, description, !episode)") &&
-    /\{!episode && clipped && \(/.test(banner) &&
-    /function useClamped\([\s\S]{0,900}?scrollHeight > element\.clientHeight/.test(page),
+  "and nothing under it opens the rest of it - no ellipsis, no overlay and no other control",
+  !banner.includes("hero-more") &&
+    !banner.includes("DescriptionPopup") &&
+    !page.includes("DescriptionPopup") &&
+    !/more-link/.test(banner) &&
+    !css.includes(".hero-more") &&
+    !css.includes(".description-sheet") &&
+    !css.includes(".description-text"),
+  "Item.tsx and styles.css",
+)
+check(
+  "and the description itself is not a control, so a press that lands on the text does nothing",
+  !/<p className="overview"[\s\S]{0,140}?onClick/.test(banner),
   "Item.tsx",
 )
 check(
-  "the whole description opens in the app's own overlay, on the sheet media info draws",
-  banner.includes("<DescriptionPopup") &&
-    popup.includes('className="info-pop"') &&
-    popup.includes('className="info-sheet description-sheet"') &&
-    popup.includes('role="dialog"') &&
-    popup.includes('aria-modal="true"'),
-  "Item.tsx and DescriptionPopup.tsx",
-)
-check(
-  "which the remote's Back closes, on both paths a television delivers it",
-  popup.includes("ownBack(() =>") && popup.includes("isBackKey(event)") && popup.includes("noteBackKeydown()"),
-  "DescriptionPopup.tsx",
-)
-check(
-  "and closing it puts the viewer back on the control they opened it with",
-  page.includes("if (reveal.current) placeFocus(reveal.current)") && popup.includes("autoFocus"),
-  "Item.tsx and DescriptionPopup.tsx",
-)
-check(
-  "and the description itself is not a control: only the ellipsis opens the overlay",
-  /<button[\s\S]{0,300}?onClick=\{\(\) => setReading\(true\)\}/.test(banner) && !/<p ref=\{synopsis\}[\s\S]{0,140}?onClick/.test(banner),
-  "Item.tsx",
-)
-check(
-  "and the ellipsis says what it opens, for a viewer who cannot see the glyph",
-  /aria-label=\{`Read the full description of \$\{described\.Name \|\| "this show"\}`\}/.test(banner),
-  "Item.tsx",
-)
-check(
-  "and it is a control the remote can land on, drawn as one rather than as punctuation",
-  /\.browse-hero \.hero-more\s*\{[^}]*min-height:\s*34px[^}]*border-radius:\s*999px/.test(css) &&
-    css.includes(".more-link:focus") &&
-    css.includes(".more-link.dpad-focus"),
-  "styles.css",
-)
-check(
-  "and the whole of it is read at a reading size, on a sheet rather than at the banner's preview size",
-  /\.description-text\s*\{[^}]*font-size:\s*18px/.test(css) && /\.description-sheet\s*\{[^}]*width:\s*min\(880px/.test(css),
+  "and the whole of it is drawn at the banner's own reading size, in the copy rather than on a sheet",
+  /\.browse-hero \.hero-synopsis \.overview\s*\{[^}]*display:\s*block[^}]*-webkit-line-clamp:\s*none[^}]*overflow:\s*visible/.test(css),
   "styles.css",
 )
 
