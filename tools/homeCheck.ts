@@ -697,6 +697,32 @@ check(
   !rule(".library-hero").includes("min-height"),
   rule(".library-hero").trim(),
 )
+/* A library's featured title is read, not skimmed. The description under its facts is drawn in full
+   where it stands: the hero is a floor rather than a height, so a title the server describes in a line
+   or two draws the page the viewer already knows and a longer one makes the hero taller, and the
+   application's own clamp - which Home's rotating hero keeps, because that hero is a fixed share of the
+   screen with the first row of posters under it - is lifted for this one. `tools/foldCheck.ts` measures
+   both: the share for the usual description, and the whole of the longest one. */
+const libraryHero = listed(".library-hero > .hero.stage-copy")
+const libraryOverview = listed(".library-hero > .hero.stage-copy .overview")
+check(
+  "a library's hero is a floor rather than a height, so it grows with the description it carries",
+  libraryHero.includes("height: auto") && libraryHero.includes("min-height: calc(var(--app-height, 100dvh) * 0.42)"),
+  libraryHero.trim(),
+)
+check(
+  "and the description under its facts is drawn in full, with the application's own clamp lifted",
+  libraryOverview.includes("display: block") &&
+    libraryOverview.includes("-webkit-line-clamp: none") &&
+    libraryOverview.includes("overflow: visible"),
+  libraryOverview.trim(),
+)
+check(
+  "and Home's rotating hero keeps the clamp and the share it stands at, because the first row of posters is on the screen with it",
+  rule(".hero.stage-copy").includes("height: calc(var(--app-height, 100dvh) * 0.42)") &&
+    rule(".hero.stage-copy .overview").includes("-webkit-line-clamp: 2"),
+  `${rule(".hero.stage-copy").trim()} / ${rule(".hero.stage-copy .overview").trim()}`,
+)
 
 /* A library's rotating hero: the same behaviour Home's hero has, over the films a library holds.
    The deck is a random sample of that library, taken from Jellyfin's own random order, so a visit

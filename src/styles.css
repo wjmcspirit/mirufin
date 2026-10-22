@@ -1946,6 +1946,26 @@ html:not(.remote) .nav:hover .nav-label {
   transition: grid-template-rows 0.45s ease, opacity 0.35s ease;
 }
 .library-hero > .hero { overflow: hidden; }
+/* A library's featured title is read, not skimmed: the description under its facts is drawn in full
+   and the hero grows to hold it, the way a season's banner already does. The class on that paragraph
+   is the application's own clamp, and it is lifted here rather than in the markup because this is the
+   page that decides the description is read where it stands - Home's rotating hero keeps it, because
+   that hero is a fixed share of the screen with the first row of posters under it.
+
+   The floor is the share a library's hero has always stood at, so a title the server describes in a
+   line or two draws the page the viewer already knows, and only a longer description makes the hero
+   taller. Nothing inside the copy gives way for it: the title's box, the facts and the row of actions
+   keep the sizes the shared composition gives them, and the page under the hero is pushed down
+   rather than run over. */
+.library-hero > .hero.stage-copy {
+  height: auto;
+  min-height: calc(var(--app-height, 100dvh) * 0.42);
+}
+.library-hero > .hero.stage-copy .overview {
+  display: block;
+  -webkit-line-clamp: none;
+  overflow: visible;
+}
 .library-hero.collapsed {
   grid-template-rows: 0fr;
   opacity: 0;

@@ -170,7 +170,23 @@ interface FoldReport {
     art: { top: number; bottom: number; height: number }
     caption: { top: number; bottom: number; height: number }
     /** The copy the library's hero carries: the description, the buttons, and the title's own box. */
-    copy: { top: number; bottom: number; height: number; synopsisBottom: number; actionsTop: number; title: number }
+    copy: {
+      top: number
+      bottom: number
+      height: number
+      synopsisBottom: number
+      actionsTop: number
+      title: number
+      /** The copy's own box, padding included: what the hero is as tall as when the copy needs more
+          room than the share of the screen the composition stands at. */
+      box: number
+    }
+    /** The description itself, as it is drawn: its own box, its lines, and whether any of it was cut
+        off - a clamped paragraph reports its content as taller than the box it was given. */
+    description: { top: number; bottom: number; height: number; lineHeight: number; lines: number; clipped: boolean }
+    /** Whether the whole copy stayed inside the hero, and whether the page under it followed. */
+    copyInside: boolean
+    headFollowsHero: boolean
     lefts: { hero: number; heading: number; card: number }
     edges: { logo: number; group: number; grid: number }
     headInside: boolean
@@ -246,8 +262,11 @@ async function waitFor<T>(what: string, attempt: () => Promise<T | null>, timeou
  * One browser, kept open for every panel so the measurements share a run. The viewport override
  * is what makes a 4K panel measurable on a smaller desktop: the page sees exactly that viewport,
  * and nothing else on the machine has to be that size.
+ *
+ * `query` is what the probe is asked for on top of the page it draws - `?synopsis=long` for the
+ * tallest copy a library's hero can carry, and so on - the same way `measureSeason` asks for one.
  */
-async function measureAll(browser: string, probe: string, panels: Panel[]) {
+async function measureAll(browser: string, probe: string, panels: Panel[], query = "") {
   const port = 9400 + Math.floor(Math.random() * 400)
   const profile = mkdtempSync(join(tmpdir(), "mirufin-fold-"))
   const child = spawn(
@@ -284,7 +303,7 @@ async function measureAll(browser: string, probe: string, panels: Panel[]) {
             deviceScaleFactor: 1,
             mobile: false,
           })
-        await session.send("Page.navigate", { url: `${probe}?row=${row}` })
+        await session.send("Page.navigate", { url: `${probe}?row=${row}${query.replace(/^\?/, "&")}` })
         const text = await waitFor(`${panel.name} to measure itself`, async () => {
           const value = await session.evaluate("document.getElementById('probe').textContent")
           return typeof value === "string" && value !== "pending" ? value : null
@@ -673,20 +692,28 @@ for (const { panel, report } of await measureAll(browser, probe, PANELS)) {
     `line ${report.parts.kicker}, synopsis ${report.parts.overview}`,
   )
   /* The library page's own fold, measured in the same run. A library's hero is the same `Hero`
-     component Home uses, so it has to stand at the same height - and the heading, the count, the
-     tools and the top of the grid have to be on screen under it. That is what a library page drawn
+     component Home uses, so it stands at the same share of the screen - and the heading, the count,
+     the tools and the top of the grid have to be on screen under it. That is what a library page drawn
      from `.hero`'s own 520px floor could not do: on the 844-unit canvas that floor is 62% of the
-     screen, and the heading, the count and the whole first row sat below the bottom edge. */
+     screen, and the heading, the count and the whole first row sat below the bottom edge.
+
+     The share is a floor rather than a height, because a library's description is read in full where
+     it stands: a description that needs more room than the two lines the composition reserves makes
+     the hero taller, and the copy is then what sets its height. The law is asserted rather than one
+     measurement of it, so it holds for a description of any length - `?synopsis=long` below measures
+     the longest one a server sends. */
   const library = report.library
+  const share = report.fold * 0.42
   console.log(
-    `     library: hero ${library.hero.top}..${library.hero.bottom} (${library.hero.height} tall)  ` +
+    `     library: hero ${library.hero.top}..${library.hero.bottom} (${library.hero.height} tall, ` +
+      `a share of ${Math.round(share * 10) / 10})  ` +
       `head ends ${library.head.bottom}  count ends ${library.count.bottom}  tools end ${library.tools.bottom}\n` +
       `     grid starts ${library.gridTop}  art ${library.art.top}..${library.art.bottom}  caption ends ${library.caption.bottom}`,
   )
   check(
-    `${panel.name} (${report.row}): a library's hero is the same height as Home's`,
-    Math.abs(library.hero.height - (report.hero.bottom - report.hero.top)) <= 1,
-    `library ${library.hero.height}, home ${Math.round((report.hero.bottom - report.hero.top) * 10) / 10}`,
+    `${panel.name} (${report.row}): a library's hero stands at Home's own share of the screen, and the copy it carries is what makes it taller`,
+    Math.abs(library.hero.height - Math.max(share, library.copy.box)) <= 1 && library.copyInside,
+    `hero ${library.hero.height}, the share ${Math.round(share * 10) / 10}, the copy's box ${library.copy.box}`,
   )
   check(
     `${panel.name} (${report.row}): and the library's heading is under it, on screen`,
@@ -872,6 +899,49 @@ for (const { panel, report } of await measureAll(browser, probe, PANELS)) {
       film.studios.bottom <= film.actions.top + 0.5,
     `description ends ${film.description.bottom}, genres ${film.genres.top}..${film.genres.bottom}, ` +
       `studios ${film.studios.top}..${film.studios.bottom}, actions from ${film.actions.top}`,
+  )
+  console.log("")
+}
+
+/* The same library page with the longest description a server sends. A library's hero is a floor
+   rather than a height - the description under its facts is read in full where it stands, so the hero
+   grows with the text - and what has to hold instead is that the whole of the description is drawn,
+   that the copy stays inside the hero, and that the heading, the count, the tools and the grid follow
+   the hero rather than being run over by it. The page as it loads without `?synopsis=long` carries the
+   usual description - the line or two the composition's two-line reserve is for, which is the short
+   end of the same range - so the two ends are both measured, at every panel size. */
+console.log("\nThe library page with a description several times the length of the usual one\n")
+for (const { panel, report } of await measureAll(browser, probe, PANELS, "?synopsis=long")) {
+  const library = report.library
+  const written = library.description
+  const step = Math.round((library.copy.actionsTop - library.copy.synopsisBottom) * 10) / 10
+  console.log(
+    `     ${panel.name}: hero ${library.hero.top}..${library.hero.bottom} (${library.hero.height} tall, ` +
+      `${Math.round((library.hero.height / report.fold) * 100)}% of the screen)\n` +
+      `     description ${written.lines} lines ${written.top}..${written.bottom} (${written.height} tall, clipped ${written.clipped})\n` +
+      `     heading ${library.head.top}..${library.head.bottom}  count ends ${library.count.bottom}  ` +
+      `tools end ${library.tools.bottom}  grid begins ${library.gridTop}  ` +
+      `art ${library.art.top}..${library.art.bottom} of ${report.fold}`,
+  )
+  check(
+    `${panel.name} (long description): the whole of the library's description is drawn, with nothing clamped off it`,
+    written.clipped === false && written.lines > 2,
+    `${written.lines} lines ${written.top}..${written.bottom}, clipped ${written.clipped}`,
+  )
+  check(
+    `${panel.name} (long description): and the hero grows to hold the copy it carries`,
+    library.copyInside && library.hero.height > report.fold * 0.42 + 1,
+    `hero ${library.hero.height} of ${report.fold}, copy ${library.copy.top}..${library.copy.bottom} inside ${library.hero.top}..${library.hero.bottom}`,
+  )
+  check(
+    `${panel.name} (long description): and the page under the hero follows it rather than being run over by it`,
+    library.headFollowsHero && library.gridTop >= library.head.bottom - 0.5,
+    `hero ends ${library.hero.bottom}, heading ${library.head.top}..${library.head.bottom}, grid begins ${library.gridTop}`,
+  )
+  check(
+    `${panel.name} (long description): and the row of actions keeps its step below the description, and the title its own box`,
+    step >= 12 && step <= 20 && Math.abs(library.copy.title - 92) <= 1,
+    `a ${step} step, title box ${library.copy.title}`,
   )
   console.log("")
 }

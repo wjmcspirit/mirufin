@@ -145,7 +145,7 @@
                   <div class="hero-title"><h1>Underworld Awakening</h1></div>
                   <p class="hero-episode"></p>
                   <p class="kicker">2012 · 1h 28m · R · 6.3 <span class="star" aria-hidden="true">★</span> · Rotten 25% Critics</p>
-                  <p class="overview clamp">
+                  <p class="overview clamp" id="library-overview">
                     Having escaped years of imprisonment, vampire warrioress Selene finds herself in a
                     changed world where humans have discovered the existence of both Vampire and Lycan.
                   </p>
@@ -345,6 +345,26 @@
         if (/(^|[?&])free=1(&|$)/.test(location.search)) {
           document.querySelector(".hero").style.height = "auto"
         }
+        /**
+         * The library's featured title with the longest description a server sends: a series'
+         * synopsis that runs to several times the length of the usual one, which is the tallest copy
+         * a library's hero is ever drawn with. `?synopsis=long` draws it before anything is measured,
+         * so what the hero does with a description that cannot be clamped into two lines is measured
+         * rather than assumed. The page as it loads without it carries the usual description - the
+         * line or two the composition's own two-line reserve is for - so the two ends of the range are
+         * both measured.
+         */
+        if (/(^|[?&])synopsis=long(&|$)/.test(location.search)) {
+          document.getElementById("library-overview").textContent =
+            "A description of the sort a server actually sends for a series, and then keeps sending: " +
+            "this one runs to several times the length of the usual line, which is the tallest copy a " +
+            "library's hero is ever drawn with. The description under the facts of the title a library " +
+            "features is read in full where it stands, so the hero is sized by it rather than by a " +
+            "fixed share of the screen, and the heading, the count, the tools and the grid under the " +
+            "hero follow it down the page. Nothing is cut off the end of this text and no control " +
+            "under it opens the rest anywhere else, because there is no rest: the whole of it is " +
+            "drawn, over as many lines as the words need at this width."
+        }
         // Under a root zoom the browser reports rectangles in scaled pixels, so one factor
         // converts every measurement back into design units - and it is read off the shell,
         // whose height the stylesheet pins to --app-height.
@@ -454,6 +474,7 @@
           libShell.style.display = "grid"
 
           var hero = units(libShell.querySelector(".hero"))
+          var copyBox = units(libShell.querySelector(".hero .hero-copy"))
           var head = units(libShell.querySelector(".library-head"))
           var count = units(libShell.querySelector(".count-line"))
           var tools = units(libShell.querySelector(".library-icons"))
@@ -488,8 +509,32 @@
                 synopsisBottom: round(description.bottom),
                 actionsTop: round(actions.top),
                 title: round(units(libShell.querySelector(".hero .hero-title")).height),
+                // The copy's own box, padding included: it is what the hero is as tall as when the
+                // copy needs more room than the share of the screen the composition stands at.
+                box: round(copyBox.height),
               }
             })(),
+            // The description itself, as it is drawn: how tall it is, how many lines that is, and
+            // whether any of it was cut off. A clamped paragraph reports its own content as taller
+            // than the box it was given, which is exactly what this catches - so a description that
+            // is drawn in full is one that does not report itself as clipped.
+            description: (function () {
+              var node = libShell.querySelector("#library-overview")
+              var lineHeight = parseFloat(getComputedStyle(node).lineHeight) || 0
+              var box = units(node)
+              return {
+                top: round(box.top),
+                bottom: round(box.bottom),
+                height: round(box.height),
+                lineHeight: round(lineHeight),
+                lines: lineHeight ? round(box.height / lineHeight) : 0,
+                clipped: node.scrollHeight > node.clientHeight + 1,
+              }
+            })(),
+            // The whole copy has to stay inside the hero - it is the hero's own box that clips - and
+            // the page under the hero has to follow it rather than be run over by it.
+            copyInside: copyBox.top >= hero.top - 0.5 && copyBox.bottom <= hero.bottom + 0.5,
+            headFollowsHero: head.top >= hero.bottom - 0.5,
             // The library's own one left edge: the hero's title, the heading under it and the first
             // card in the grid are three different boxes, and they have to begin in the same place.
             lefts: {
