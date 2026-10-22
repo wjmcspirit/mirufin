@@ -192,7 +192,18 @@ Note "Pushed master and v$nextName"
 Step 'Publishing the GitHub release'
 
 # The same credential git push just used. It is never written to output.
-$credential = ("protocol=https`nhost=github.com`n`n" | git credential fill 2>$null)
+#
+# The question is handed to git through a file rather than through a pipe. Git answers a credential
+# request that arrives on a pipe with "refusing to work with credential missing protocol field" -
+# and answers the identical request on a file handle, which is what a console hands it. The file
+# holds the question only, never the answer, and it is removed as soon as the answer has been read.
+$ask = Join-Path ([System.IO.Path]::GetTempPath()) "mirufin-credential-$PID.txt"
+Set-Content -Path $ask -Value "protocol=https`nhost=github.com`n" -Encoding Ascii -NoNewline
+try {
+    $credential = (& $env:ComSpec /c "git credential fill < `"$ask`"" 2>$null)
+} finally {
+    Remove-Item $ask -ErrorAction SilentlyContinue
+}
 $token = ($credential | Where-Object { $_ -like 'password=*' }) -replace '^password=', ''
 if (-not $token) { throw 'No stored GitHub credential was available, so the release was not published. The version bump is committed and pushed; run this script again to publish it.' }
 $headers = @{ Authorization = "Bearer $token"; Accept = 'application/vnd.github+json'; 'User-Agent' = 'Mirufin' }
