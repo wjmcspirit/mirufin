@@ -1774,6 +1774,7 @@ html:not(.remote) .nav:hover .nav-label {
 .card-board,
 .letter-row,
 .detail-layout,
+.episode-spot,
 .search-hits,
 .problem,
 .empty,
@@ -2014,18 +2015,22 @@ select {
   grid-template-columns: minmax(0, 1fr);
   gap: 22px;
 }
-/* A page that browses a season: the season selector across the top, the cinematic banner over the
-   episode row, and the row itself directly under the banner.
+/* A page that browses a season: the cinematic banner - the season's own poster beside the show's
+   logo, its facts and its synopsis - then the season selector on its own row, the row of stills, the
+   episode the remote is on described under the row with the action that settles it, and the title's
+   own actions under that.
 
    The page's own head - a portrait beside the copy - belongs to a title's own page. Here the
-   banner is the head: it stands on the series' full-bleed backdrop, which `ItemPage` pins from
-   the item the page is about, so the artwork is the dominant thing on the screen and no second,
-   smaller copy of it is painted inside the block.
+   banner is the head, and the season's poster stands in it beside the copy: it stands on the
+   series' full-bleed backdrop, which `ItemPage` pins from the item the page is about, so the
+   artwork is the dominant thing on the screen and no second, smaller copy of it is painted inside
+   the block.
 
-   Its height is the shared hero's share of the television, stepped down once so that the season
-   selector above it and the whole episode row below it - the stills and the caption under them -
-   are on screen together at 1080p without a scroll. The row is what the viewer came for and the
-   banner is what says which episode they are looking at, so neither may be pushed off the bottom
+   Its height is the shared hero's share of the television, and the season's poster is what it is
+   drawn at: the poster is a fixed 2:3 box, so the banner is the same height at every panel size and
+   the season selector and the whole episode row - the stills and the caption under them - are on
+   screen together at 1080p without a scroll. The row is what the viewer came for and the banner is
+   what says which show and which season they are browsing, so neither may be pushed off the bottom
    edge.
 
    It is a floor rather than a height, which is the one place this banner differs from Home's hero:
@@ -2037,27 +2042,46 @@ select {
   height: auto;
   min-height: calc(var(--app-height, 100dvh) * 0.40);
 }
+/* The season's own poster, at the head of the page that browses it: the season the viewer is in, in
+   the artwork the show's own page draws it with. It is a child of the banner, so it stands on the
+   banner's bottom edge beside the copy - the relationship a title's own page draws between its
+   poster and its copy - and it begins on the page's content boundary, which is where the season
+   selector, the stills and the actions under them all begin. Its size is stated here rather than
+   taken from the copy, so a long show name can never grow the artwork, and the 2:3 box is the app's
+   own poster shape: a season reads as the same object here as it does on the show's page. A season
+   the server has no picture for borrows the show's own, so the head of the page is never blank. */
+.season-poster {
+  flex: 0 0 auto;
+  width: 240px;
+  aspect-ratio: 2 / 3;
+  margin: 0 0 16px var(--strip-pad);
+  border-radius: 14px;
+  overflow: hidden;
+  background: #12151c;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+.season-poster img, .season-poster .ph {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 /* The banner draws no layer of its own. The shared `.hero.stage-copy` rule already turns a block's
    own gradient off, because the app's heroes stand on the full-bleed stage and the stage's own scrim
    is what keeps the copy legible - and this banner did re-enable one, which put a dark rectangle over
    the left of the artwork with a hard edge along the bottom of the band. The stage behind it is what
    the rest of the app's heroes rest on, so the show's picture reads at full strength here too. */
 /* The banner's copy, spaced by what belongs together. The shared copy gap is the app's rhythm; this
-   banner states the deliberate differences: the season pills are a control row rather than a line of
-   text, so they stand clear of the title above them and of the episode below, while the episode's
-   own line, its facts and its badges stay one group at the shared gap - and the synopsis, which the
-   whole block leads to, stands clear of the tags above it. */
+   banner states its own: the synopsis, which the copy leads to, stands clear of the facts above it,
+   and the show's fact links follow it as the page's own controls. */
 .browse-hero .hero-copy { gap: 7px; }
 .browse-hero .overview { margin-top: 3px; }
 /* The title's box steps down with the banner: a logo is still read from across the room, and the
-   room the copy gives back is what pays for the season selector above it. */
+   room the copy gives back is what pays for the episode described under it and the season selector
+   below that. */
 .browse-hero .hero-title { height: 72px; }
 .browse-hero .hero-title .logo-title { max-height: 72px; }
-/* The episode the remote is on carries the row's own flags - up next, resume, watched - so the
-   banner says about the episode exactly what the episode's own card says. */
-.browse-hero .hero-episode .episode-flag { margin-left: 10px; }
-/* The page's own rhythm above and below the banner: the season selector sits close to it, and the
-   banner sits close to the row it describes. */
+/* The page's own rhythm: the season selector sits close under the banner, the row follows the
+   selector, and the episode the remote is on is described under the row it was chosen from. */
 .browse-page .detail-body { gap: 18px; }
 .season-bar {
   display: block;
@@ -2092,62 +2116,72 @@ select {
   background: var(--violet);
 }
 .season-card.on .card-title { color: #f4f7ff; }
-/* The season pills, inside the banner's own copy: one per season, under the show's title and its
-   facts and above the episode's synopsis, where the viewer is already reading what the page is
-   about. A pill is the app's own small-control shape - the same border, radius and translucent
-   fill as a `.chips` badge, one step larger because it is pressed rather than read - and the season
-   being browsed is filled with the app's violet, so "which season am I in" is answered by the pill
-   the viewer is looking at rather than by an underline they have to find.
+/* The season selector: a line of text tabs on their own row under the banner, one per season,
+   between the show's own head and the row of stills, where the season being browsed is the only
+   thing left to answer. A tab is the season's own name and nothing else - no border, no fill, no
+   pill - so the line reads as the seasons the show holds rather than as a row of buttons, and the
+   season being browsed is marked by the app's violet as a rule under its name.
+   The two states a tab can be in are drawn by two different selectors and never by one: the season
+   being browsed is the `on` state, which the page sets from the season in the address and which
+   stays on that tab when the remote moves away from it, and where the remote *is* is the focus ring.
+   A tab that is merely focused is not a season that has been chosen, and a selected tab carries no
+   ring of its own - so a filled pill is never combined with the underline, and the viewer can tell
+   "the season I am in" from "the tab I am on" at a glance.
    The strip is a `.scroller` like every other row, so the remote walks it sideways and it scrolls
-   when the focused pill reaches the edge - a show with thirteen seasons scrolls the pills the way
-   it scrolls a row of posters - and it is not a snap container for the same reason the episode row
-   is not: the focus engine decides where a pill rests. Its own padding is stated against the
-   strip's class, because the shared `.scroller` padding is the room a poster's ring is drawn into,
-   which a line of pills neither needs nor can spare, and because the first pill has to begin on the
-   same left edge as the title above it. */
+   when the focused tab reaches the edge - a show with thirteen seasons scrolls the tabs the way it
+   scrolls a row of posters - and it is not a snap container for the same reason the episode row is
+   not: the focus engine decides where a tab rests. Its own padding is stated against the strip's
+   class, because the shared `.scroller` padding is the room a poster's ring is drawn into, which a
+   line of text neither needs nor can spare, and because the first tab has to begin on the same left
+   edge as the season poster in the banner above it and the stills below it: the strip carries the
+   page's own content inset itself, and the inset is also what a focused tab's ring is drawn into. */
 .detail-body .season-tabs {
-  align-items: center;
-  gap: 10px;
+  align-items: flex-end;
+  gap: 26px;
   scroll-snap-type: none;
-  /* The room a focused pill's ring is drawn into, and the offset that gives it back: the ring is
-     drawn 3 units outside the pill, so the strip is inset by 4 and pulled back by the same 4 - the
-     first pill still begins on the copy's own left edge, with the ring inside the strip's box
-     rather than clipped by the scroll container. */
-  padding: 6px 4px;
-  margin: 0 -4px;
-  scroll-padding-inline: 4px;
+  padding: 6px var(--strip-pad);
+  scroll-padding-inline: var(--strip-pad);
 }
 .season-tab {
   position: relative;
   flex: 0 0 auto;
-  padding: 7px 14px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.34);
-  font-size: 15px;
+  /* The room the underline is drawn into, and nothing on either side of it: a tab with no inset of
+     its own begins exactly on the page's content edge, like the poster above it and the stills
+     below it, and its rule is exactly as wide as its name. */
+  padding: 4px 0 10px;
+  border: 0;
+  background: none;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: 0.01em;
   color: var(--muted);
   white-space: nowrap;
-  transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+  transition: color 0.16s ease;
 }
-/* The season being browsed: the app's violet at the weight the rest of the app gives a state - a
-   translucent wash and a border in the same colour, not a filled button. Which season the viewer is
-   in is a *state*, and it stays on the pill when the remote moves away from it; the ring below is
-   what says where the remote is. Neither one is drawn by the other: a pill that is selected is not
-   outlined, and a pill that is focused is not selected until it is pressed. */
-.season-tab.on {
-  border-color: rgba(91, 120, 255, 0.65);
-  background: rgba(91, 120, 255, 0.22);
-  color: #eaefff;
+/* The season being browsed: a state, not a control. The app's violet is the rule under the name and
+   nothing else - no wash, no border, no ring - so the mark says which season the episodes under it
+   belong to without competing with the ring that says where the remote is. */
+.season-tab.on { color: #f4f7ff; }
+.season-tab.on::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  border-radius: 99px;
+  background: var(--violet);
 }
 .season-tab:hover { color: #fff; }
+/* Where the remote is: the app's violet as one restrained outline - no wash behind it, no glow
+   around it - drawn 4 units clear of the tab so it reads beside the underline rather than over it. */
 .season-tab:focus,
 .season-tab:focus-visible,
 .season-tab.dpad-focus {
   color: #fff;
-  outline: 3px solid var(--violet);
-  outline-offset: 3px;
+  outline: 2px solid var(--violet);
+  outline-offset: 4px;
+  border-radius: 4px;
 }
 /* The show's own head, and the room the season posters need: the banner steps down a little on the
    show's page - it has no episode row under it to pay for - so the seasons row is on screen at
@@ -2155,10 +2189,11 @@ select {
 .series-head { display: grid; gap: 0; }
 .series-head .browse-hero.stage-copy { min-height: calc(var(--app-height, 100dvh) * 0.34); }
 .series-head .episode-actions { margin-top: 14px; }
-/* The block that browses a season: the banner that describes the episode the remote is on, the
-   row of stills, and the actions under the row. The block's own column is stated for the same
-   reason the page's is - the banner carries a title and a line of facts, and the row must not take
-   its width from either. The banner's own `margin-bottom` is what separates it from the row. */
+/* The block that browses a season: the banner that names the show with the season's poster in it,
+   the season selector, the row of stills, the episode the remote is on described under the row, and
+   the title's actions under that. The block's own column is stated for the same reason the page's is
+   - the banner carries a title and a line of facts, and the row must not take its width from
+   either. */
 .episode-block {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -2232,11 +2267,59 @@ select {
   font-size: 14px;
 }
 .episode-meta .episode-flag { margin-left: 0; }
-/* The actions belong to the row they sit under, so they start where its first still does - on the
-   application's content boundary, which is the strip's own inset and not a number of their own.
-   They used to carry 40 of their own padding, which left them 8 to the right of the row above
-   them at 1080p and 4 at 4K, where the boundary moves with the panel. */
-.episode-actions { margin-top: 14px; padding-inline: var(--strip-pad); }
+/* The episode the remote is on, described under the row that selects it: the episode's own title with
+   the row's flags - up next, resume, watched - then its facts line, which leads with the season and
+   episode number, then what it is made of, then what it is about. The show's own description is not
+   repeated here and this episode's is not drawn in the banner: the banner is the page's head and
+   describes the show, and this block is the episode, so one information area carries one subject.
+   What settles the episode - its watched state - is the first control of the band under this block,
+   on the one row with the title's own actions (see `.episode-actions`).
+   The block begins on the application's content boundary like everything around it: its inset comes
+   from the shared rule above (`.episode-spot` is named there), and this rule states only what is its
+   own - the grid and the measure.
+   Its title is one step down from the banner's, because the show is the page's heading and this is
+   the episode's: the banner names what the viewer is browsing, and this block names the episode the
+   row is resting on. */
+.episode-spot {
+  display: grid;
+  gap: 6px;
+  max-width: 1180px;
+}
+.episode-spot h2 {
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #f4f7ff;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.45);
+}
+.episode-spot .kicker { font-size: 15px; color: #b7c0d0; }
+.episode-spot .chips { margin-top: 2px; }
+.episode-spot .overview { max-width: 78ch; font-size: 15.5px; color: #c9d2e0; }
+/* The number and the name are two things on the one line - which episode it is, and what it is
+   called - so they are set apart by a gap rather than by a word between them: the row's own cards
+   join them with the app's dot, and the block that describes one episode has the room to space them
+   instead. */
+.episode-spot-gap { display: inline-block; width: 10px; }
+/* The one band a season page carries: the episode's own watched state - the episode just described
+   above it, which is what that button settles - and then the title's own actions, the season's Play
+   and the season's own watched toggle among them. They are all the app's own `.btn`, so the row has
+   one button height whatever each control does, and the band's own gap is the whole of the spacing
+   between them; the band wraps only if a panel is too narrow to hold it, which is what keeps the
+   controls on one line at every television size.
+   The band belongs to the row it sits under, so it starts where that row's first still does - on the
+   application's content boundary, which is the strip's own inset and not a number of its own. It
+   used to carry 40 of its own padding, which left it 8 to the right of the row above it at 1080p and
+   4 at 4K, where the boundary moves with the panel. */
+.episode-actions {
+  margin-top: 14px;
+  padding-inline: var(--strip-pad);
+  align-items: center;
+  gap: 10px;
+}
+/* A press in flight says so beside the control it belongs to, and quietly: the button stays where it
+   is and keeps the remote's focus, so this note is the only thing that says the write has not come
+   back yet. */
+.episode-note { color: var(--muted); font-size: 14px; }
 .episode-flag {
   display: inline-block;
   margin-left: 10px;
@@ -3152,8 +3235,9 @@ input[type="range"]::-webkit-slider-thumb {
   .episode-art { width: min(220px, 60%); }
   .hero, .detail-hero { min-height: 420px; }
   /* The browse page's banner is drawn on a canvas this breakpoint does not have - there is no
-     television height to take a share of and no season selector above it to make room for - so
-     the copy is what sets its height here, and the season selector and the episode row follow it. */
+     television height to take a share of and no season selector under it to make room for - so the
+     poster and the copy are what set its height here, and the season selector and the episode row
+     follow it. */
   .browse-hero.stage-copy { height: auto; min-height: 420px; }
 }
 

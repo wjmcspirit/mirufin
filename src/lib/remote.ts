@@ -136,12 +136,12 @@ export function isTextField(node: HTMLElement) {
  * The page's own content, in the order a viewer reads it: the hero's primary action first - the Play
  * a library or a show opens on - then the page's browse surface, which is the row of cards the viewer
  * came for, and only then the hero's remaining controls. That order is what keeps a page browsing a
- * season off its season selector: the pills are the hero's own controls and the episode row is the
- * browse surface, so the remote lands on the episodes and the selector is one press away. It is also
- * what keeps the season selector out of the page's memory: the seat a page files on the way out is
- * whatever the viewer was on, so a page entered on a pill filed a pill - a control linking to another
- * season - and returning to it put the focus ring back on the first season's pill however late the
- * season being browsed was.
+ * season off its season selector: the episode row is the browse surface, so the remote lands on the
+ * episodes and the selector - the row of season tabs the page draws above them - is one press away.
+ * It is also what keeps the season selector out of the page's memory: the seat a page files on the
+ * way out is whatever the viewer was on, so a page entered on a tab filed a tab - a control linking to
+ * another season - and returning to it put the focus ring back on the first season's tab however late
+ * the season being browsed was.
  *
  * A page with none of those - settings, a form, a list of text - keeps the first control it offers,
  * and a text field is never chosen: entering a page must not open the television's keyboard. The

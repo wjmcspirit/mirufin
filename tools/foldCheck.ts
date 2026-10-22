@@ -275,15 +275,19 @@ interface BrowseShape {
   fold: number
   banner: { top: number; bottom: number }
   bannerHeight: number
+  /** The season's own poster, in the banner beside the copy. */
+  poster: { top: number; bottom: number; width: number; height: number }
   /** The copy the banner carries: it has to fit inside the banner rather than be clipped by it. */
   copy: { top: number; bottom: number; height: number }
+  /** The episode the remote is on, described under the row that selects it. */
+  spot: { top: number; bottom: number }
   season: { top: number; bottom: number }
   block: { top: number }
   row: { top: number; bottom: number }
   art: { top: number; bottom: number; width: number; height: number }
   actions: { top: number }
   /** The one content boundary, as each block of the page begins on it. */
-  edges: { copy: number; season: number; row: number; actions: number }
+  edges: { poster: number; copy: number; spot: number; season: number; row: number; actions: number }
 }
 
 /** The season page walked with the remote: where each press of the walk landed. */
@@ -297,18 +301,32 @@ interface SeasonWalkReport {
   fromHero: WalkStep[]
   across: WalkStep[]
   rowDown: WalkStep[]
+  /** Along the one band under the episode's details, sideways: the episode's action, then the title's. */
+  bandAcross: WalkStep[]
   backUp: WalkStep[]
   castUp: WalkStep[]
   rowUp: WalkStep[]
   railAgain: WalkStep[]
   page: { top: number; left: number }
   rowScrollLeft: number
+  /** Where the row had scrolled to at the end of the walk across it, in design units. */
+  rowScrollAfterAcross: number
   /** The focused still and the row's box, in the design units the layout is drawn in. */
   art: { width: number; height: number }
   cardWidth: number
   strip: { left: number; right: number }
   /** The page's content boundary, as every block of the page begins on it. */
-  edges: { copy: number; title: number; season: number; row: number; actions: number; castHeading: number; castCard: number }
+  edges: {
+    poster: number
+    copy: number
+    title: number
+    spot: number
+    season: number
+    row: number
+    actions: number
+    castHeading: number
+    castCard: number
+  }
   /** The same measurement taken before the remote touched the page. */
   rowArt: { width: number; height: number }
   /** On a show's page: where the seasons row and its first poster sit, in design units. */
@@ -362,8 +380,25 @@ interface SeasonReport {
   pageScrollTop: { before: number; atStart: number; atEnd: number; back: number }
   /** The season selector's own box, and what it is made of: a strip that grows needs explaining. */
   seasonBox: { height: number; tab: { width: number; height: number }; padding: string; gap: string; font: string; wrap: string }
-  /** Where each line of the banner's copy begins, so the order they are read in can be asserted. */
-  order: { title: number; episode: number; facts: number; chips: number; seasons: number; overview: number; links: number }
+  /**
+   * The one band under the episode's details: every control on it, where each one sits and how tall
+   * it is. A season page carries one row of them - the episode's own watched state and the title's
+   * own actions - so the row has to hold them all on one line, at one height.
+   */
+  actionsRow: { count: number; tops: number[]; heights: number[]; width: number; wraps: boolean }
+  /** Where each block of the page begins, so the order they are read in can be asserted. */
+  order: {
+    title: number
+    facts: number
+    links: number
+    seasons: number
+    row: number
+    episode: number
+    episodeFacts: number
+    chips: number
+    overview: number
+    actions: number
+  }
   pristine: BrowseShape
   seasonStrip: { clientWidth: number; scrollWidth: number; scrollLeft: number; left: number; right: number; cardIndex: number; cardInside: boolean }
 }
@@ -764,49 +799,92 @@ for (const { panel, report } of await measureSeason(browser, seasonProbe, PANELS
     report.right.length > 0 && report.right.every((step) => step.artWidth === report.right[0].artWidth) && report.right[0].artWidth === 360,
     `${report.right[0]?.artWidth ?? 0} design units`,
   )
-  /* The page's own hierarchy, measured at every panel size: the season selector across the top of
-     the content area, the cinematic banner under it, and the row of stills directly beneath the
-     banner. This is the order Wholphin's series screen has, and the order this page had lost - it
-     opened on a season row and a compact block of details, with no banner over the episodes at
-     all. Everything here is measured from the real stylesheet, in the design units the layout is
-     drawn in, so a panel size cannot change the answer. */
+  /* The page's own hierarchy, measured at every panel size: the cinematic banner that names the show
+     across the top with the season's own poster in it, the season selector on its own row under the
+     banner, the row of stills under the selector, and the episode the remote is on described under the
+     row it was chosen from. Everything here is measured from the real stylesheet, in the design units
+     the layout is drawn in, so a panel size cannot change the answer. */
   const shape = report.pristine
   console.log(
-    `     seasons ${shape.season.top}..${shape.season.bottom}  banner ${shape.banner.top}..${shape.banner.bottom} ` +
-      `(${shape.bannerHeight} tall)  row ${shape.row.top}..${shape.row.bottom}  still ${shape.art.top}..${shape.art.bottom} ` +
-      `of the ${shape.fold}-unit canvas\n` +
-      `     edges copy/season/row/actions ${shape.edges.copy}/${shape.edges.season}/${shape.edges.row}/${shape.edges.actions}\n` +
+    `     banner ${shape.banner.top}..${shape.banner.bottom} (${shape.bannerHeight} tall)  ` +
+      `poster ${shape.poster.width}x${shape.poster.height} at ${shape.poster.top}..${shape.poster.bottom}  ` +
+      `seasons ${shape.season.top}..${shape.season.bottom}  row ${shape.row.top}..${shape.row.bottom}  ` +
+      `spot ${shape.spot.top}..${shape.spot.bottom}  still ${shape.art.top}..${shape.art.bottom} of the ${shape.fold}-unit canvas\n` +
+      `     edges poster/copy/spot/season/row/actions ${shape.edges.poster}/${shape.edges.copy}/${shape.edges.spot}/${shape.edges.season}/${shape.edges.row}/${shape.edges.actions}\n` +
       `     selector ${shape.seasonBox.height} tall, tab ${shape.seasonBox.tab.width}x${shape.seasonBox.tab.height}, ` +
       `padding ${shape.seasonBox.padding}, gap ${shape.seasonBox.gap}, font ${shape.seasonBox.font}, wrap ${shape.seasonBox.wrap}`,
   )
   check(
-    `${panel.name}: the season pills are inside the banner, and the banner above the episode row`,
-    shape.season.top >= shape.banner.top - 1 && shape.season.bottom <= shape.banner.bottom + 1 && shape.banner.bottom <= shape.row.top + 1,
-    `seasons ${shape.season.top}..${shape.season.bottom} against banner ${shape.banner.top}..${shape.banner.bottom}, row starts at ${shape.row.top}`,
-  )
-  /* The order the copy is read in, which is what the viewer asked for: the show's title, then the
-     episode's own line and the tags that describe it, then the season pills, then the episode's
-     synopsis. The pills belong under the title and its tags and above the description, not in a
-     strip of their own above the banner. */
-  check(
-    `${panel.name}: the copy reads title, season pills, episode, tags, description - in that order`,
-    shape.order.title < shape.order.seasons &&
-      shape.order.seasons < shape.order.episode &&
-      shape.order.episode < shape.order.facts &&
-      shape.order.facts < shape.order.chips &&
-      shape.order.chips < shape.order.overview,
-    `title ${shape.order.title}, seasons ${shape.order.seasons}, episode ${shape.order.episode}, facts ${shape.order.facts}, ` +
-      `chips ${shape.order.chips}, description ${shape.order.overview}`,
+    `${panel.name}: the season's own poster stands in the banner, beside the copy`,
+    shape.poster.top >= shape.banner.top - 1 &&
+      shape.poster.bottom <= shape.banner.bottom + 1 &&
+      shape.edges.copy > shape.edges.poster,
+    `poster ${shape.poster.top}..${shape.poster.bottom} in banner ${shape.banner.top}..${shape.banner.bottom}, copy at ${shape.edges.copy}`,
   )
   check(
-    `${panel.name}: the banner keeps the shared hero's own share of the television as its floor`,
-    shape.bannerHeight >= shape.fold * 0.4 - 1,
-    `${shape.bannerHeight} of ${shape.fold} units`,
+    `${panel.name}: and it is drawn as the app's own 2:3 poster box`,
+    Math.abs(shape.poster.width / shape.poster.height - 2 / 3) < 0.01 && Math.abs(shape.poster.width - 240) < 1,
+    `${shape.poster.width}x${shape.poster.height}`,
   )
   check(
-    `${panel.name}: the row sits directly under the banner, with no heading of its own between them`,
-    shape.row.top - shape.banner.bottom <= 16,
-    `${Math.round((shape.row.top - shape.banner.bottom) * 10) / 10} units between them`,
+    `${panel.name}: the season selector sits under the banner, and the row of stills under the selector`,
+    shape.season.top >= shape.banner.bottom - 1 && shape.season.bottom <= shape.row.top + 1,
+    `banner ends ${shape.banner.bottom}, seasons ${shape.season.top}..${shape.season.bottom}, row starts at ${shape.row.top}`,
+  )
+  check(
+    `${panel.name}: and the episode the remote is on is described under the row that selects it`,
+    shape.spot.top >= shape.row.bottom - 1,
+    `spot ${shape.spot.top}..${shape.spot.bottom}, row ends at ${shape.row.bottom}`,
+  )
+  /* The order the page is read in, which is what the viewer asked for: the banner's own copy - the
+     show's title, its facts and its fact links - then the season selector, then the row it browses,
+     then the episode the remote is on described under the row with its number, what it is made of
+     and what it is about, and then the one band under both, which settles the episode and the title
+     on one row. */
+  check(
+    `${panel.name}: the page reads banner, season selector, row, episode, actions - in that order`,
+    shape.order.title < shape.order.facts &&
+      shape.order.facts < shape.order.links &&
+      shape.order.links < shape.order.seasons &&
+      shape.order.seasons < shape.order.row &&
+      shape.order.row < shape.order.episode &&
+      shape.order.episode < shape.order.episodeFacts &&
+      shape.order.episodeFacts < shape.order.chips &&
+      shape.order.chips < shape.order.overview &&
+      shape.order.overview < shape.order.actions,
+    `title ${shape.order.title}, facts ${shape.order.facts}, links ${shape.order.links}, seasons ${shape.order.seasons}, ` +
+      `row ${shape.order.row}, episode ${shape.order.episode}, episode facts ${shape.order.episodeFacts}, ` +
+      `chips ${shape.order.chips}, description ${shape.order.overview}, actions ${shape.order.actions}`,
+  )
+  /* The band under the episode's details is one row: the episode's own watched state and the title's
+     own actions share it, so every control begins on the same line and is the same height whatever
+     each one does. A band that wrapped, or a button drawn at another size, is what this catches. */
+  const band = shape.actionsRow
+  const bandTops = [...new Set(band.tops.map((top) => Math.round(top)))]
+  const bandHeights = [...new Set(band.heights.map((height) => Math.round(height)))]
+  console.log(
+    `     band: ${band.count} controls on ${bandTops.length} line(s) of ${band.width} units, ` +
+      `tops ${band.tops.join("/")}, heights ${band.heights.join("/")}`,
+  )
+  check(
+    `${panel.name}: the watched actions and the title's own actions share one row under the episode's details`,
+    band.count >= 3 && bandTops.length === 1 && !band.wraps,
+    `${band.count} controls on ${bandTops.length} line(s), tops ${band.tops.join(", ")}, wraps ${band.wraps}`,
+  )
+  check(
+    `${panel.name}: and every control on it is the same height, so the row reads as one row`,
+    bandHeights.length === 1,
+    `heights ${band.heights.join(", ")}`,
+  )
+  check(
+    `${panel.name}: the row sits directly under the season selector, with no heading between them`,
+    shape.row.top - shape.season.bottom <= 16,
+    `${Math.round((shape.row.top - shape.season.bottom) * 10) / 10} units between them`,
+  )
+  check(
+    `${panel.name}: the banner is drawn at the season's poster, and keeps the shared hero's own share of the television`,
+    shape.bannerHeight >= shape.poster.height - 1 && shape.bannerHeight >= shape.fold * 0.4 - 1,
+    `banner ${shape.bannerHeight} of ${shape.fold}, poster ${shape.poster.height}`,
   )
   check(
     `${panel.name}: the banner and the whole row - stills and the caption under them - are on screen without a scroll`,
@@ -814,16 +892,22 @@ for (const { panel, report } of await measureSeason(browser, seasonProbe, PANELS
     `banner at ${shape.banner.top}, stills end at ${shape.art.bottom}, row ends at ${shape.row.bottom}, of ${shape.fold}`,
   )
   check(
-    `${panel.name}: the row is entered below the banner rather than off the bottom edge`,
-    shape.art.top > shape.banner.bottom && shape.art.top < shape.fold,
-    `stills start at ${shape.art.top}, banner ends at ${shape.banner.bottom}, of ${shape.fold}`,
+    `${panel.name}: the row is entered below the selector rather than off the bottom edge`,
+    shape.art.top > shape.season.bottom && shape.art.top < shape.fold,
+    `stills start at ${shape.art.top}, selector ends at ${shape.season.bottom}, of ${shape.fold}`,
   )
   check(
-    `${panel.name}: the banner's copy, the season selector, the first still and the actions share one left edge`,
-    Math.abs(shape.edges.copy - shape.edges.season) <= 1 &&
+    `${panel.name}: the season's poster, the episode described under the row, the season selector, the first still and the actions share one left edge`,
+    Math.abs(shape.edges.poster - shape.edges.spot) <= 1 &&
+      Math.abs(shape.edges.spot - shape.edges.season) <= 1 &&
       Math.abs(shape.edges.season - shape.edges.row) <= 1 &&
       Math.abs(shape.edges.row - shape.edges.actions) <= 1,
-    `copy ${shape.edges.copy}, season ${shape.edges.season}, row ${shape.edges.row}, actions ${shape.edges.actions}`,
+    `poster ${shape.edges.poster}, spot ${shape.edges.spot}, season ${shape.edges.season}, row ${shape.edges.row}, actions ${shape.edges.actions}`,
+  )
+  check(
+    `${panel.name}: and the banner's copy sits to the right of the poster, as a title's page draws its copy`,
+    shape.edges.copy > shape.edges.poster,
+    `poster ${shape.edges.poster}, copy ${shape.edges.copy}`,
   )
   check(
     `${panel.name}: and the copy the banner carries fits inside the banner rather than being clipped by it`,
@@ -1286,12 +1370,18 @@ for (const { shape } of WALK_SHAPES) {
   for (const { panel, report } of await measurePage<SeasonWalkReport>(browser, seasonWalkProbe, PANELS, `?shape=${shape}`)) {
     const landed = (walk: WalkStep[]) => walk.map((step) => step.group).join(" -> ")
     const edges = report.edges
-    const boundary = edges.copy
-    const strays = Object.entries(edges).filter(([, value]) => value >= 0 && Math.abs(value - boundary) > 1)
+    // On a season's page the boundary is the season poster in the banner: the copy stands to its
+    // right, as a title's page draws its copy beside its poster. On a show's page the banner carries
+    // no poster, so its copy is the boundary.
+    const boundary = shape === "series" ? edges.copy : edges.poster
+    const beside = shape === "series" ? [] : ["copy", "title"]
+    const strays = Object.entries(edges).filter(
+      ([name, value]) => !beside.includes(name) && value >= 0 && Math.abs(value - boundary) > 1,
+    )
     check(
-      `${panel.name} (${shape}): the banner's copy, its title, the season selector, the row, the actions and the cast share one left edge`,
-      strays.length === 0,
-      `boundary ${boundary}, ${strays.map(([name, value]) => `${name} at ${value}`).join(", ")}`,
+      `${panel.name} (${shape}): the season's poster, the episode described under the row, the selector, the row, the actions and the cast share one left edge`,
+      strays.length === 0 && (shape === "series" || edges.copy > edges.poster),
+      `boundary ${boundary}, copy at ${edges.copy}, ${strays.map(([name, value]) => `${name} at ${value}`).join(", ")}`,
     )
     check(
       `${panel.name} (${shape}): the episode still is the size the row is designed at`,
@@ -1303,37 +1393,53 @@ for (const { shape } of WALK_SHAPES) {
       shape === "series" || Math.abs(report.rowArt.width / report.rowArt.height - 16 / 9) < 0.01,
       `${report.rowArt.width}x${report.rowArt.height}`,
     )
-    // Down from the banner's own controls: on a season's page the episode row is the page's next
-    // step, and on a show's page the show's own actions come first - they are part of its head -
-    // and the seasons row is the row under them.
+    // Down from the banner's own controls: on a season's page the season selector is the next step -
+    // it is the row the page draws under the episode it describes - and the episode row follows it;
+    // on a show's page the show's own actions come first (they are part of its head) and the seasons
+    // row is the row under them.
     check(
       `${panel.name} (${shape}): Down from the banner's own controls reaches the page's next row`,
       shape === "series"
         ? report.fromHero[0]?.group === "actions" && report.fromHero[1]?.group === "seasons"
-        : report.fromHero[0]?.group === "episodes",
+        : report.fromHero[0]?.group === "seasons" && report.fromHero[1]?.group === "episodes",
       landed(report.fromHero),
     )
     check(
       `${panel.name} (${shape}): Right and Left walk the row, and the row follows`,
       shape === "series" ||
-        (report.across.length > 0 && report.across.every((step) => step.group === "episodes" && step.inRow) && report.rowScrollLeft > 0),
-      `${landed(report.across)}, scrolled ${report.rowScrollLeft}`,
+        (report.across.length > 0 &&
+          report.across.every((step) => step.group === "episodes" && step.inRow) &&
+          report.rowScrollAfterAcross > 0),
+      `${landed(report.across)}, scrolled ${report.rowScrollAfterAcross} by the end of the walk across`,
     )
     check(
-      `${panel.name} (${shape}): Down from the episode row reaches the actions under it and then the cast`,
+      `${panel.name} (${shape}): Down from the episode row reaches the band that settles it, and then the cast`,
       shape === "series" || (report.rowDown[0]?.group === "actions" && report.rowDown[1]?.group === "cast"),
       landed(report.rowDown),
     )
-    // Up from the cast: on a season's page it has to find the row above it - never the rail - and on
-    // a show's page the seasons it was browsing from.
+    /* The band under the episode's details is walked sideways: the episode's own watched state comes
+       first, and the title's own actions - the season's Play and its watched toggle among them -
+       follow it on the same row. This is what says the two watched controls are one row rather than
+       two bands, and that the episode's action is the one the episode is settled with. */
+    check(
+      `${panel.name} (${shape}): Right walks the band from the episode's own watched state to the title's actions`,
+      shape === "series" ||
+        (report.bandAcross.length === 2 &&
+          report.bandAcross.every((step) => step.group === "actions") &&
+          report.bandAcross[0]?.name !== report.bandAcross[1]?.name),
+      `${report.bandAcross.map((step) => `${step.name} (${step.group})`).join(" -> ")}`,
+    )
+    // Up from the cast: on a season's page it has to find the row above it, through the one band
+    // under the episode's details - never the rail - and on a show's page the seasons it was
+    // browsing from.
     check(
       `${panel.name} (${shape}): Up from the cast returns to the page's own content above it`,
       shape === "series" ? report.castUp[0]?.group === "seasons" : report.castUp.some((step) => step.group === "episodes" && step.inRow),
       landed(report.castUp),
     )
     check(
-      `${panel.name} (${shape}): Up from the episode row returns to the banner above it, not to the rail`,
-      shape === "series" || report.rowUp[0]?.group === "hero",
+      `${panel.name} (${shape}): Up from the episode row returns to the season selector above it, not to the rail`,
+      shape === "series" || report.rowUp[0]?.group === "seasons",
       landed(report.rowUp),
     )
     // The show's page exists to open a season from, so its season posters have to be on the screen
@@ -1352,17 +1458,17 @@ for (const { shape } of WALK_SHAPES) {
       )
     }
     // The season selector on the season's page is the page's own first step, and Down from it is a
-    // request for the episodes: the banner's own controls come first - they are part of the banner
-    // the selector stands above - and the row is the next step under them. The cast is never what
-    // either press reaches, so the row is not skipped on the way down the page. On the show's page
-    // the seasons row is the page's last browse surface, and Down from it reaches the cast.
+    // request for the episodes: the row is the next step under it, because the selector stands
+    // between the episode the page describes and the row it browses. The cast is never what either
+    // press reaches, so the row is not skipped on the way down the page. On the show's page the
+    // seasons row is the page's last browse surface, and Down from it reaches the cast.
     check(
       shape === "series"
         ? `${panel.name} (series): Down from the seasons row reaches the cast, the page's next step`
-        : `${panel.name} (season): Down from the season selector walks the banner and then reaches the episode row`,
+        : `${panel.name} (season): Down from the season selector reaches the episode row, the page's next step`,
       shape === "series"
         ? report.fromSeasons[0]?.group === "cast"
-        : report.fromTabs[0]?.group === "hero" && report.fromTabs[1]?.group === "episodes",
+        : report.fromTabs[0]?.group === "episodes",
       shape === "series" ? landed(report.fromSeasons) : landed(report.fromTabs),
     )
     const walked = [

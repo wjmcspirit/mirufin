@@ -622,8 +622,6 @@ function episodeRow(main: El, count: number, withActions = true) {
   const h2 = new El("h2")
   h2.text = "Season 2"
   head.add(h2)
-  const spot = new El("div", "episode-spot")
-  spot.place(300, 400, 1000, 104)
   const scroller = new El("div", "scroller episode-scroller")
   scroller.place(430, 400, 1336, HEIGHT)
   scroller.clientWidth = 1336
@@ -647,36 +645,46 @@ function episodeRow(main: El, count: number, withActions = true) {
     scroller.add(card)
     return card
   })
+  // The episode the remote is on is described under the row that selects it, and the band under that
+  // description is one row: the episode's own watched state first - it settles the episode just
+  // described - and then the title's own actions, the season's Play among them. They are the same
+  // `.btn` the page draws, laid out side by side in one `.actions` band.
+  const spot = new El("div", "episode-spot")
+  spot.place(720, 400, 1000, 104)
   const actions = new El("div", "actions episode-actions")
-  actions.place(720, 400, 700, 48)
+  actions.place(840, 400, 900, 48)
+  const spotAction = new El("button", "btn icon-btn")
+  spotAction.text = "Mark Watched"
+  spotAction.place(850, 440, 176, 48)
+  actions.add(spotAction)
   const play = new El("button", "btn btn-primary")
   play.text = "Play"
-  play.place(730, 440, 176, 48)
+  play.place(850, 626, 176, 48)
   if (withActions) actions.add(play)
-  section.add(head, spot, scroller, actions)
+  section.add(head, scroller, spot, actions)
   main.add(section)
-  return { section, scroller, cards, play, actions }
+  return { section, scroller, cards, play, spotAction, actions }
 }
 
 /**
- * The season page's own shape, as the app renders it: a head whose controls are the season's fact
- * links, then the episode block - the season heading, the episode the remote is on, the row of
- * stills and the band under it, which carries the season and focused-episode watched controls -
- * then the cast, and then what the viewer might watch next.
+ * The season page's own shape, as the app renders it: a head whose controls are the show's fact
+ * links, then the episode block - the episode the remote is on, the season selector on its own row
+ * under it, the row of stills, and the band under the row, which carries the season and
+ * focused-episode watched controls - then the cast, and then what the viewer might watch next.
  *
- * A season is now a title that can be marked watched as a whole, and the band also offers the
- * watched toggle for the episode the row is on. That is the shape the reported bug happened in:
- * with the fact links under the row instead of in the head, Down from the row reached a genre label
- * and Up from the cast reached a label rather than the row.
+ * A season is a title that can be marked watched as a whole, and the band also offers the watched
+ * toggle for the episode the row is on. That is the shape the reported bug happened in: with the
+ * fact links under the row instead of in the head, Down from the row reached a genre label and Up
+ * from the cast reached a label rather than the row.
  */
 function seasonPage(main: El) {
-  const hero = new El("header", "detail-hero stage-copy")
-  hero.place(60, 0, 1920, 420)
+  const hero = new El("header", "hero stage-copy browse-hero")
+  hero.place(60, 0, 1920, 230)
   const links = new El("p", "meta-links genre-pills")
   const pills = ["/library/L1?genre=Drama", "/library/L1?genre=Crime"].map((href, index) => {
     const pill = new El("a", "").attr("href", href)
     pill.text = index === 0 ? "Drama" : "Crime"
-    pill.place(320 + index * 120, 50, 110, 40)
+    pill.place(240, 50 + index * 120, 110, 40)
     links.add(pill)
     return pill
   })
@@ -686,11 +694,26 @@ function seasonPage(main: El) {
   // The row and the band under it. The band carries the season and focused-episode watched
   // controls, so the row's next step down the page is that band and then the cast.
   const block = episodeRow(main, 12, true)
+  // The season selector, on its own row between the episode the page describes and the row it
+  // browses: it is a strip of its own, so the remote reaches it on the way down and again on the
+  // way back up, and pressing a pill changes the season the page is browsing.
+  const tabs = new El("nav", "scroller season-tabs")
+  tabs.place(404, 400, 1336, 26)
+  const seasonTabs = ["S1", "S2", "S3"].map((id, index) => {
+    const tab = new El("a", index === 1 ? "season-tab on" : "season-tab").attr("href", `/item/SERIES?season=${id}`)
+    tab.text = `Season ${index + 1}`
+    tab.place(406, 400 + index * 120, 110, 22)
+    tabs.add(tab)
+    return tab
+  })
+  // Splice it in where the page draws it: under the banner, above the row it browses.
+  tabs.parent = block.section
+  block.section.children.splice(1, 0, tabs)
   const cast = people(main, ["P1", "P2", "P3", "P4", "P5", "P6"], "Cast", 1200)
   const similar = row(main, "If you liked this", ["/item/S1", "/item/S2", "/item/S3"])
   similar.scroller.place(1500, 0, 1600, 300)
   similar.cards.forEach((card, index) => card.place(1500, index * 200, 168, 252))
-  return { hero, links, pills, block, cast, similar }
+  return { hero, links, pills, block, tabs, seasonTabs, cast, similar }
 }
 
 /** The part of the row's own contents the strip is showing, in the coordinates it lays out in. */
@@ -1099,10 +1122,11 @@ function testSeasonWalk() {
 /**
  * The season page with the remote: the moves the viewer reported broken.
  *
- * Down from the head enters the episode row, Right and Left walk it, Down from the row reaches
- * the actions under it and then the cast, Up from the cast comes back through the actions to the
- * row, and Up from the row returns to the head. None of it may fall back to the navigation rail
- * while the page has a step of its own in that direction.
+ * Down from the head reaches the season selector and then the episode row, Right and Left walk the
+ * row, Down from the row reaches the one band under the episode's details - the episode's own
+ * watched state first, with the title's own actions beside it on the same row - Right and Left walk
+ * that band, Down from it reaches the cast, and Up comes back through all of them. None of it may
+ * fall back to the navigation rail while the page has a step of its own in that direction.
  */
 function testSeasonPageWalk() {
   clearSeats()
@@ -1113,7 +1137,10 @@ function testSeasonPageWalk() {
 
   placeFocus(season.pills[0])
   moveFocus("ArrowDown")
-  check("Down from the head enters the episode row", active !== null && season.block.cards.includes(active), label(active))
+  check("Down from the head reaches the season selector", active !== null && season.seasonTabs.includes(active), label(active))
+
+  moveFocus("ArrowDown")
+  check("and Down from the selector enters the episode row", active !== null && season.block.cards.includes(active), label(active))
 
   placeFocus(season.block.cards[0])
   moveFocus("ArrowRight")
@@ -1122,20 +1149,33 @@ function testSeasonPageWalk() {
   check("and Left walks it back", active === season.block.cards[0], label(active))
 
   moveFocus("ArrowDown")
-  check("Down from the episode row reaches the actions under it", active === season.block.play, label(active))
+  check("Down from the episode row reaches the band that settles the episode", active === season.block.spotAction, label(active))
+
+  moveFocus("ArrowRight")
+  check("and Right walks that band sideways to the title's own actions", active === season.block.play, label(active))
+
+  moveFocus("ArrowLeft")
+  check("and Left walks it back to the episode's own watched state", active === season.block.spotAction, label(active))
 
   moveFocus("ArrowDown")
-  check("Down again reaches the cast", active !== null && season.cast.links.includes(active), label(active))
+  check("and Down from the band reaches the cast", active !== null && season.cast.links.includes(active), label(active))
 
   moveFocus("ArrowUp")
-  check("Up from the cast returns to the actions under the row", active === season.block.play, label(active))
+  check(
+    "Up from the cast returns to the band under the episode's details, never past it",
+    active !== null && season.block.actions.children.includes(active as El),
+    label(active),
+  )
 
   moveFocus("ArrowUp")
-  check("Up again returns to the episode row", active !== null && season.block.cards.includes(active), label(active))
+  check("and Up again returns to the episode row", active !== null && season.block.cards.includes(active), label(active))
 
   moveFocus("ArrowUp")
-  check("Up from the episode row returns to the head", active !== null && season.pills.includes(active), label(active))
-  check("and not to the navigation rail", !(active instanceof El) || !active.closest(".side"), label(active))
+  check("Up from the episode row returns to the season selector", active !== null && season.seasonTabs.includes(active), label(active))
+
+  moveFocus("ArrowUp")
+  check("and Up again returns to the head", active !== null && season.pills.includes(active), label(active))
+  check("and never to the navigation rail", !(active instanceof El) || !active.closest(".side"), label(active))
 }
 
 /**
@@ -2937,12 +2977,13 @@ function testFocusDeclarations() {
  *
  * The order the landing looks in is the order a viewer reads a page: the hero's primary action, then
  * the page's browse surface, then the hero's remaining controls. It is what keeps a page that browses
- * a season off its season selector - the pills are the hero's own controls and the episode row is the
- * browse surface, so the remote lands on the episodes and the selector is one press away. It is also
- * what keeps the selector out of the page's memory: the seat a page files on the way out is whatever
- * the viewer was on, so a page entered on a pill filed a pill - a control linking to another season -
- * and returning to that page put the focus ring back on the first season's pill, however late the
- * season being browsed was. That is the defect these checks are here to keep out.
+ * a season off its season selector - the episode row is the browse surface and the selector is the
+ * row of season tabs the page draws above it, so the remote lands on the episodes and the selector is
+ * one press away. It is also what keeps the selector out of the page's memory: the seat a page files
+ * on the way out is whatever the viewer was on, so a page entered on a tab filed a tab - a control
+ * linking to another season - and returning to that page put the focus ring back on the first
+ * season's tab, however late the season being browsed was. That is the defect these checks are here
+ * to keep out.
  */
 function testLandingPolicy() {
   const nodes = (list: El[]) => list as unknown as HTMLElement[]
@@ -2959,8 +3000,10 @@ function testLandingPolicy() {
   const page = box("div", "detail browse-page")
   const main = box("div", "main", page)
   const hero = box("header", "hero stage-copy browse-hero", main)
-  const copy = box("div", "hero-copy", hero)
-  const pills = box("nav", "scroller season-tabs", copy)
+  box("div", "hero-copy", hero)
+  // The season selector is the page's own control row, drawn under the episode it describes and
+  // above the row it browses - not a control of the hero's.
+  const pills = box("nav", "scroller season-tabs", main)
   const firstPill = box("a", "season-tab", pills)
   const selectedPill = box("a", "season-tab on", pills)
   const row = box("div", "scroller episode-scroller", main)

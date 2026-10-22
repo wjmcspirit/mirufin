@@ -3,10 +3,10 @@
  * app's own navigation engine. It reports where focus landed at every press - the page's own
  * groups, in the page's own order - so a skip can be seen rather than argued about.
  *
- * `?shape=season` draws the season page (its head, then the episode block, then the cast), and
- * `?shape=series` draws the series page's shape (the same head and episode block with the seasons
- * row between them, and the title's own actions plus the focused episode's watched toggle in the
- * band under the row).
+ * `?shape=season` draws the season page (its head, then the episode block - the banner, the episode
+ * the remote is on described under it, the season selector on its own row, the row of stills and
+ * the actions under the row - then the cast), and `?shape=series` draws the series page's shape (the
+ * same banner and the show's own actions plus the seasons row under them).
  *
  * `tools/foldCheck.ts` drives this page in a headless browser and asserts what comes back.
  */
@@ -140,14 +140,15 @@
     seasonCards = fill(seasonStrip, 9, seasonCard)
     body.appendChild(seasons)
   } else {
-    // The season's page: the season pills, which belong inside the banner's own copy - they are
-    // inserted there below, between the episode's tags and its synopsis.
+    // The season's page: the season selector, on its own row under the episode the page describes.
+    // It is inserted into the block below, between that description and the row it browses.
     seasonStrip = element("nav", "scroller season-tabs", "season-tabs")
     seasonTabs = fill(seasonStrip, 9, seasonTab)
   }
 
-  // The episode block: the cinematic banner that describes the episode the remote is on, the row
-  // of stills directly under it, and the title's actions under the row.
+  // The episode block: the cinematic banner that names the show, the episode the remote is on
+  // described under it, the season selector on its own row, the row of stills, and the title's
+  // actions under the row.
   var block = element("section", "episode-block", "episode-block")
   var banner = element("header", "hero stage-copy browse-hero", "banner")
   var copy = element("div", "hero-copy", "hero-copy")
@@ -160,47 +161,84 @@
   logo.textContent = "Sheriff Country"
   title.appendChild(logo)
   copy.appendChild(title)
-  var episode = element("p", "hero-episode", "hero-episode")
-  episode.textContent = "S2 E1  ·  Family Trust"
-  copy.appendChild(episode)
   var factsLine = element("p", "kicker", "hero-facts")
-  factsLine.textContent = "October 16, 2026  ·  43m  ·  TV-14  ·  7.9"
-  // The season pills, directly under the title: the order the page draws them in, with the episode's
-  // own line, its tags and its synopsis below.
-  if (shape !== "series") copy.appendChild(seasonStrip)
+  factsLine.textContent = "2019  ·  2 Seasons  ·  TV-14  ·  7.9"
   copy.appendChild(factsLine)
-  var chips = element("p", "chips", "hero-chips")
-  var chipLabels = ["720p", "H.264", "AC3", "5.1", "Subtitles"]
-  for (var c = 0; c < chipLabels.length; c += 1) {
-    var chip = element("span", "", "")
-    chip.textContent = chipLabels[c]
-    chips.appendChild(chip)
-  }
-  copy.appendChild(chips)
-  var overview = element("p", "overview clamp", "")
-  overview.textContent = "A synopsis of the sort a server actually sends: two lines of it at this width."
-  copy.appendChild(overview)
-  // The title's own fact links, where every other page keeps them: in the head, which here is the
-  // banner.
+  // The show's own fact links, where every other page keeps them: in the head, which here is the
+  // banner. The show's own synopsis is not drawn on this page: the episode under the banner is
+  // described in full, and the room is what keeps that description, the selector and the row of
+  // stills on screen together.
   var facts = element("p", "meta-links genre-pills", "hero-links")
   var pills = [element("a", "", "genre-drama"), element("a", "", "genre-crime")]
   pills[0].textContent = "Drama"
   pills[1].textContent = "Crime"
   for (var p = 0; p < pills.length; p += 1) facts.appendChild(pills[p])
   copy.appendChild(facts)
+  // The season's own poster, at the head of the page that browses it: a child of the banner, so it
+  // stands on the banner's bottom edge beside the copy, on the page's content boundary.
+  var poster = null
+  if (shape !== "series") {
+    poster = element("span", "season-poster", "season-poster")
+    poster.setAttribute("data-season", "S2")
+    var posterImg = document.createElement("img")
+    posterImg.setAttribute("alt", "")
+    posterImg.setAttribute("src", ART)
+    poster.appendChild(posterImg)
+    banner.appendChild(poster)
+  }
   banner.appendChild(copy)
+
+  // The episode the remote is on, described under the banner: its own title with the row's flags,
+  // its number and facts, what it is made of, and what it is about.
+  var spot = element("div", "episode-spot", "episode-spot")
+  var spotTitle = element("h2", "", "episode-title")
+  var spotCode = element("span", "episode-code", "")
+  spotCode.textContent = "S2:E1"
+  spotTitle.appendChild(spotCode)
+  var spotGap = element("span", "episode-spot-gap", "")
+  spotTitle.appendChild(spotGap)
+  spotTitle.appendChild(document.createTextNode("Family Trust"))
+  var upNext = element("span", "episode-flag", "")
+  upNext.textContent = "Up next"
+  spotTitle.appendChild(upNext)
+  spot.appendChild(spotTitle)
+  var spotFacts = element("p", "kicker", "episode-facts")
+  spotFacts.textContent = "October 16, 2026  ·  43m  ·  TV-14  ·  7.9"
+  spot.appendChild(spotFacts)
+  var chips = element("p", "chips", "episode-chips")
+  var chipLabels = ["720p", "H.264", "AC3", "5.1", "Subtitles"]
+  for (var c = 0; c < chipLabels.length; c += 1) {
+    var chip = element("span", "", "")
+    chip.textContent = chipLabels[c]
+    chips.appendChild(chip)
+  }
+  spot.appendChild(chips)
+  var overview = element("p", "overview clamp", "episode-overview")
+  overview.textContent = "A synopsis of the sort a server actually sends: two lines of it at this width."
+  spot.appendChild(overview)
 
   var strip = element("div", "scroller episode-scroller", "episode-strip")
   var episodeCards = fill(strip, 12, episodeCard)
-  // The band under the row carries the title's own actions and the focused episode's watched
-  // toggle. A season is now a title that can be marked watched as a whole; a series carries its
-  // own Play and watched controls too. The buttons are the same shape the page draws, so the
-  // walk and the left edge are measured against the real band rather than an empty one.
+  // The one band a season page carries, under the episode's details: the focused episode's watched
+  // toggle first, because the band is under that episode and settling it is what the control is for,
+  // then the title's own actions - the season's Play, the season's own watched toggle and Media
+  // info. A series carries its own Play and watched controls and has no episode to mark, so its band
+  // is the title's own. The buttons are the same shape the page draws, so the walk and the left edge
+  // are measured against the real band rather than an empty one.
   var actions = element("div", "actions episode-actions", "episode-actions")
   var actionButtons = []
+  if (shape !== "series") {
+    var episodeWatched = element("button", "btn icon-btn", "episode-watched")
+    episodeWatched.textContent = "Mark Watched"
+    actionButtons.push(episodeWatched)
+  }
   if (shape === "series") {
     actionButtons.push(element("a", "btn btn-primary", "play"))
     actionButtons[0].textContent = "Play"
+  } else {
+    var play = element("a", "btn btn-primary", "play")
+    play.textContent = "Play"
+    actionButtons.push(play)
   }
   var watched = element("button", "btn icon-btn", shape === "series" ? "show-watched" : "season-watched")
   watched.textContent = shape === "series" ? "Mark show watched" : "Mark season watched"
@@ -208,14 +246,6 @@
   var media = element("button", "btn icon-btn", "media-info")
   media.textContent = "Media info"
   actionButtons.push(media)
-  // The focused episode's watched toggle belongs to a page that browses a season: the show's own
-  // page has no episode to mark, and drawing the control there would put an episode's action under
-  // a page that is about the show.
-  if (shape !== "series") {
-    var episodeWatched = element("button", "btn icon-btn", "episode-watched")
-    episodeWatched.textContent = "Mark episode watched"
-    actionButtons.push(episodeWatched)
-  }
   for (var b = 0; b < actionButtons.length; b += 1) actions.appendChild(actionButtons[b])
   if (shape === "series") {
     // The show's own head: the banner and the show's actions under it, then the seasons row the
@@ -226,7 +256,9 @@
     body.insertBefore(head, body.firstChild)
   } else {
     block.appendChild(banner)
+    block.appendChild(seasonStrip)
     block.appendChild(strip)
+    block.appendChild(spot)
     block.appendChild(actions)
     body.appendChild(block)
   }
@@ -253,8 +285,10 @@
   /** The group of the page a control belongs to, so a walk can say where focus went. */
   function groupOf(node) {
     if (!node || node === document.body) return "none"
-    // The season pills are drawn inside the banner's copy, so they are asked about before the
-    // banner is: a pill is the season selector, not the hero.
+    // The season selector is its own row, between the banner and the row it browses, so it is asked
+    // about before the banner is: a tab is the selector, not the hero. The band under the episode's
+    // details is the page's one actions row - the episode's own watched state and the title's own
+    // actions share it - so it is one group rather than two.
     if (node.closest(".season-tabs")) return "seasons"
     if (node.closest(".browse-hero")) return "hero"
     if (node.closest(".episode-scroller")) return "episodes"
@@ -296,14 +330,18 @@
   }
 
   // The page as it opens, before the remote has touched it: every row is at its own beginning,
-  // so a row's first card is a measurement of the page's layout rather than of a scroll. The
-  // banner's own copy, the season selector's first control, the row's first still and the actions
-  // under the row all have to begin on the application's one content boundary.
+  // so a row's first card is a measurement of the page's layout rather than of a scroll. The season's
+  // poster in the banner, the episode described under the row, the season selector's first control,
+  // the row's first still, the actions under the row and the cast all have to begin on the
+  // application's one content boundary. The banner's own copy sits to the right of the poster, as a
+  // title's page draws its copy beside its poster.
   var pristineArt = episodeCards[0].querySelector(".episode-art").getBoundingClientRect()
   var before = {
     edges: {
+      poster: shape === "series" ? -1 : edgeOf(poster),
       copy: edgeOf(eyebrow),
       title: edgeOf(title),
+      spot: shape === "series" ? -1 : edgeOf(spotTitle),
       season: shape === "series" ? edgeOf(seasonCards[0]) : edgeOf(seasonTabs[0]),
       row: shape === "series" ? -1 : edgeOf(episodeCards[0]),
       actions: edgeOf(actions.firstElementChild),
@@ -320,9 +358,9 @@
     await nextFrame()
     var fromRail = await walk(["ArrowDown"])
 
-    // Down from the season selector on the season's page: the banner's own controls first - the
-    // title's fact links, which are part of the banner - and the episode row under them. The cast
-    // is never what this press reaches, so the row is not skipped on the way down the page.
+    // Down from the season selector on the season's page: the episode row is the next step under it,
+    // because the selector sits between the episode the page describes and the row it browses. The
+    // cast is never what this press reaches, so the row is not skipped on the way down the page.
     var fromTabs = []
     if (shape !== "series") {
       remote.placeFocus(seasonTabs[1])
@@ -350,22 +388,38 @@
     var rowDown = []
     var backUp = []
     var rowUp = []
+    var acrossScroll = 0
     if (shape !== "series") {
       remote.placeFocus(episodeCards[0])
       await nextFrame()
       across = await walk(["ArrowRight", "ArrowRight", "ArrowRight"])
-      rowDown = await walk(["ArrowDown", "ArrowDown"])
+      // Where the row had scrolled to by the time the remote had walked three stills along it: the
+      // row is what follows the remote, so this is measured at the end of the walk across.
+      acrossScroll = design(strip.scrollLeft)
+      // Down out of the row: the episode the page describes carries its own action, so the press
+      // reaches that first, then the title's own band, then the cast.
+      rowDown = await walk(["ArrowDown", "ArrowDown", "ArrowDown"])
       backUp = await walk(["ArrowUp", "ArrowUp", "ArrowUp"])
       remote.placeFocus(episodeCards[2])
       await nextFrame()
       rowUp = await walk(["ArrowUp"])
     }
 
-    // Up from the cast: on a season's page it has to find the row above it, and on a show's page
-    // the seasons it was browsing from.
+    // Along the one band under the episode's details: the episode's own watched state first, then
+    // the title's own actions, all on one row. A sideways press walks that row; a vertical one
+    // leaves it for the cast. Both are measured, because the band being one row is the point.
+    var bandAcross = []
+    if (shape !== "series") {
+      remote.placeFocus(document.querySelector(".episode-actions .btn"))
+      await nextFrame()
+      bandAcross = await walk(["ArrowRight", "ArrowRight"])
+    }
+
+    // Up from the cast: on a season's page it has to find the row above it, through the two action
+    // rows, and on a show's page the seasons it was browsing from.
     remote.placeFocus(castCards[3])
     await nextFrame()
-    var castUp = await walk(["ArrowUp", "ArrowUp"])
+    var castUp = await walk(["ArrowUp", "ArrowUp", "ArrowUp"])
 
     // The page as the viewer leaves it after walking down it: the rail again, from below.
     remote.placeFocus(document.querySelector(".side-nav .nav"))
@@ -399,12 +453,14 @@
       fromHero: fromHero,
       across: across,
       rowDown: rowDown,
+      bandAcross: bandAcross,
       backUp: backUp,
       castUp: castUp,
       rowUp: rowUp,
       railAgain: railAgain,
       page: { top: Math.round(main.scrollTop), left: Math.round(main.scrollLeft) },
       rowScrollLeft: design(strip.scrollLeft),
+      rowScrollAfterAcross: acrossScroll,
       art: { width: design(firstArt.width), height: design(firstArt.height) },
       strip: { left: design(stripBox.left), right: design(stripBox.right) },
       cardWidth: design(episodeCards[0].getBoundingClientRect().width),

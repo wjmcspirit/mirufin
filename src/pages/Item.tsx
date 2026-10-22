@@ -556,9 +556,9 @@ function seasonSubtitle(count: number | undefined, progress: SeasonProgress | un
 }
 
 /**
- * One season's own page: the season selector, the banner that describes the episode the remote is
- * on, the row of stills, and the actions under them - the screen the reference calls the season
- * browser.
+ * One season's own page: the banner that describes the show, the season selector on its own row,
+ * the row of stills, the episode the remote is on described under that row, and the band that
+ * settles it - the screen the reference calls the season browser.
  *
  * This is the destination a season poster on the show's page opens, and it is the one screen that
  * browses a season. It draws the show's own season selector across the top, so changing season is
@@ -651,11 +651,12 @@ function SeasonBody({
             progress={pending ? null : progress}
             series={series}
             actions={actions}
-            // The season selector, drawn by the banner's own copy: under the show's title and its
-            // tags, above the episode's synopsis. It is handed the season being browsed - the one in
-            // the address, which the page has already resolved - so the pill the viewer sees marked
-            // is the season whose episodes are under it.
+            // The season's own poster, at the head of the page, and the season selector on its own
+            // row under the banner: the poster says which season is on screen before anything is
+            // read, the tabs change it with a sideways press, and the one being browsed carries the
+            // app's violet as a rule under its name.
             tabs={seasons && seasons.length > 1 ? <SeasonTabs seasons={seasons} active={browsed.Id} seriesId={seriesId} /> : null}
+            poster={<SeasonPoster season={browsed} series={series} />}
             refreshKey={refreshKey}
             onPlayedChange={onPlayedChange}
             onLoaded={(episodes) => setProgress(episodes.length > 0 ? seasonProgress(episodes) : null)}
@@ -674,12 +675,17 @@ function SeasonBody({
 }
 
 /**
- * The season selector: every season of the show on one line, with the one being browsed marked.
+ * The season selector: every season of the show on one line of text tabs, with the one being
+ * browsed marked.
  *
  * It is drawn on the season page rather than only on the show's own page, because this is the
  * screen that browses a season: changing season is a sideways press here, not a trip back to the
- * show and in again. Each tab names its season, and the season being browsed carries an underline
- * - the reference's own way of saying which season the episodes under it belong to.
+ * show and in again. Each tab is the season's own name and nothing else - a line of text rather than
+ * a control with a shape of its own - and the season being browsed carries a violet rule under its
+ * name, which is the reference's own way of saying which season the episodes under it belong to.
+ * The tab the remote is resting on is drawn by the focus ring instead, so the season the viewer is
+ * *in* and the season the viewer is *on* are never the same mark, and a tab that is only focused is
+ * not a season that has been chosen.
  *
  * A tab replaces the page it is on rather than stacking another one: the season it opens is the
  * same screen with another season in it, so Back leaves for the show in one press instead of
@@ -781,6 +787,29 @@ function SeasonCard({
  * would be showing whichever season happened to be remembered rather than one the viewer chose. One
  * screen, one job - the show here, the season there.
  */
+/**
+ * The selected season's own poster, at the head of the page that browses it.
+ *
+ * It is the season's artwork, and a season the server has none for borrows the show's - a season
+ * with no picture of its own is still a season of *this* show, and the show's own art says so. It is
+ * drawn as the app's one poster shape, so a season reads as the same object here as it does on the
+ * show's page, and it stands on the page's content boundary like everything under it: the poster is
+ * the first thing the viewer reads, and the show's own details follow it.
+ */
+function SeasonPoster({ season, series }: { season: Item; series: Item | null }) {
+  const title = season.Name || (season.IndexNumber != null ? `Season ${season.IndexNumber}` : "Season")
+  return (
+    <span className="season-poster" data-season={season.Id}>
+      <MediaImage
+        src={seasonArtSrc(season, series)}
+        fallback={series ? primarySrc(series, artWidth("poster")) : null}
+        alt=""
+        label={title}
+      />
+    </span>
+  )
+}
+
 function SeriesBody({
   series,
   actions,
@@ -830,7 +859,7 @@ function SeriesBody({
       {/* The show itself: the banner over its own backdrop, with the show's logo, facts, genres and
           synopsis, and the show's own actions under it. */}
       <section className="series-head">
-        <BrowseHero item={series} series={series} season={null} episode={null} progress={null} upNext={false} />
+        <BrowseHero item={series} series={series} season={null} progress={null} />
         {actions && <div className="actions episode-actions">{actions}</div>}
       </section>
       {seasons && seasons.length > 0 && (
@@ -865,29 +894,31 @@ function SeriesBody({
 }
 
 /**
- * One season's episodes: the cinematic banner that describes the episode the remote is on, the
- * row of landscape stills the viewer browses, and the actions under the row.
+ * One season's episodes: the page's banner with the show's own copy in it, the season selector on
+ * its own row, the row of landscape stills the viewer browses, the episode the remote is on
+ * described under that row, and the one band under both.
  *
- * The banner stands over the row rather than beside a portrait, so the series' backdrop is the
- * dominant thing on the page and the page's own title, the season it is browsing and the episode
- * the remote is resting on are read as one composition - the shape Wholphin's series screen has.
- * It is drawn by `BrowseHero`, from the same shared hero the rest of the app features a title
- * with, and it is inside this block so that the banner, the row and the actions below them are
- * one section of the page: the season selector above it and the cast below it are what the
- * remote leaves the block for.
+ * The banner is the page's head and it stands over the whole block, so the series' backdrop is the
+ * dominant thing on the page and the show the viewer is browsing is read first - with the season's
+ * own poster in it, and the show's synopsis, because the banner describes the show. It is drawn by
+ * `BrowseHero`, from the same shared hero the rest of the app features a title with, and it is
+ * inside this block so that the banner, the season selector, the row, the episode's own description
+ * and the band under them are one section of the page: the cast below it is what the remote leaves
+ * the block for.
  *
- * The row is a strip rather than a vertical list, so several episodes are on screen at once and
- * the remote walks it sideways while Up and Down leave it. Moving along the row changes the
- * banner - the episode's name, its facts and its synopsis - and never takes it away. The row is
- * entered on the episode this season begins at: the one the server named as next up when that
- * episode is in this season, and otherwise the episode in progress, or the first the viewer has
- * not watched.
+ * The row is a strip rather than a vertical list, so several episodes are on screen at once and the
+ * remote walks it sideways while Up and Down leave it. Moving along the row changes the block under
+ * it - the episode's name, its number, its facts and its synopsis - and never takes it away. The row
+ * is entered on the episode this season begins at: the one the server named as next up when that
+ * episode is in this season, and otherwise the episode in progress, or the first the viewer has not
+ * watched.
  *
- * Only the episodes the server returned for this season are listed, in the order it returned
- * them, which is Jellyfin's own episode order. Nothing here reads anything while the remote
- * moves: the list is fetched once per season, and the banner is drawn from the list already in
- * hand. The watched toggle in the band acts on the episode the banner is about, so one episode
- * can be settled without leaving the row.
+ * Only the episodes the server returned for this season are listed, in the order it returned them,
+ * which is Jellyfin's own episode order. Nothing here reads anything while the remote moves: the
+ * list is fetched once per season, and everything drawn from it - the episode described under the
+ * row and the watched toggle beside it in the band - is read from the list already in hand. The
+ * stills themselves are the page's playback: pressing OK on one plays that episode, and moving onto
+ * one only changes what is described under the row.
  */
 function EpisodeList({
   item,
@@ -898,6 +929,7 @@ function EpisodeList({
   progress = null,
   actions = null,
   tabs = null,
+  poster = null,
   refreshKey = 0,
   onPlayedChange,
   onLoaded,
@@ -914,6 +946,8 @@ function EpisodeList({
   actions?: ReactNode
   /** The season selector, when the page browsing this season draws one. */
   tabs?: ReactNode
+  /** The selected season's own poster, for the head of the page it is browsing. */
+  poster?: ReactNode
   /** Changes when the show or season was toggled, so this row reads its episodes again. */
   refreshKey?: number
   /** Told after an episode's own played state changed, so the page can reread its folder. */
@@ -925,12 +959,13 @@ function EpisodeList({
   // The list on screen, and the season it was read for. A season that changes under this row never
   // shows the previous season's episodes - not even for the frame between the press and the answer -
   // so the list is kept with its key and only handed to the row when the key is the one being
-  // browsed. Everything the row draws, including the banner above it, is read from that list.
+  // browsed. Everything the row draws, including the episode described above it, is read from that
+  // list.
   const [listed, setListed] = useState<{ key: string; items: Item[] } | null>(null)
   // The episode whose own watched state is being written, so only its button goes quiet.
   const [playedBusy, setPlayedBusy] = useState("")
   const [playError, setPlayError] = useState("")
-  // The episode the banner is about: whatever the remote is resting on, and until it rests
+  // The episode the page is describing: whatever the remote is resting on, and until it rests
   // anywhere, the episode this season begins at.
   const [spotId, setSpotId] = useState("")
   // What the list currently on screen is of. A show or season toggle bumps `refreshKey` and asks
@@ -975,16 +1010,21 @@ function EpisodeList({
 
   // The banner is drawn whether or not the episodes have arrived: it is the page's own head, and
   // a page that opened on a blank space while the server answered would read as a page with no
-  // banner at all. Until an episode is known it describes the season the row is browsing.
+  // banner at all. It describes the show and the season being browsed, which do not depend on the
+  // episode list, and the season selector under it is drawn from the show's own seasons - so the
+  // page the viewer opened is complete before its episodes are.
   //
-  // The band holds the title's own actions and the focused episode's watched toggle. It used to
-  // carry a second button that played the whole season from here; that button is gone, and the
-  // band is one row of controls rather than a row with a gap in it.
+  // The order below is the order the page is read in: the banner - the show's logo art, its facts
+  // and its own synopsis, with the season's poster beside them - then the season selector on its own
+  // row, then the row of stills the remote walks, then the episode the remote is on described under
+  // that row, and then the one band under both, which settles the episode and carries the title's
+  // own actions. The cast, and what the viewer might watch next, follow this block.
 
   if (!episodes) {
     return (
       <>
-        <BrowseHero item={item} series={series} season={season} episode={null} progress={progress} upNext={false} tabs={tabs} />
+        <BrowseHero item={item} series={series} season={season} progress={progress} poster={poster} />
+        {tabs}
         <Loading label="Loading episodes" />
       </>
     )
@@ -993,7 +1033,8 @@ function EpisodeList({
   if (episodes.length === 0) {
     return (
       <>
-        <BrowseHero item={item} series={series} season={season} episode={null} progress={progress} upNext={false} tabs={tabs} />
+        <BrowseHero item={item} series={series} season={season} progress={progress} poster={poster} />
+        {tabs}
         <p className="hint">No episodes in this season.</p>
         {actions && <div className="actions episode-actions">{actions}</div>}
       </>
@@ -1002,8 +1043,8 @@ function EpisodeList({
 
   /**
    * Write one episode's own watched state. Jellyfin stores it on the episode, so a season or
-   * show's folder summary is reread by the page afterwards; the row itself is updated here so
-   * the still's check and the banner above it change as soon as the request succeeds.
+   * show's folder summary is reread by the page afterwards; the row itself is updated here so the
+   * still's check and the episode described above it change as soon as the request succeeds.
    */
   async function toggleEpisodePlayed(target: Item) {
     if (!episodes) return
@@ -1048,66 +1089,65 @@ function EpisodeList({
    */
   const anchorId = seasonStart(episodes)?.episode.Id || ""
   const spot = episodes.find((episode) => episode.Id === spotId) || episodes.find((episode) => episode.Id === anchorId) || episodes[0]
-  const band = (
-    <div className="actions episode-actions">
-      {actions}
-      <button
-        className={`btn icon-btn ${spot.UserData?.Played ? "on" : ""}`}
-        type="button"
-        onClick={() => void toggleEpisodePlayed(spot)}
-        disabled={playedBusy === spot.Id}
-        aria-pressed={Boolean(spot.UserData?.Played)}
-        aria-label={`${spot.UserData?.Played ? "Mark episode unwatched" : "Mark episode watched"}: ${episodeCode(spot) || spot.Name || "episode"}`}
-      >
-        <CheckIcon size={16} />
-        {spot.UserData?.Played ? "Mark episode unwatched" : "Mark episode watched"}
-      </button>
-      {playError && <span className="error" role="alert">{playError}</span>}
-    </div>
-  )
 
   return (
     <>
-      <BrowseHero item={item} series={series} season={season} episode={spot} progress={progress} upNext={spot.Id === anchorId} tabs={tabs} />
+      <BrowseHero item={item} series={series} season={season} progress={progress} poster={poster} />
+      {tabs}
       <div className="scroller episode-scroller">
         {episodes.map((episode) => (
           <EpisodeCard key={episode.Id} episode={episode} series={series} next={episode.Id === anchorId} onPoint={() => setSpotId(episode.Id)} />
         ))}
       </div>
-      {band}
+      {/* The episode the remote is on, described under the row that selects it: the row is the page's
+          browse surface, and the block under it is what the viewer is looking at. */}
+      <EpisodeSpot episode={spot} upNext={spot.Id === anchorId} />
+      {/* One band under the episode's details, on one row: the episode's own watched state, which is
+          what settles the episode just described, then the title's own actions - the season's Play,
+          the season's own watched toggle, Media info. Both watched controls the page carries stand
+          here together, so a season is settled as a whole and an episode is settled in place
+          without leaving the row. */}
+      <div className="actions episode-actions">
+        <EpisodeWatched
+          episode={spot}
+          busy={playedBusy === spot.Id}
+          error={playError}
+          onToggle={() => toggleEpisodePlayed(spot)}
+        />
+        {actions}
+      </div>
     </>
   )
 }
 
 /**
  * The cinematic banner at the top of a page that browses a season: the series' own backdrop with
- * the copy for the episode the remote is on.
+ * the copy for the show and the season being browsed.
  *
  * It is the app's own hero - the shared `.hero.stage-copy` block, the shared `hero-copy` column,
- * the shared title box, the shared metadata line and the shared clamped synopsis - so the title,
- * the facts and the synopsis are drawn at the size they are drawn at everywhere else, and the
- * artwork behind them is the page's own full-bleed stage: the series' backdrop, which `ItemPage`
- * pins from the item the page is about. Nothing here paints a picture of its own, so the backdrop
- * is never a second, smaller copy of itself, and an episode's thumbnail can never take the
- * series' place.
+ * the shared title box and the shared metadata line - so the title and the facts are drawn at the
+ * size they are drawn at everywhere else, and the artwork behind them is the page's own full-bleed
+ * stage: the series' backdrop, which `ItemPage` pins from the item the page is about. Nothing here
+ * paints a picture of its own, so the backdrop is never a second, smaller copy of itself, and an
+ * episode's thumbnail can never take the series' place.
  *
- * What it says follows the row beneath it. The line above the title is where the viewer is -
- * which season, and how much of it is watched - the title is the series' own logo or name, and
- * the line under it is the episode the remote is resting on with the episode's facts and its
- * synopsis. So a press along the row changes the banner and never takes it away.
+ * What it says is the show and where the viewer is in it: the line above the title is the season
+ * being browsed and how much of it is watched, the title is the series' own logo or name, and the
+ * facts, the genre links and the synopsis under it are the show's own. That is the whole of what the
+ * banner carries, and it is the only place on the page the show is described: the episode the remote
+ * is on is described below the row that selects it, in the block that follows - title, facts, what it
+ * is made of and what it is about - so the show and the episode are never two descriptions of one
+ * subject in one information area, and no line of the banner changes as the remote walks the row.
  *
- * Before the season's episodes have arrived there is no episode to describe and the banner
- * states the season alone, rather than standing empty: the page's head is there from its first
- * paint.
+ * It is drawn before the season's episodes have arrived, and describes the season alone rather
+ * than standing empty: the page's head is there from its first paint.
  */
 function BrowseHero({
   item,
   series,
   season,
-  episode,
   progress,
-  upNext,
-  tabs = null,
+  poster = null,
 }: {
   /** The page's own item: the series, or the season this page was opened for. */
   item: Item
@@ -1115,65 +1155,36 @@ function BrowseHero({
   series: Item | null
   /** The season the row is browsing, once the page knows which one that is. */
   season: Item | null
-  /** The episode the remote is on, or `null` before the season's episodes have been read. */
-  episode: Item | null
   /** How much of the season is watched, for the line above the title. */
   progress: SeasonProgress | null
-  /** Whether the episode is the one this season would play next. */
-  upNext: boolean
   /**
-   * The season selector, when the page browsing this season has one to show.
+   * The selected season's own poster, at the head of the page.
    *
-   * It belongs in the copy rather than above the banner: the viewer reads what the show is, what the
-   * episode is and which season they are in as one block, so the seasons sit between the show's own
-   * facts and the episode's synopsis - under the title and its tags, above the description.
+   * It is what says *which* season of the show is on screen before anything is read: the show's
+   * name, its logo and its artwork are the same for every season, so the season's own picture is
+   * the only thing here that answers "where am I in this show" at a glance.
    */
-  tabs?: ReactNode
+  poster?: ReactNode
 }) {
-  // The subject of the copy: the episode where there is one, and otherwise the season the row is
-  // browsing, so the facts and the synopsis are always about something the viewer can see.
-  const subject = episode || season || item
+  // What the copy is about: the show itself, which is what this page is for. The episode the remote
+  // is on is described under the row that selects it, so the page reads the show, the season
+  // selector, the episodes and then the episode - and no line of the banner changes as the remote
+  // walks the row.
+  const subject = series || season || item
   const context = season ? seasonLineText(season, progress) : kindLabel(item)
-  const code = episode ? episodeCode(episode) : ""
-  const watched = Boolean(episode?.UserData?.Played)
-  const resume = Boolean(episode && isInProgress(episode))
-  // What the episode is made of, said as compact badges beside its facts: the resolution, the
-  // video and audio codecs, and whether there are subtitles. A season or a show has none of that
-  // of its own, and the line is simply not drawn for one.
-  const chips = subject.Type === "Episode" ? [...techChips(subject), ...(hasSubtitles(subject) ? ["Subtitles"] : [])] : []
   return (
     <header className="hero stage-copy browse-hero">
+      {poster}
       <div className="hero-copy">
         <p className="eyebrow">{context}</p>
         {/* The title's own box: the show's logo where the server has one and its name in type where
             it has not. It is the show the viewer is browsing, which is what the whole page is
-            about - the episode under it is the one the remote has chosen. A page that could not
-            read the show still names it, from the season's own record, rather than leaving the
-            banner unnamed. */}
+            about. A page that could not read the show still names it, from the season's own record,
+            rather than leaving the banner unnamed. */}
         <div className="hero-title">
           {series ? <TitleLogo item={series} /> : <h1>{season?.SeriesName || item.Name || "Untitled"}</h1>}
         </div>
-        {/* The season selector, when this page has one: directly under the show's own title and
-            artwork, above the episode it is browsing. The viewer reads the show, then which season
-            of it they are in, then the episode - so the pills sit between the logo and the episode
-            line rather than among the episode's own facts. */}
-        {tabs}
-        {episode && (
-          <p className="hero-episode">
-            {episode.Name || ""}
-            {upNext ? <span className="episode-flag">Up next</span> : null}
-            {resume ? <span className="episode-flag watching">Resume</span> : null}
-            {watched ? <span className="episode-flag watched">Watched</span> : null}
-          </p>
-        )}
-        <MetaLine item={subject} lead={code} />
-        {chips.length > 0 && (
-          <p className="chips">
-            {chips.map((chip) => (
-              <span key={chip}>{chip}</span>
-            ))}
-          </p>
-        )}
+        <MetaLine item={subject} />
         {subject.Overview && <p className="overview clamp">{subject.Overview}</p>}
         {/* The page's own controls, where every other page keeps them: the head is the title's
             facts, and the episode row follows them. */}
@@ -1184,14 +1195,135 @@ function BrowseHero({
 }
 
 /**
+ * The episode the remote is on, described under the row that selects it: the selected episode's
+ * details, and nothing else.
+ *
+ * The row above this block is the season's browse surface: moving the remote onto a still is the
+ * viewer saying which episode they are looking at, and this block is what they are looking at - the
+ * number and the name, when it aired, how long it is, what it is made of, and what it is about. It
+ * is drawn from the episode the row says is focused, so it follows the remote and never the other
+ * way round: nothing here can move the row, and nothing here starts playback.
+ *
+ * The episode's own state is stated with it - the episode this season would play next, one the
+ * viewer is part way through, and one they have finished - so the block says about the episode
+ * exactly what the episode's own card in the row says. What settles the episode - its watched state
+ * (see `EpisodeWatched`) - stands in the band under this block, on the one row with the title's own
+ * actions, which is what the episode needs no page of its own for: the row chooses the episode, this
+ * block describes it, and the band under both settles it without leaving the season.
+ *
+ * The show's own description is not repeated here, and the episode's is not drawn in the banner: the
+ * banner is the page's head and describes the show, this block is the episode. One information area,
+ * one subject.
+ */
+function EpisodeSpot({
+  episode,
+  upNext,
+}: {
+  /** The episode the remote is on. */
+  episode: Item
+  /** Whether this is the episode the season would play next. */
+  upNext: boolean
+}) {
+  const watched = Boolean(episode.UserData?.Played)
+  const resume = isInProgress(episode)
+  const code = episodeCode(episode)
+  const chips = [...techChips(episode), ...(hasSubtitles(episode) ? ["Subtitles"] : [])]
+  return (
+    <section className="episode-spot">
+      <h2>
+        {code ? <span className="episode-code">{code}</span> : null}
+        {code && episode.Name ? <span className="episode-spot-gap" /> : null}
+        {episode.Name}
+        {upNext ? <span className="episode-flag">Up next</span> : null}
+        {resume ? <span className="episode-flag watching">Resume</span> : null}
+        {watched ? <span className="episode-flag watched">Watched</span> : null}
+      </h2>
+      <MetaLine item={episode} />
+      {chips.length > 0 && (
+        <p className="chips">
+          {chips.map((chip) => (
+            <span key={chip}>{chip}</span>
+          ))}
+        </p>
+      )}
+      {episode.Overview && <p className="overview clamp">{episode.Overview}</p>}
+    </section>
+  )
+}
+
+/**
+ * The watched action for the episode the remote is on, in the band under the block that describes it.
+ *
+ * It is named for what pressing it will do - Mark Watched on an episode that has not been watched,
+ * Mark Unwatched on one that has - and its accessible name says which episode it settles. It is the
+ * first control of the band, because the band is under the episode's own details and the episode is
+ * what it settles, and the title's own actions - the season's Play and its watched toggle among them
+ * - follow it on the same row.
+ *
+ * There is no Play button here: pressing OK on the still in the row above is what plays the episode,
+ * so a second way to start the same episode from the same screen would be two answers to one
+ * question.
+ *
+ * A press in flight is guarded rather than disabled: a disabled control drops the remote's focus to
+ * the page body, which costs the viewer the place they were in. The button stays where it is and
+ * ignores a second press until the first has been answered, and a press that fails leaves the state
+ * exactly as it was, with the reason beside the button.
+ */
+function EpisodeWatched({
+  episode,
+  busy,
+  error,
+  onToggle,
+}: {
+  /** The episode the row is on. */
+  episode: Item
+  /** Whether this episode's own watched state is being written. */
+  busy: boolean
+  /** What went wrong with the last press, if anything. */
+  error: string
+  onToggle: () => Promise<void>
+}) {
+  const saving = useRef(false)
+  const code = episodeCode(episode)
+  const watched = Boolean(episode.UserData?.Played)
+
+  async function toggle() {
+    if (saving.current) return
+    saving.current = true
+    try {
+      await onToggle()
+    } finally {
+      saving.current = false
+    }
+  }
+
+  return (
+    <>
+      <button
+        className={`btn icon-btn ${watched ? "on" : ""}`}
+        type="button"
+        onClick={() => void toggle()}
+        aria-pressed={watched}
+        aria-label={`${watched ? "Mark Unwatched" : "Mark Watched"}: ${code || episode.Name || "episode"}`}
+      >
+        <CheckIcon size={16} />
+        {watched ? "Mark Unwatched" : "Mark Watched"}
+      </button>
+      {busy ? <span className="episode-note">Saving…</span> : null}
+      {error && <span className="error" role="alert">{error}</span>}
+    </>
+  )
+}
+
+/**
  * One episode in a season's row: the still, the number and name under it, the runtime, and the
  * marks the row has always carried - watched, and how far in.
  *
  * A card reports the remote's arrival to the page and nothing else. It does not ask the stage for
  * its own artwork: the picture behind the page is the series' backdrop, which is what the banner
  * stands on, and swapping it for a still would put a thumbnail where the series' own art belongs.
- * What the card does change is the banner above it - the name, the facts and the synopsis - which
- * is the page saying which episode the remote is on.
+ * What the card does change is the description above it - the episode's name, its number, its facts
+ * and its synopsis - which is the page saying which episode the remote is on.
  */
 function EpisodeCard({
   episode,
@@ -1202,7 +1334,7 @@ function EpisodeCard({
   episode: Item
   series: Item | null
   next: boolean
-  /** Told when this card takes the remote, so the banner above the row can follow it. */
+  /** Told when this card takes the remote, so the episode described above the row can follow it. */
   onPoint?: () => void
 }) {
   const width = artWidth("wide")
