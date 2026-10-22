@@ -125,15 +125,18 @@ export function ItemPage() {
       })
   }
 
-  if (status === "error" || !item) return <Problem message={error || "This title is unavailable."} />
+  // A page that could not be read says so; a page that has not been read yet says that instead.
+  // The two used to be one line, and every page opened on "This title is unavailable." for as
+  // long as its read took - the first paint of a destination, before any of its own content.
+  if (status === "error") return <Problem message={error || "This title is unavailable."} />
 
   // A season page keeps its frame while the next season is read. The season selector belongs to the
   // show rather than to the season, so it is still the right selector, and the page below it says
   // which season it is waiting for rather than showing the one the viewer has left (`SeasonBody`).
   // Every other page is a title in its own right, and is replaced whole while the next one is read,
   // so a page never shows one title's head over another title's content.
-  const keepsFrame = item.Type === "Season" && status === "loading"
-  if (status === "loading" && !keepsFrame) return <Loading label="Loading title" />
+  const keepsFrame = item?.Type === "Season" && status === "loading"
+  if (!item || (status === "loading" && !keepsFrame)) return <Loading label="Loading title" />
 
   const episode = item.Type === "Episode"
   // A series and a season are the two pages that browse a season: they draw the season's own

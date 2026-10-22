@@ -1,9 +1,9 @@
 import { App as NativeApp } from "@capacitor/app"
 import { Capacitor } from "@capacitor/core"
-import { useEffect } from "react"
+import { useEffect, useLayoutEffect } from "react"
 import { useLocation, useNavigate, useNavigationType } from "react-router-dom"
 import { useLocalProxy } from "../lib/media"
-import { backHeld, clearSeats, focusables, isBackKey, isTextField, landingControl, landOn, moveFocus, noteRoute, remoteKey, resetFocusState, restoreSeat, takeBack, trackSeats } from "../lib/remote"
+import { backHeld, clearSeats, focusables, isBackKey, isTextField, landingControl, landOn, moveFocus, noteRoute, openAtTop, remoteKey, resetFocusState, restoreSeat, takeBack, trackSeats } from "../lib/remote"
 import { useSession } from "../session"
 
 const ARROWS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])
@@ -41,10 +41,11 @@ export function RemoteNav() {
   const { userId } = useSession()
   const route = location.pathname + location.search
 
-  // Where the viewer was is remembered per route, so the memory has to be told which route
-  // is on screen before anything can be remembered about it. Told before the placement
-  // below runs, so a restoration is filed against the screen it belongs to.
-  useEffect(() => {
+  // Where the viewer was is remembered per route, so the memory has to be told which route is on
+  // screen before anything can be remembered about it. It is told in the layout pass, beside the
+  // placement below, because that placement is where a seat is filed: a route that had not been
+  // noted yet would file the screen being left under the screen being opened.
+  useLayoutEffect(() => {
     noteRoute(route)
   }, [route])
 
@@ -57,7 +58,25 @@ export function RemoteNav() {
     clearSeats()
   }, [userId])
 
-  useEffect(() => {
+  /**
+   * Where a screen opens: at its own top, with the remote where the viewer left it only when Back
+   * is what brought them here.
+   *
+   * The column below the rail is one element for the life of the app - Shell draws it once and only
+   * the screen inside it changes - so a destination would otherwise inherit the offset of the
+   * screen it was opened from. That one fault was the whole of it, and it showed on every kind of
+   * page: a season opened from a show's seasons row began part way down its own banner, and a cast
+   * member opened from a row near the bottom of a page began part way down their portrait and
+   * biography. It is answered here, once, rather than on either page.
+   *
+   * Both halves are in the layout pass, before the browser paints: the offset being left is never
+   * seen, and neither is the place a Back is about to put back. The restoration used to run after
+   * the paint, so a Back painted the top of the screen first (and the row the seat's item was
+   * revealed from) and then jumped to the place the viewer left - three offsets in three frames,
+   * measured on a television.
+   */
+  useLayoutEffect(() => {
+    openAtTop()
     resetFocusState()
     if (useLocalProxy()) return
     document.documentElement.classList.add("remote")
@@ -112,8 +131,9 @@ export function RemoteNav() {
     }
     window.addEventListener("keydown", takenOver, true)
     // Back is a real history step and the screen it lands on is the one the viewer left, so
-    // its record is honoured even when the page has put focus somewhere of its own. A plain
-    // visit only borrows the record, and lands the page itself if it has already chosen.
+    // its record is honoured even when the page has put focus somewhere of its own - offsets
+    // and all. A plain visit only borrows the record's control, once the page has drawn it and
+    // only if the viewer can see it; the column keeps the top this pass has just given it.
     // The action is read from the render that changed the path, so this still runs exactly
     // when it always did - a new screen, never a query typed into the one already open.
     const cancel = restoreSeat(route, navigationType === "POP", land)

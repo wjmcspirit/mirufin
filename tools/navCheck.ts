@@ -3245,26 +3245,50 @@ function testScreenOpensAtTop() {
   check("and the page's own landing was not needed", !landed)
   cancelPlain()
 
-  // The wiring: the column is reset in the layout pass of the screen the viewer opens, before the
-  // browser paints it - not on a timer, and not by a margin or a hidden block.
+  // The wiring: one owner for where a screen opens, in the layout pass of the screen that opens,
+  // before the browser paints it - not on a timer, and not by a margin or a hidden block.
   const shellSource = readFileSync("src/components/Shell.tsx", "utf8")
+  const nav = readFileSync("src/components/RemoteNav.tsx", "utf8")
+  const remoteSource = readFileSync("src/lib/remote.ts", "utf8")
+  const itemSource = readFileSync("src/pages/Item.tsx", "utf8")
   check(
-    "the page column is the one the reset is applied to",
-    /<div className="main" ref=\{column\}>/.test(shellSource) &&
-      shellSource.includes('import { openAtTop } from "../lib/remote"'),
-    "Shell.tsx",
+    "the page column is the app's own, and the navigation is what finds it",
+    /export function openAtTop\(column: HTMLElement \| null = mainColumn\(\)\)/.test(remoteSource),
+    "remote.ts",
   )
   check(
-    "and it is put back before the new screen is painted",
-    /useLayoutEffect\(\(\) => \{\s*openAtTop\(column\.current\)\s*\}, \[location\.pathname\]\)/.test(shellSource),
+    "a screen is put back at its own top in the navigation's own layout pass",
+    /useLayoutEffect\(\(\) => \{\s*openAtTop\(\)\s*resetFocusState\(\)/.test(nav) &&
+      nav.indexOf("openAtTop()") < nav.indexOf("restoreSeat(route") &&
+      !nav.slice(nav.indexOf("openAtTop()"), nav.indexOf("restoreSeat(route")).includes("useEffect("),
+    "RemoteNav.tsx",
+  )
+  check(
+    "and the restoration is started in that same pass, so both are in place before the paint",
+    /const cancel = restoreSeat\(route, navigationType === "POP", land\)[\s\S]{0,300}?\}, \[location\.pathname\]\)/.test(nav),
+    "RemoteNav.tsx",
+  )
+  check(
+    "the route is noted in the layout pass too, before the seat a screen files is filed",
+    /useLayoutEffect\(\(\) => \{\s*noteRoute\(route\)\s*\}, \[route\]\)/.test(nav) &&
+      nav.indexOf("noteRoute(route)") < nav.indexOf("restoreSeat(route"),
+    "RemoteNav.tsx",
+  )
+  check(
+    "and the column is not reset by anything else, on a render or on a timer",
+    !shellSource.includes("openAtTop(") && !/setTimeout\([^)]*openAtTop/.test(nav),
     "Shell.tsx",
   )
   check(
     "a page still reading its own row says so, so the landing waits for it",
-    readFileSync("src/pages/Item.tsx", "utf8").includes('{!seasons && <Loading label="Loading seasons" />}'),
+    itemSource.includes('{!seasons && <Loading label="Loading seasons" />}'),
     "Item.tsx",
   )
-  const remoteSource = readFileSync("src/lib/remote.ts", "utf8")
+  check(
+    "a page whose read has not come back yet is loading, not unavailable",
+    /if \(status === "error"\) return <Problem/.test(itemSource) && !/status === "error" \|\| !item/.test(itemSource),
+    "Item.tsx",
+  )
   check(
     "the landing is the one placement that does not move the column",
     /export function landOn\(node: HTMLElement\) \{[\s\S]{0,200}?focusNode\(node, false\)/.test(remoteSource) &&
@@ -3273,16 +3297,142 @@ function testScreenOpensAtTop() {
   )
   check(
     "and the landing is what the navigation uses",
-    /const content = landingControl\(items\)[\s\S]{0,160}?landOn\(content\)/.test(
-      readFileSync("src/components/RemoteNav.tsx", "utf8"),
-    ),
+    /const content = landingControl\(items\)[\s\S]{0,160}?landOn\(content\)/.test(nav),
     "RemoteNav.tsx",
   )
   check(
-    "and only a Back puts the remembered offsets back",
-    remoteSource.includes("if (insist) applySeat(seat)") && remoteSource.includes("if (insist) nudge(seat, node)"),
+    "only a Back puts the remembered offsets back, and nothing puts them back for the focus",
+    remoteSource.includes("if (insist) applySeat(seat)") &&
+      remoteSource.includes("if (insist) nudge(seat, node)") &&
+      /stop\(\)\s*cancelRestore = null\s*\/\/[^\n]*\n\s*\/\/[^\n]*\n\s*focusNode\(node, false\)/.test(remoteSource),
     "remote.ts",
   )
+  check(
+    "and a place the page cannot hold yet is not written to it",
+    /function holdsSeat\(main: HTMLElement, seat: NavSeat\)/.test(remoteSource) &&
+      /if \(holdsSeat\(main, seat\) && Math\.abs\(main\.scrollTop - seat\.top\) > 1\) main\.scrollTop = seat\.top/.test(
+        remoteSource,
+      ),
+    "remote.ts",
+  )
+}
+
+/**
+ * Every kind of destination, opened from a page that was scrolled somewhere else.
+ *
+ * One fault produced all of these, and it was in the container every screen shares rather than in
+ * any page: the column below the rail lives for the life of the app, so whatever offset the screen
+ * being left had, the screen being opened inherited - a season from a show's seasons row, a cast
+ * member from a row near the bottom of a season, a film from a person's filmography, a collection
+ * from a show's page. The policy these checks hold: a new destination starts at its own top, Back
+ * comes back to the place - and the row - the viewer left, and a season changed within the same
+ * season browser keeps its top.
+ */
+function testDetailDestinations() {
+  // The column every screen shares, in the design units a 1080p television draws.
+  const page = shell()
+  const main = page.main
+  main.place(70, 0, 1920, 774)
+  main.clientHeight = 774
+  main.scrollHeight = 2400
+
+  /** A season page: its block, its episode row, and the cast row under it. */
+  function seasonPage(offset: number) {
+    main.children = []
+    const block = episodeRow(main, 12)
+    const cast = row(main, "Cast", ["/item/P1", "/item/P2", "/item/P3"])
+    cast.scroller.place(620, 50, 1600, 280)
+    cast.cards.forEach((card, index) => card.place(620, 50 + index * 200, 168, 252))
+    main.scrollHeight = 2400
+    // The page as the viewer left it: the offset, and every rect inside it moved up with it, which
+    // is what a browser reports for a page that has been scrolled.
+    scrollPage(main, offset)
+    return { block, cast }
+  }
+
+  /** A cast member's page: their portrait and copy at the head, then their filmography. */
+  function personPage() {
+    main.children = []
+    const head = new El("header", "detail-hero stage-copy")
+    head.place(102, 50, 1920, 488)
+    const portrait = new El("div", "poster-lg")
+    portrait.place(102, 50, 320, 480)
+    head.add(portrait)
+    const copy = new El("div", "detail-copy")
+    copy.add(new El("p", "eyebrow"))
+    copy.add(new El("h1"))
+    copy.add(new El("p", "overview"))
+    head.add(copy)
+    const films = row(main, "Movies in Library", ["/item/FM1", "/item/FM2", "/item/FM3"])
+    films.scroller.place(620, 50, 1600, 280)
+    films.cards.forEach((card, index) => card.place(620, 50 + index * 200, 168, 252))
+    main.scrollHeight = 2400
+    return { head, films }
+  }
+
+  // The season page the viewer walked down to its cast, and the cast member they pressed OK on.
+  clearSeats()
+  resetFocusState()
+  const season = seasonPage(955)
+  noteRoute("/item/S3")
+  placeFocus(season.cast.cards[0])
+  const leftAt = 955
+  main.scrollTop = leftAt
+  activate(season.cast.cards[0])
+
+  // The destination: the same column, a different screen in it. The column is put back at its top
+  // before the seat is asked for anything, exactly as the navigation does it, and the landing the
+  // navigation hands the restoration is the page's own placement.
+  const person = personPage()
+  noteRoute("/item/P1")
+  openAtTopScreen(main)
+  let landed = false
+  const cancelPerson = restoreSeat("/item/P1", false, () => {
+    landed = true
+    const content = landingControl(focusables())
+    if (content) landOn(content)
+  })
+  run(200)
+  check("a cast member opens at the top of their own page", main.scrollTop === 0, String(main.scrollTop))
+  check(
+    "with their portrait and name on it, not the row they were opened from",
+    person.head.rect.top >= 70 && person.films.cards[0].rect.top > person.head.rect.bottom,
+    `head ${person.head.rect.top}..${person.head.rect.bottom}, films ${person.films.cards[0].rect.top}`,
+  )
+  check(
+    "and the remote rests on their own page",
+    active !== null && (person.films.cards.includes(active) || person.head.contains(active)),
+    label(active),
+  )
+  check("the cast member's page is answered by its own landing", landed)
+  cancelPerson()
+
+  // Back: the season page returns to the place the viewer left it at, on the cast member they left.
+  const back = seasonPage(0)
+  noteRoute("/item/S3")
+  const cancelBack = restoreSeat("/item/S3", true, () => {})
+  run(200)
+  check("Back returns the season page to the place it was left at", main.scrollTop === leftAt, String(main.scrollTop))
+  check("and the remote to the cast member it was left on", active === back.cast.cards[0], label(active))
+  cancelBack()
+
+  // A season changed within the same season browser: a new screen, at its own top.
+  main.scrollTop = 178
+  const changed = episodeRow(main, 12)
+  noteRoute("/item/S4")
+  openAtTopScreen(main)
+  let changedFromLanding = false
+  const cancelChange = restoreSeat("/item/S4", false, () => {
+    changedFromLanding = true
+  })
+  run(200)
+  check("a season changed in the same browser opens at its own top", main.scrollTop === 0, String(main.scrollTop))
+  check(
+    "and the remote is on the row the new season browsed, not on an offset from the last one",
+    changedFromLanding || active === changed.cards[0],
+    label(active),
+  )
+  cancelChange()
 }
 
 /**
@@ -3513,6 +3663,7 @@ testClearingAndOverlays()
 testFadedPanel()
 testFocusDeclarations()
 testScreenOpensAtTop()
+testDetailDestinations()
 console.log(failures === 0 ? "\nAll navigation checks passed." : `\n${failures} navigation check(s) failed.`)
 if (failures > 0) throw new Error(`${failures} navigation check(s) failed`)
 

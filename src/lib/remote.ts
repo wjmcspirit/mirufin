@@ -264,20 +264,28 @@ export function placeFocus(node: HTMLElement) {
  * Open a screen at its own top.
  *
  * The page column is one element for the life of the app - `Shell` draws it once and only the
- * screen inside it changes - so a screen the viewer opens would otherwise inherit the offset of
- * the screen they left, and the season opened from a show's seasons row began part way down its
- * own banner: the poster and the show's logo above the top of the column, the stills clipped by
- * it. It is put back here, at the moment the screen changes and before the browser paints the
- * new one, so the offset is neither seen nor inherited. It is also what keeps a page's own
+ * screen inside it changes - so a destination would otherwise inherit the offset of the screen it
+ * was opened from, and the same fault showed itself on every kind of page: the season opened from a
+ * show's seasons row began part way down its own banner, with the show's logo and the top of the
+ * season poster above the top of the column and the stills clipped by it, and a cast member opened
+ * from a row near the bottom of a page began part way down their portrait and biography. It is put
+ * back here, in the layout pass of the screen that opens and before the browser paints it, so the
+ * offset of the screen being left is neither seen nor inherited. It is also what keeps a page's own
  * drawing - a row arriving late, a heading that grows - from being read as a place to be.
  *
- * A Back is not this: the screen the viewer returns to is the one they left, and the offset
- * they left it at is theirs. The restoration applies it after this has run, and it wins.
+ * The document behind the column is reset with it: it is the other container a viewer can end up
+ * scrolled in (a WebView that scrolled itself to a focused control, a page drawn past the screen by
+ * a rule the app does not own), and a destination opens at its top there too.
+ *
+ * A Back is not this: the screen the viewer returns to is the one they left, and the offset they
+ * left it at is theirs. The restoration runs in the same layout pass, after this, and wins.
  */
-export function openAtTop(column: HTMLElement | null) {
-  if (!column) return
-  if (column.scrollTop !== 0) column.scrollTop = 0
-  if (column.scrollLeft !== 0) column.scrollLeft = 0
+export function openAtTop(column: HTMLElement | null = mainColumn()) {
+  if (column) {
+    if (column.scrollTop !== 0) column.scrollTop = 0
+    if (column.scrollLeft !== 0) column.scrollLeft = 0
+  }
+  if (window.scrollX !== 0 || window.scrollY !== 0) window.scrollTo(0, 0)
 }
 
 /**
@@ -992,10 +1000,31 @@ function seatTarget(seat: NavSeat): HTMLElement | null {
   return bandFor(seat.band) ? null : matching[seat.seat] || matching[0]
 }
 
+/**
+ * Can the column hold the place this seat names?
+ *
+ * A page that pages in as it scrolls asks for its next page by being scrolled, so it is written to
+ * whether it is tall enough or not. Every other page can only be scrolled as far as the content it
+ * has drawn, and a place past that is clamped to the end of it and painted there.
+ */
+function holdsSeat(main: HTMLElement, seat: NavSeat) {
+  return Boolean(main.querySelector(".more-sentinel")) || main.scrollHeight - main.clientHeight + 1 >= seat.top
+}
+
+/**
+ * Put the place the viewer left back: the column, and every row that was scrolled.
+ *
+ * A place the page cannot hold yet is not written at all. The browser clamps an offset past the
+ * end of the page to its end, and the clamped place is painted like any other: a Back to a season
+ * whose place was 955 settled at 192, then 569, then 955 in three paints, because the page draws
+ * its head, then its frame, then its episodes, and the offset went in against each of them. The
+ * page's own content arrives in pieces, so the place goes in the moment the page is tall enough to
+ * hold it - which is the next look, a few milliseconds later.
+ */
 function applySeat(seat: NavSeat) {
   const main = mainColumn()
   if (main) {
-    if (Math.abs(main.scrollTop - seat.top) > 1) main.scrollTop = seat.top
+    if (holdsSeat(main, seat) && Math.abs(main.scrollTop - seat.top) > 1) main.scrollTop = seat.top
   } else {
     window.scrollTo(0, seat.top)
   }
@@ -1019,12 +1048,17 @@ function onScreen(node: HTMLElement) {
  *
  * Revealing a focused card centres it and pins its row to the top of the column, which is
  * not where the viewer left the page. The remembered offset wins, unless it would leave the
- * item off screen - then the item's own reveal is the better answer.
+ * item off screen - then the item's own reveal is the better answer. The reveal waits until the
+ * column is actually holding the remembered place: while the page is still drawing, a reveal
+ * would pin the row to the top of the column - a place the viewer was never at - and that place
+ * would be painted before the page arrived.
  */
 function nudge(seat: NavSeat, node: HTMLElement) {
   const settle = () => {
     if (!node.isConnected) return
     applySeat(seat)
+    const main = mainColumn()
+    if (!main || !holdsSeat(main, seat)) return
     if (!onScreen(node)) placeReveal(node)
   }
   settle()
@@ -1071,7 +1105,9 @@ export function restoreSeat(route: string, insist: boolean, onGiveUp: () => void
   const settle = (node: HTMLElement) => {
     stop()
     cancelRestore = null
-    focusNode(node, insist)
+    // The focus itself never moves the column: a Back's place is the offsets below, and a plain
+    // visit keeps the top the screen opened at. The row the control is in is still brought to it.
+    focusNode(node, false)
     // The remembered offsets are the viewer's place on the screen they left. A Back puts them
     // back and keeps them while the focus that follows settles; a plain visit does not move the
     // column at all, so the screen it opens stays at its own top.
@@ -1096,28 +1132,31 @@ export function restoreSeat(route: string, insist: boolean, onGiveUp: () => void
       stop()
       return
     }
-    // The offsets go back first: a library grid that pages in as it scrolls then loads the
-    // page the item was on while the search below is still running.
-    if (insist) applySeat(seat)
-    const exact = seatTarget(seat)
-    // A plain visit borrows the seat's control only once the page has stopped drawing and only
-    // when the viewer can see it: the screen keeps the top its own navigation gave it, so a
-    // control the remembered offset used to bring into view is not one the viewer is looking at,
-    // and resting the remote on it would leave the focus ring off the screen until they pressed
-    // something. The page's own landing runs instead - the row the viewer came for.
-    if (exact && (insist || (!pageIsDrawing() && onScreen(exact)))) {
-      settle(exact)
-      return
-    }
-    if (!insist) {
-      // Nothing else of the seat is borrowed by a plain visit: the row's first card is not the
-      // place the viewer left, and the page's own landing answers better. While the page is still
-      // drawing, the wait below is what gives it the chance to.
-      if (!pageIsDrawing()) {
+    // Nothing of the seat goes back while the page is still drawing its own content. An offset
+    // put on a page whose head is all that has arrived is clamped by the browser to what that
+    // short page can hold, and the clamped place is painted: a Back measured on a television
+    // settled at 569 before it reached the 955 the viewer had left. The wait below is what picks
+    // the seat up the moment the page has drawn, and the page's own landing answers for it if the
+    // page never does.
+    if (!pageIsDrawing()) {
+      // The offsets go back first: a library grid that pages in as it scrolls then loads the
+      // page the item was on while the search below is still running.
+      if (insist) applySeat(seat)
+      const exact = seatTarget(seat)
+      // A plain visit borrows the seat's control only when the viewer can see it: the screen keeps
+      // the top its own navigation gave it, so a control the remembered offset used to bring into
+      // view is not one the viewer is looking at, and resting the remote on it would leave the
+      // focus ring off the screen until they pressed something.
+      if (exact && (insist || onScreen(exact))) {
+        settle(exact)
+        return
+      }
+      if (!insist) {
+        // Nothing else of the seat is borrowed by a plain visit: the row's first card is not the
+        // place the viewer left, and the page's own landing answers better.
         giveUp()
         return
       }
-    } else {
       const row = bandFor(seat.band)
       if (row) {
         if (!rowSeen) rowSeen = performance.now()
