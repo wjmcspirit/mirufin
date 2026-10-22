@@ -477,13 +477,14 @@ check(
 )
 
 /* The rail's two states, which are two different things and must not be drawn as one. The page the
-   viewer is on is a persistent mark: the app's own cyan icon, a rule under it as wide as the icon,
-   and the page's own name under that - all three drawn whether or not the remote is on the tab.
-   Where the remote is is the app's own television ring: the light cyan ring and the cyan halo every
-   button, poster and profile card in the app wears, drawn on a plate around the icon, with the icon
-   at full white. The two can be on two different tabs at once, and each still has to read for what
-   it is. What a television makes of that cannot be measured here - `tools/foldCheck.ts` is the only
-   harness with a layout engine - so what is held is the shape of the rules that keep them apart.
+   viewer is on is a persistent mark: a translucent circle behind the icon, the icon itself in the
+   app's own cyan, and the page's own name under it - all of it drawn whether or not the remote is on
+   the tab. Where the remote is is the app's own television ring: the light cyan ring with the cyan
+   halo every button, poster and profile card in the app wears, drawn around the icon's own circle
+   and left empty. One mark is filled and the other is not, so the two can be on two different tabs
+   at once and each still reads for what it is. What a television makes of that cannot be measured
+   here - `tools/foldCheck.ts` is the only harness with a layout engine - so what is held is the
+   shape of the rules that keep them apart.
 
    `rule` above looks for a selector and its opening brace on the same line, which is how most of
    this stylesheet is written. The rail's focus rules are not: one rule answers the keyboard, the
@@ -497,51 +498,136 @@ function listed(selector: string) {
   }
   return ""
 }
+/** One rail token, in the units it is written in. */
+function railUnits(name: string) {
+  return Number(css.match(new RegExp(`--${name}:\\s*([\\d.]+)px`))?.[1] ?? "0")
+}
 const railTab = listed(".nav")
+const railGroup = listed(".side-nav")
 const railName = listed(".nav-label")
 const activeTab = listed(".nav.active")
-const activeRule = listed(".nav.active::after")
 const activeName = listed(".nav.active .nav-label")
+const activeCircle = listed(".nav.active::before")
+const circle = listed(".nav::before")
+const ring = listed(".nav::after")
+const ringOn = listed(".nav:focus::after")
 const focusedTab = listed(".nav:focus")
+const focusedOnly = listed(".nav:focus:not(.active)")
 const focusedName = listed(".nav:focus .nav-label")
-const plate = listed(".nav::before")
-const plateOn = listed(".nav:focus::before")
 check(
-  "one tab's box is the size the rail names, and it is what holds the icon, the rule under it and the name under that",
-  railTab.includes("height: var(--rail-item)") && css.includes("--rail-item: 50px"),
+  "one tab's box is the size the rail names, and it is what holds the icon, the mark around it and the name under that",
+  railTab.includes("height: var(--rail-item)") && railUnits("rail-item") > 0,
   railTab.trim(),
 )
 check(
-  "and the name is placed under that box at the rail's own spacing, so the three parts of a tab read as one object",
+  "and the name is placed under that box, at the rail's own spacing",
   railName.includes("top: calc(100% + var(--rail-name-gap))"),
   railName.trim(),
+)
+/* The icons used to sit 2 units apart, which read as one object rather than as a row of
+   destinations. The rail's own group is spaced by the token and by nothing else, and the value is
+   what the viewer asked for: 8 to 12 units more than the 2 the group had. */
+const railGap = railUnits("rail-gap")
+check(
+  "the rail's own group is spaced by the token, not by a number of its own",
+  railGroup.includes("gap: var(--rail-gap)"),
+  railGroup.trim(),
+)
+check(
+  "and two tabs stand 8 to 12 units further apart than they did, so the icons are told apart at a glance",
+  railGap >= 10 && railGap <= 14,
+  `${railGap} units between two tabs, against the 2 they were`,
 )
 /* The rail's own height is a budget rather than a preference: the box plus the padding above and
    below it is what pushes the hero and the first row of posters down. The fold has about 12 units
    of room at 1080p with the medium posters under it, measured by `tools/foldCheck.ts`, so the rail
    may grow a little and no further. */
 const railPad = Number(rule(".side").match(/padding:\s*(\d+)px var\(--content-pad\)/)?.[1] ?? "0")
-const railItem = Number(css.match(/--rail-item:\s*(\d+)px/)?.[1] ?? "0")
+const railItem = railUnits("rail-item")
+const railIcon = railUnits("rail-icon")
+const iconTop = (railItem - railIcon) / 2
+const nameTop = railItem + railUnits("rail-name-gap")
 check(
   "and the rail's own height stays inside what the fold can pay for",
   railPad > 0 && railItem > 0 && railPad * 2 + railItem <= 72,
   `${railPad}px above and below a ${railItem}px box is ${railPad * 2 + railItem} of the 844-unit canvas`,
 )
+/* The page the viewer is on: the circle, and only the circle. It is a mark behind the icon rather
+   than a wash over the tab, it is filled with a translucent dark cyan and edged with a hairline of
+   the app's cyan, and it carries no gradient: the artwork behind the rail is what the eye should be
+   drawn to, and a bright disc would fight it. */
+const circleSize = railUnits("rail-circle")
 check(
-  "the page the viewer is on is drawn in the app's own cyan, and not in the colour the remote's own state is drawn in",
-  activeTab.includes("color: var(--accent)") && focusedTab.includes("color: #fff"),
-  `active ${activeTab.trim()} / focused ${focusedTab.trim()}`,
+  "the page the viewer is on is drawn in the app's own cyan",
+  activeTab.includes("color: var(--accent)"),
+  activeTab.trim(),
 )
 check(
-  "and its rule is exactly as wide as the icon and begins at the icon's own bottom edge, so it belongs to the tab rather than floating below it",
-  activeRule.includes("width: var(--rail-icon)") &&
-    activeRule.includes("top: calc(var(--rail-icon-top) + var(--rail-icon) + var(--rail-rule-gap))"),
-  activeRule.trim(),
+  "and it wears a circle behind its icon, of the size the viewer asked for",
+  circleSize >= 34 &&
+    circleSize <= 38 &&
+    circle.includes("width: var(--rail-circle)") &&
+    circle.includes("height: var(--rail-circle)"),
+  `${circleSize} units across`,
 )
 check(
-  "and the page's own name is drawn with the remote nowhere near the tab, and quieter than a focused tab's",
-  activeName.includes("visibility: visible") && activeName.includes("opacity: 0.82") && focusedName.includes("opacity: 1"),
-  `${activeName.trim()} / ${focusedName.trim()}`,
+  "and the circle is centred on the icon rather than on the tab, so it stands exactly behind it",
+  circle.includes("border-radius: 50%") &&
+    circle.includes("top: calc(var(--rail-icon-top) - var(--rail-circle-inset))") &&
+    css.includes("--rail-circle-inset: calc((var(--rail-circle) - var(--rail-icon)) / 2)"),
+  circle.trim(),
+)
+check(
+  "and it is a translucent dark cyan with a hairline of the app's cyan at its edge, and no gradient",
+  /background: rgba\(\d+, \d+, \d+, 0\.\d+\);/.test(circle) &&
+    /border: 1px solid rgba\(62, 200, 255, 0\.\d+\);/.test(circle) &&
+    !/gradient/.test(circle),
+  circle.trim(),
+)
+check(
+  "and the circle is drawn whether or not the remote is on the tab",
+  activeCircle.includes("opacity: 1"),
+  activeCircle.trim(),
+)
+check(
+  "and the page's own name is drawn quietly under the icon",
+  activeName.includes("visibility: visible") && activeName.includes("opacity: 0.82"),
+  activeName.trim(),
+)
+/* Where the remote is: the app's ring, drawn around the icon's own circle and left empty. The shape
+   is what keeps the two states apart - a filled circle can never be a tab the remote is on - and its
+   halo is what stops short of the name under the tab. */
+const ringOffset = Number(ring.match(/outline-offset:\s*(\d+)px/)?.[1] ?? "0")
+const ringWeight = Number(ring.match(/outline:\s*(\d+)px solid #8ee6ff/)?.[1] ?? "0")
+const halo = Number(ring.match(/box-shadow:\s*0 0 0 (\d+)px rgba\(62, 200, 255, 0\.28\)/)?.[1] ?? "0")
+const circleEdge = iconTop + railIcon / 2 + circleSize / 2
+check(
+  "the tab the remote is on wears the app's own television ring, drawn on the icon's own circle",
+  ringWeight === 3 &&
+    ring.includes("width: var(--rail-circle)") &&
+    ring.includes("top: calc(var(--rail-icon-top) - var(--rail-circle-inset))") &&
+    ringOn.includes("opacity: 1"),
+  ring.trim(),
+)
+check(
+  "and the ring is empty, so a tab the remote is on can never be read as the page the viewer is on",
+  !/background:/.test(ring) && ring.includes("opacity: 0"),
+  ring.trim(),
+)
+check(
+  "and neither the ring nor its halo reaches the name under the tab",
+  circleEdge + ringOffset + ringWeight < nameTop && circleEdge + halo <= nameTop,
+  `the circle ends ${circleEdge}, the ring ${circleEdge + ringOffset + ringWeight}, its halo ${circleEdge + halo}, the name begins ${nameTop}`,
+)
+check(
+  "and the tab the remote is on draws its icon at full white, while the page the viewer is on keeps the app's cyan",
+  focusedOnly.includes("color: #fff") && !focusedTab.includes("color: #fff"),
+  `${focusedTab.trim()} / ${focusedOnly.trim()}`,
+)
+check(
+  "and that tab's own name is the one the rail draws loud",
+  focusedName.includes("opacity: 1") && focusedName.includes("color: #fff"),
+  focusedName.trim(),
 )
 const namedBy = listed(".side-nav.rail-named .nav.active .nav-label")
 check(
@@ -554,23 +640,6 @@ check(
   "and the rail is told when another tab has taken its one name",
   /rail\.current\?\.classList\.toggle\("rail-named"/.test(shell) && /nameRail\(link\)/.test(shell),
   "Shell.tsx",
-)
-check(
-  "the tab the remote is on draws its icon at full white, which is not the cyan the page the viewer is on is drawn in",
-  focusedTab.includes("color: #fff"),
-  focusedTab.trim(),
-)
-check(
-  "and it wears the app's own television ring - the light cyan ring and the cyan halo every button, poster and profile card in the app wears - drawn on a plate around the icon",
-  plate.includes("width: var(--rail-plate)") &&
-    plate.includes("outline: 3px solid #8ee6ff") &&
-    plate.includes("box-shadow: 0 0 0 6px rgba(62, 200, 255, 0.28)"),
-  plate.trim(),
-)
-check(
-  "and that plate is nothing until the remote is on the tab, so it can never read as the active page's mark",
-  plate.includes("opacity: 0") && plateOn.includes("opacity: 1"),
-  `${plate.trim()} / ${plateOn.trim()}`,
 )
 
 /** One media query's block, as it is written. */
