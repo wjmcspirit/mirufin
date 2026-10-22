@@ -796,9 +796,34 @@ check(
   "Item.tsx",
 )
 check(
-  "while every other title keeps its studios, which are doors to browse the library by",
-  page.includes('<p className="meta-links">') && page.includes("studioName="),
+  "while every other title keeps its studios, which are doors to browse the library by, drawn as the quieter group of chips under the genres",
+  page.includes('<p className="meta-links studio-pills">') && page.includes("studioName="),
   "Item.tsx",
+)
+/* A title's own page is where the whole of its description is read. It is the plain `.overview` and
+   never the `.clamp` the app's heroes and a person's biography hold their text to, and the stylesheet
+   states the same thing about the copy's own description, so no engine and no shared rule can cut it
+   off and nothing on the page opens the rest of it anywhere else. */
+check(
+  "a title's own description is drawn in full where it stands, with no clamp of its own and no control that opens the rest",
+  page.includes('<p className="overview">{item.Overview}</p>') &&
+    !page.includes('className="overview clamp">{item.Overview}') &&
+    flat.includes(".detail-copy .overview { display: block; -webkit-line-clamp: none; overflow: visible; }"),
+  "Item.tsx and styles.css",
+)
+/* A studio is the same door a genre is, one size down and a step back in colour: the genres keep the
+   app's primary chip and the accent's cyan outline, while the studios take the app's own muted colour
+   and a smaller box, so the page reads genre first and studio second. The ring a press draws is the
+   same on both, because the hierarchy is in the chip rather than in what a press does. */
+check(
+  "a studio chip is the quieter, smaller group under the genres, in the app's muted colour rather than the accent",
+  /\.meta-links\.studio-pills a,\s*\.meta-links\.studio-pills span\s*\{[^}]*min-height:\s*26px[^}]*color:\s*var\(--muted\)[^}]*font-size:\s*12\.5px/.test(
+    css,
+  ) &&
+    /\.meta-links\.genre-pills a\s*\{[^}]*min-height:\s*32px[^}]*font-size:\s*14px/.test(css) &&
+    /\.meta-links\.studio-pills a:focus,[\s\S]{0,200}?outline:\s*3px solid #8ee6ff/.test(css) &&
+    !/\.meta-links\.studio-pills[^{]*\{[^}]*var\(--accent\)/.test(css),
+  "styles.css",
 )
 
 check(

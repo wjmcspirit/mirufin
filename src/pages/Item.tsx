@@ -257,6 +257,12 @@ export function ItemPage() {
                 </p>
               )}
               {item.Taglines?.[0] && <p className="tagline">{item.Taglines[0]}</p>}
+              {/* A title's description is read in full where it stands. It is the plain `.overview`
+                  and never the `.clamp` the app's heroes and a person's biography hold their text
+                  to, so it wraps over as many lines as the server's own words need, nothing is cut
+                  off it, and no control on the page opens the rest of it anywhere else - there is
+                  no rest. The rule is stated in the stylesheet as well as by the class this page
+                  does not add, so no engine and no shared rule can clamp it. */}
               {item.Overview && (item.Type === "Person" ? <Bio text={item.Overview} /> : <p className="overview">{item.Overview}</p>)}
               {/* A title's genre and studio links are drawn in its head, as they are on every other
                   page: the head is the page's own controls, and the sections follow them. They used
@@ -1845,6 +1851,13 @@ function PhotoBody({ item }: { item: Item }) {
  * name travels with the id so the results page can say what it is showing without asking the
  * server a second time, and a label the server sent without an id is drawn as a label: nothing
  * here invents an id to make a door out of it.
+ *
+ * The two groups are one row of doors with a hierarchy rather than two kinds of control. A genre
+ * is what a viewer browses by, so it keeps the app's primary chip - the cyan-outlined
+ * `.genre-pills` above. A studio is the same door asked more narrowly, and it is drawn as the
+ * quieter half of it: the same pill shape, one size down and a step back in colour (`.studio-pills`
+ * in the stylesheet), so the page reads genre first and studio second while a press on either one
+ * behaves identically.
  */
 function FactLinks({ item }: { item: Item }) {
   const { libraries } = useSession()
@@ -1875,7 +1888,7 @@ function FactLinks({ item }: { item: Item }) {
         </p>
       )}
       {studios.length > 0 && (
-        <p className="meta-links">
+        <p className="meta-links studio-pills">
           {studios.map((studio) =>
             libraryId && studio.id ? (
               <Link

@@ -2796,6 +2796,74 @@ function testStudioDiscovery() {
 }
 
 // ---------------------------------------------------------------------------
+// A film's two groups of fact links, and the band under them
+// ---------------------------------------------------------------------------
+
+/**
+ * A film's genres and the studios drawn under them.
+ *
+ * Both groups are the same kind of door - a link into the library the film lives in, narrowed to that
+ * genre or that studio - so they are walked as one column rather than as two controls that happen to
+ * sit together: Down from the genre chips reaches the studio chips, Down again reaches the film's own
+ * actions, and Up comes back through both. The studio chips are the quieter group on the screen, and
+ * a press on one opens the studio's own results exactly as it did before they were restyled - the
+ * hierarchy is in the chip, not in what a press does.
+ */
+function testFilmFactLinks() {
+  clearSeats()
+  resetFocusState()
+  const { main } = shell()
+  const head = new El("header", "detail-hero stage-copy")
+  head.place(60, 0, 1440, 420)
+  const copy = new El("div", "detail-copy")
+  const overview = new El("p", "overview")
+  overview.text = "The whole of the film's description, read where it stands."
+  overview.place(96, 400, 640, 96)
+  const genres = new El("p", "meta-links genre-pills")
+  const genreChips = ["Action", "Fantasy"].map((name, index) => {
+    const chip = new El("a", "").attr("href", `/library/LIB?genre=${name}&genreName=${name}`)
+    chip.text = name
+    chip.place(204, 400 + index * 150, 140, 32)
+    genres.add(chip)
+    return chip
+  })
+  const studios = new El("p", "meta-links studio-pills")
+  const studioChips = ["Lakeshore Entertainment", "Screen Gems"].map((name, index) => {
+    const chip = new El("a", "").attr("href", `/library/LIB?studio=${name}&studioName=${name}`)
+    chip.text = name
+    chip.place(246, 400 + index * 150, 150, 26)
+    studios.add(chip)
+    return chip
+  })
+  copy.add(overview, genres, studios)
+  const band = new El("div", "actions detail-actions")
+  const play = new El("a", "btn btn-primary").attr("href", "/play/MOVIE?resume=0")
+  play.text = "Play"
+  play.place(300, 400, 140, 44)
+  band.add(play)
+  head.add(copy, band)
+  main.add(head)
+  episodeRow(main, 12)
+  noteRoute("/item/MOVIE")
+
+  placeFocus(genreChips[0])
+  moveFocus("ArrowDown")
+  check("Down from a film's genre chips reaches the studio chips under them", active === studioChips[0], label(active))
+  moveFocus("ArrowDown")
+  check("and Down again reaches the film's own actions", active === play, label(active))
+  moveFocus("ArrowUp")
+  check("Up from the actions comes back to the studio chips", active === studioChips[0], label(active))
+  moveFocus("ArrowUp")
+  check("and Up again returns to the genre chips", active === genreChips[0], label(active))
+  check(
+    "a studio chip is the same door a genre chip is: the library this film lives in, narrowed to that studio",
+    studioChips[0].getAttribute("href") === "/library/LIB?studio=Lakeshore Entertainment&studioName=Lakeshore Entertainment" &&
+      genreChips[0].getAttribute("href") === "/library/LIB?genre=Action&genreName=Action",
+    `${genreChips[0].getAttribute("href")} / ${studioChips[0].getAttribute("href")}`,
+  )
+}
+
+// ---------------------------------------------------------------------------
 // What the remote can reach has to be drawn when it is reached
 // ---------------------------------------------------------------------------
 
@@ -3133,6 +3201,7 @@ testPersonChain()
 testCrewRow()
 testGenreDiscovery()
 testStudioDiscovery()
+testFilmFactLinks()
 testClearingAndOverlays()
 testFadedPanel()
 testFocusDeclarations()

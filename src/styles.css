@@ -1171,10 +1171,71 @@ html:not(.remote) .nav:hover .nav-label {
   outline-offset: 3px;
   box-shadow: 0 0 0 6px rgba(62, 200, 255, 0.28);
 }
+/* A studio is the same door as a genre - it opens the library this title lives in, narrowed to that
+   studio - but it is the quieter half of what a title is. The genre chips above are the page's
+   primary metadata chips and keep the accent's own cyan outline; a studio is the same pill one size
+   down and a step back in colour, so the page reads genre first and studio second while a press on
+   either one behaves identically: the same shared `.meta-links` band, the same D-pad ring, and the
+   same library link behind it. The grey-blue border and the muted text are the app's own muted
+   colour rather than a colour of their own - nothing in this group is tinted with the accent, which
+   is what sets it a step back rather than making it a second kind of control.
+
+   A studio the server sent without an id is drawn the same way rather than as plain text: it is the
+   same name in the same group, and it is simply not a door. A genre's label keeps the plain look it
+   has always had, because the genre row is the page's own composition. */
+.meta-links.studio-pills {
+  gap: 8px;
+  align-items: center;
+}
+.meta-links.studio-pills a,
+.meta-links.studio-pills span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 3px 11px;
+  border: 1px solid rgba(154, 163, 181, 0.32);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.2;
+  letter-spacing: 0.03em;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+.meta-links.studio-pills a:hover {
+  background: rgba(154, 163, 181, 0.16);
+  border-color: rgba(154, 163, 181, 0.55);
+  color: var(--text);
+}
+/* The ring a press draws is the app's own - the outline and the wash the genre chips draw - because
+   the hierarchy is in the chip and not in how the remote lands on it. */
+.meta-links.studio-pills a:focus,
+.meta-links.studio-pills a:focus-visible,
+.meta-links.studio-pills a.dpad-focus {
+  color: #fff;
+  background: rgba(154, 163, 181, 0.2);
+  border-color: var(--muted);
+  text-shadow: none;
+  outline: 3px solid #8ee6ff;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px rgba(62, 200, 255, 0.22);
+}
 .hero-copy .overview,
 .detail-copy .overview {
   color: #d5dce8;
   text-shadow: 0 1px 10px rgba(0, 0, 0, 0.6);
+}
+/* A title's own page is where the whole of its description is read. The app's heroes and a person's
+   biography hold their text to a clamp and offer the rest through the control beside it; here the
+   text is free to wrap over as many lines as the server's own words need, and nothing on the page
+   opens it anywhere else - there is nothing left to open. `line-clamp` is stated as none here as
+   well as by the class this page does not add, so no engine and no shared rule can cut this text
+   off, and the fact links and the action band below it follow the text rather than being overlapped
+   by it. The same guard the browse hero's episode description carries, for the same reason. */
+.detail-copy .overview {
+  display: block;
+  -webkit-line-clamp: none;
+  overflow: visible;
 }
 .hero-copy .hero-episode {
   color: #f4f7ff;

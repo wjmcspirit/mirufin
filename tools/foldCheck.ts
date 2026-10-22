@@ -73,6 +73,56 @@ const PANELS: Panel[] = [
   { name: "4K", width: 3840, height: 2160 },
 ]
 
+/** A box on a page, in the design units the television layout is drawn in. */
+interface Box {
+  top: number
+  bottom: number
+  left: number
+  right: number
+  height: number
+}
+
+/**
+ * A group of fact-link chips: how many doors it holds, how many rows they are drawn in, and how big
+ * each one is. A group that does not fit the copy's width wraps onto the next line.
+ */
+interface ChipGroup {
+  count: number
+  rows: number
+  height: number
+  font: number
+  /** The furthest right any chip in the group reaches. */
+  widest: number
+  top: number
+  bottom: number
+}
+
+/**
+ * A title's own page as it is drawn: its poster and its copy, the description in that copy, the two
+ * groups of fact links under it and the band of its own actions under those.
+ */
+interface DetailPage {
+  lefts: { poster: number; copy: number; heading: number; row: number; grid: number }
+  edges: { logo: number; group: number; row: number; grid: number }
+  screen: number
+  wide: number
+  overflow: number
+  film: {
+    /** The lines the description occupies, and what its own box says about the text inside it. */
+    lines: number
+    clamped: string
+    clipped: boolean
+    /** Controls under the description that open the rest of it: a title's own page draws none. */
+    reveal: number
+    description: Box
+    copy: Box
+    head: Box
+    genres: ChipGroup
+    studios: ChipGroup
+    actions: Box
+  }
+}
+
 interface FoldReport {
   /** Which first row was measured: a row of posters, or a row of landscape cards. */
   row: "poster" | "wide"
@@ -112,6 +162,8 @@ interface FoldReport {
     artInside: boolean
     captionInside: boolean
   }
+  /** A film's own page, measured in the same run: its copy, its fact links and its action band. */
+  detail: DetailPage
 }
 
 /** Just enough of the DevTools protocol to set a viewport and read a value back. */
@@ -666,6 +718,49 @@ for (const { panel, report } of await measureAll(browser, probe, PANELS)) {
     `${panel.name} (${report.row}): and none of the page's blocks reach past the screen's right edge`,
     detail.wide <= detail.screen && detail.overflow <= 0.5,
     `widest box ends at ${detail.wide} of ${detail.screen}, overflow ${detail.overflow}`,
+  )
+  /* The film head's copy, as the page draws it: the whole of the description, the two groups of
+     fact links under it, and the band of the film's own actions under those. The description is what
+     this page is for and it is read in full where it stands - nothing clamped off it and no control
+     under it that opens the rest, because there is no rest - and the two groups of doors under it are
+     one hierarchy rather than two kinds of control: the genres keep the app's primary chip and the
+     studios are the quieter, smaller group. Both groups wrap when they hold more names than one row
+     takes, and none of it overlaps the band below it. */
+  const film = detail.film
+  console.log(
+    `     film copy: description ${film.lines} lines (clamped ${film.clamped}, clipped ${film.clipped}, reveal ${film.reveal})  ` +
+      `genres ${film.genres.count} in ${film.genres.rows} row(s) at ${film.genres.height}x${film.genres.font}  ` +
+      `studios ${film.studios.count} in ${film.studios.rows} row(s) at ${film.studios.height}x${film.studios.font}`,
+  )
+  check(
+    `${panel.name} (${report.row}): a film's description is drawn in full, with nothing clamped off it and no control that opens the rest`,
+    film.lines > 2 && film.clipped === false && film.clamped === "none" && film.reveal === 0,
+    `lines ${film.lines}, clamped ${film.clamped}, clipped ${film.clipped}, reveal ${film.reveal}`,
+  )
+  check(
+    `${panel.name} (${report.row}): and the copy it is drawn in fits inside the head it belongs to`,
+    film.copy.top >= film.head.top - 0.5 && film.copy.bottom <= film.head.bottom + 0.5,
+    `copy ${film.copy.top}..${film.copy.bottom} in head ${film.head.top}..${film.head.bottom}`,
+  )
+  check(
+    `${panel.name} (${report.row}): the studio chips are the quieter group - smaller, and set in smaller type, than the genre chips`,
+    film.studios.count > 0 && film.studios.height < film.genres.height && film.studios.font < film.genres.font,
+    `studios ${film.studios.height}x${film.studios.font}, genres ${film.genres.height}x${film.genres.font}`,
+  )
+  check(
+    `${panel.name} (${report.row}): both groups wrap rather than running past the copy, when they hold more names than one row takes`,
+    film.studios.rows >= 2 &&
+      film.genres.widest <= film.copy.right + 0.5 &&
+      film.studios.widest <= film.copy.right + 0.5,
+    `genres ${film.genres.rows} row(s) to ${film.genres.widest}, studios ${film.studios.rows} row(s) to ${film.studios.widest}, copy ends ${film.copy.right}`,
+  )
+  check(
+    `${panel.name} (${report.row}): and the description, the two groups and the action band follow one another without overlapping`,
+    film.description.bottom <= film.genres.top + 0.5 &&
+      film.genres.bottom <= film.studios.top + 0.5 &&
+      film.studios.bottom <= film.actions.top + 0.5,
+    `description ends ${film.description.bottom}, genres ${film.genres.top}..${film.genres.bottom}, ` +
+      `studios ${film.studios.top}..${film.studios.bottom}, actions from ${film.actions.top}`,
   )
   console.log("")
 }
