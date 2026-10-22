@@ -1792,7 +1792,6 @@ html:not(.remote) .nav:hover .nav-label {
 .card-board,
 .letter-row,
 .detail-layout,
-.episode-spot,
 .search-hits,
 .problem,
 .empty,
@@ -2034,9 +2033,9 @@ select {
   gap: 22px;
 }
 /* A page that browses a season: the cinematic banner - the season's own poster beside the show's
-   logo, its facts and its synopsis - then the season selector on its own row, the row of stills, the
-   episode the remote is on described under the row with the action that settles it, and the title's
-   own actions under that.
+   logo, the episode the remote is on, its facts and its synopsis - then the season selector on its
+   own row, the row of stills, and the band under the row with the action that settles the episode
+   the banner describes and the title's own actions beside it.
 
    The page's own head - a portrait beside the copy - belongs to a title's own page. Here the
    banner is the head, and the season's poster stands in it beside the copy: it stands on the
@@ -2135,12 +2134,46 @@ select {
   border-radius: 999px;
 }
 /* The title's box steps down with the banner: a logo is still read from across the room, and the
-   room the copy gives back is what pays for the episode described under it and the season selector
+   room the copy gives back is what pays for the episode the remote is on and the season selector
    below that. */
 .browse-hero .hero-title { height: 72px; }
 .browse-hero .hero-title .logo-title { max-height: 72px; }
+/* The page that browses a season stands its copy on the top edge of the season's poster.
+   The show's logo is the banner's first line here - the line that says which season the row below
+   belongs to follows it - so the copy's own box begins where the poster's box begins rather than on
+   the banner's bottom edge, and the logo's top is level with the top edge of the artwork beside it.
+   Both are drawn from the top of the banner, and the poster is the taller of the two, so it is still
+   the poster's own height that sets the banner's - exactly as it did when the copy was bottom
+   aligned - and the copy keeps the room it has always had: its own 16 of bottom padding is the space
+   the poster's own bottom margin gives it. A copy taller than the poster - a long description with
+   the ellipsis under it - grows the banner downwards instead of moving the poster, which is what
+   keeps the head of the page and the row under it in the same place whatever an episode says. */
+.episode-block .browse-hero { align-items: flex-start; }
+.episode-block .browse-hero .hero-copy {
+  height: auto;
+  justify-content: flex-start;
+  padding: 0 var(--strip-pad) 16px;
+}
+/* A logo sits on its box's own top edge, so the title's box is what the logo's top is measured
+   from. The box keeps its height; only the alignment inside it is stated here. */
+.episode-block .browse-hero .hero-title { justify-content: flex-start; }
+/* The episode the remote is on, in the banner beside the season's poster and under the show's logo:
+   its own name with the row's flags, its facts - which lead with its number - and what it is about.
+   It is the one place a season page describes an episode, so the page carries one information area
+   with one subject, and the row below is what changes that subject as the remote moves. Its own
+   lines are spaced tighter than the banner's rhythm, because they are one episode's facts rather
+   than the page's composition. */
+.hero-episode-info { display: grid; gap: 6px; }
+/* One episode's facts are one line where the show's are two: the show's line is the page's own
+   composition and is held to the two lines the banner reserves for it whatever it says, while this
+   one is a single episode's - its number, when it aired, how long it is and what it is rated - and
+   what does not fit is cut rather than allowed to grow the banner the poster has already sized. */
+.browse-hero .hero-episode-info .kicker {
+  min-height: 0;
+  -webkit-line-clamp: 1;
+}
 /* The page's own rhythm: the season selector sits close under the banner, the row follows the
-   selector, and the episode the remote is on is described under the row it was chosen from. */
+   selector, and the band under the row settles the episode the banner describes. */
 .browse-page .detail-body { gap: 18px; }
 .season-bar {
   display: block;
@@ -2258,11 +2291,10 @@ select {
 .series-head { display: grid; gap: 0; }
 .series-head .browse-hero.stage-copy { min-height: calc(var(--app-height, 100dvh) * 0.34); }
 .series-head .episode-actions { margin-top: 14px; }
-/* The block that browses a season: the banner that names the show with the season's poster in it,
-   the season selector, the row of stills, the episode the remote is on described under the row, and
-   the title's actions under that. The block's own column is stated for the same reason the page's is
-   - the banner carries a title and a line of facts, and the row must not take its width from
-   either. */
+/* The block that browses a season: the banner that names the show with the season's poster in it
+   and the episode the remote is on under its logo, the season selector, the row of stills, and the
+   band under the row. The block's own column is stated for the same reason the page's is - the
+   banner carries a title and a line of facts, and the row must not take its width from either. */
 .episode-block {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -2336,45 +2368,12 @@ select {
   font-size: 14px;
 }
 .episode-meta .episode-flag { margin-left: 0; }
-/* The episode the remote is on, described under the row that selects it: the episode's own title with
-   the row's flags - up next, resume, watched - then its facts line, which leads with the season and
-   episode number, then what it is made of, then what it is about. The show's own description is not
-   repeated here and this episode's is not drawn in the banner: the banner is the page's head and
-   describes the show, and this block is the episode, so one information area carries one subject.
-   What settles the episode - its watched state - is the first control of the band under this block,
-   on the one row with the title's own actions (see `.episode-actions`).
-   The block begins on the application's content boundary like everything around it: its inset comes
-   from the shared rule above (`.episode-spot` is named there), and this rule states only what is its
-   own - the grid and the measure.
-   Its title is one step down from the banner's, because the show is the page's heading and this is
-   the episode's: the banner names what the viewer is browsing, and this block names the episode the
-   row is resting on. */
-.episode-spot {
-  display: grid;
-  gap: 6px;
-  max-width: 1180px;
-}
-.episode-spot h2 {
-  font-size: 28px;
-  font-weight: 600;
-  line-height: 1.2;
-  color: #f4f7ff;
-  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.45);
-}
-.episode-spot .kicker { font-size: 15px; color: #b7c0d0; }
-.episode-spot .chips { margin-top: 2px; }
-.episode-spot .overview { max-width: 78ch; font-size: 15.5px; color: #c9d2e0; }
-/* The number and the name are two things on the one line - which episode it is, and what it is
-   called - so they are set apart by a gap rather than by a word between them: the row's own cards
-   join them with the app's dot, and the block that describes one episode has the room to space them
-   instead. */
-.episode-spot-gap { display: inline-block; width: 10px; }
-/* The one band a season page carries: the episode's own watched state - the episode just described
-   above it, which is what that button settles - and then the title's own actions, the season's Play
-   and the season's own watched toggle among them. They are all the app's own `.btn`, so the row has
-   one button height whatever each control does, and the band's own gap is the whole of the spacing
-   between them; the band wraps only if a panel is too narrow to hold it, which is what keeps the
-   controls on one line at every television size.
+/* The one band a season page carries: the watched state of the episode the banner describes - which
+   is the episode the row chose, and what that button settles - and then the title's own actions, the
+   season's Play and the season's own watched toggle among them. They are all the app's own `.btn`, so
+   the row has one button height whatever each control does, and the band's own gap is the whole of
+   the spacing between them; the band wraps only if a panel is too narrow to hold it, which is what
+   keeps the controls on one line at every television size.
    The band belongs to the row it sits under, so it starts where that row's first still does - on the
    application's content boundary, which is the strip's own inset and not a number of its own. It
    used to carry 40 of its own padding, which left it 8 to the right of the row above it at 1080p and

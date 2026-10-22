@@ -560,8 +560,10 @@ function activate(node: El) {
 // ---------------------------------------------------------------------------
 
 /**
- * A season browsing block: the heading, the details of the episode the remote is on, the row
- * of episode stills, and the actions under the row - the shape the season page renders.
+ * A season browsing block: the heading, the row of episode stills, and the band under the row - the
+ * shape the season page renders. The episode the remote is on is described in the banner above the
+ * row rather than in a block under it, so nothing stands between the row and the band that settles
+ * the episode it chose.
  */
 function seasonBlock(main: El) {
   const section = new El("section", "episode-block")
@@ -569,8 +571,6 @@ function seasonBlock(main: El) {
   const h2 = new El("h2")
   h2.text = "Season 2"
   head.add(h2)
-  const spot = new El("div", "episode-spot")
-  spot.place(664, 400, 1000, 104)
   const scroller = new El("div", "scroller episode-scroller")
   scroller.place(780, 400, 1600, 268)
   scroller.clientWidth = 1600
@@ -596,7 +596,7 @@ function seasonBlock(main: El) {
   favorite.text = "Favorite"
   favorite.place(1070, 592, 148, 48)
   actions.add(play, favorite)
-  section.add(head, spot, scroller, actions)
+  section.add(head, scroller, actions)
   main.add(section)
   return { section, scroller, cards, play, favorite }
 }
@@ -645,12 +645,10 @@ function episodeRow(main: El, count: number, withActions = true) {
     scroller.add(card)
     return card
   })
-  // The episode the remote is on is described under the row that selects it, and the band under that
-  // description is one row: the episode's own watched state first - it settles the episode just
-  // described - and then the title's own actions, the season's Play among them. They are the same
-  // `.btn` the page draws, laid out side by side in one `.actions` band.
-  const spot = new El("div", "episode-spot")
-  spot.place(720, 400, 1000, 104)
+  // The band under the row that chose the episode is one row: the watched state of the episode the
+  // banner describes first - it settles the episode the row is on - and then the title's own actions,
+  // the season's Play among them. They are the same `.btn` the page draws, laid out side by side in
+  // one `.actions` band.
   const actions = new El("div", "actions episode-actions")
   actions.place(840, 400, 900, 48)
   const spotAction = new El("button", "btn icon-btn")
@@ -661,15 +659,15 @@ function episodeRow(main: El, count: number, withActions = true) {
   play.text = "Play"
   play.place(850, 626, 176, 48)
   if (withActions) actions.add(play)
-  section.add(head, scroller, spot, actions)
+  section.add(head, scroller, actions)
   main.add(section)
   return { section, scroller, cards, play, spotAction, actions }
 }
 
 /**
  * The season page's own shape, as the app renders it: a head whose controls are the show's fact
- * links, then the episode block - the episode the remote is on, the season selector on its own row
- * under it, the row of stills, and the band under the row, which carries the season and
+ * links, then the episode block - the season selector on its own row under the banner, the row of
+ * stills, and the band under the row, which carries the season and
  * focused-episode watched controls - then the cast, and then what the viewer might watch next.
  *
  * A season is a title that can be marked watched as a whole, and the band also offers the watched

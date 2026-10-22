@@ -66,17 +66,17 @@
   for (var j = 0; j < 9; j += 1) seasons.appendChild(seasonTab(j))
 
   /*
-   * The worst case the banner has to hold: an episode whose name runs long, and a show with more
-   * genres and studios than one row of fact links can carry. Measured separately from the page as
-   * it usually opens, because what it checks is different - the copy may not be clipped by the
-   * banner, and the row may not be pushed off the bottom edge by a copy that is taller than the
-   * share of the screen the banner takes.
+   * The worst case the banner has to hold: an episode whose name runs long, a show with more genres
+   * and studios than one row of fact links can carry, and an episode's description longer than the
+   * two lines the banner holds for it. Measured separately from the page as it usually opens, because
+   * what it checks is different - the copy may not be clipped by the banner, and the row may not be
+   * pushed off the bottom edge by a copy that is taller than the share of the screen the banner takes.
    */
   var full = new URLSearchParams(window.location.search).get("full") === "1"
   if (full) {
-    document.querySelector(".episode-spot h2").firstChild.textContent =
+    document.querySelector(".hero-episode").firstChild.textContent =
       "The Long Way Round And Back Again, And Then The Road Home After That"
-    var links = document.querySelector(".meta-links")
+    var links = document.querySelector(".hero-copy > .meta-links")
     for (var g = 0; g < 6; g += 1) {
       var extra = document.createElement("a")
       extra.setAttribute("href", "#")
@@ -89,13 +89,13 @@
      * the tallest copy a banner is ever drawn with is this one, and this is where the room for it is
      * measured rather than assumed.
      */
-    document.querySelector(".hero-synopsis .overview").textContent =
+    document.querySelector(".hero-episode-info .hero-synopsis .overview").textContent =
       "A synopsis of the sort a server actually sends, and then keeps sending: this one runs to several times the two lines the banner holds for it, so the page draws its own reveal control under the preview and the copy the banner carries is taller than the share of the screen the banner takes on its own."
     var reveal = document.createElement("button")
     reveal.className = "more-link hero-more"
     reveal.setAttribute("type", "button")
     reveal.textContent = "…"
-    document.querySelector(".hero-synopsis").appendChild(reveal)
+    document.querySelector(".hero-episode-info .hero-synopsis").appendChild(reveal)
   }
 
   var remote = window.mirufinRemote
@@ -158,7 +158,9 @@
     var seasonBlock = document.querySelector(".season-tabs")
     var block = document.querySelector(".episode-block")
     var posterBox = document.querySelector(".season-poster").getBoundingClientRect()
-    var spotBox = document.querySelector(".episode-spot").getBoundingClientRect()
+    var titleBox = document.querySelector(".hero-title").getBoundingClientRect()
+    var logoBox = document.querySelector(".hero-title > *").getBoundingClientRect()
+    var episodeBox = document.querySelector(".hero-episode-info").getBoundingClientRect()
     var actions = document.querySelector(".episode-actions")
     var pristineArt = cards[0].querySelector(".episode-art").getBoundingClientRect()
     var copyBox = document.querySelector(".hero-copy").getBoundingClientRect()
@@ -168,6 +170,11 @@
       bannerHeight: design(banner.getBoundingClientRect().height),
       /** The season's own poster, at the head of the banner beside the copy. */
       poster: { top: design(posterBox.top), bottom: design(posterBox.bottom), width: design(posterBox.width), height: design(posterBox.height) },
+      /** The show's own logo, in the title's box at the top of the copy, and the box it sits in. */
+      logo: { top: design(logoBox.top), bottom: design(logoBox.bottom), height: design(logoBox.height) },
+      title: { top: design(titleBox.top), bottom: design(titleBox.bottom), height: design(titleBox.height) },
+      /** The episode the remote is on, described in the banner under the show's logo. */
+      episode: { top: design(episodeBox.top), bottom: design(episodeBox.bottom), height: design(episodeBox.height) },
       /** The copy the banner carries: it has to fit inside the banner rather than be clipped by it. */
       copy: { top: design(copyBox.top), bottom: design(copyBox.bottom), height: design(copyBox.height) },
       /**
@@ -177,25 +184,26 @@
        * banner and whether the row under it is still on the screen.
        */
       reveal: (function () {
-        var node = document.querySelector(".hero-synopsis .hero-more")
+        var node = document.querySelector(".hero-episode-info .hero-synopsis .hero-more")
         if (!node) return null
         var box = node.getBoundingClientRect()
         return { top: design(box.top), bottom: design(box.bottom), width: design(box.width), height: design(box.height) }
       })(),
-      /** The order the page is read in, top to bottom: the banner's own copy - the show's title, its
-         facts and its fact links - then the season selector, then the row it browses, then the episode
-         the remote is on described under the row, and then the one band under both. */
+      /** The order the page is read in, top to bottom: the banner's own copy - the show's logo, the
+         season line, the show's facts, the episode the remote is on with its facts and its
+         synopsis, and the show's fact links - then the season selector, then the row it browses, and
+         then the one band under the row. */
       order: (function () {
         var marks = {
           title: ".hero-copy .hero-title",
-          facts: ".hero-copy .kicker",
-          links: ".hero-copy .meta-links",
+          eyebrow: ".hero-copy .eyebrow",
+          facts: ".hero-copy > .kicker",
+          episode: ".hero-copy .hero-episode",
+          episodeFacts: ".hero-episode-info .kicker",
+          overview: ".hero-episode-info .overview",
+          links: ".hero-copy > .meta-links",
           seasons: ".season-tabs",
           row: ".episode-scroller",
-          episode: ".episode-spot h2",
-          episodeFacts: ".episode-spot .kicker",
-          chips: ".episode-spot .chips",
-          overview: ".episode-spot .overview",
           actions: ".episode-actions",
         }
         var tops = {}
@@ -205,9 +213,10 @@
         }
         return tops
       })(),
-      /** The band under the episode's details: every control on it, where each one sits and how tall
-         it is. A season page carries one row of them - the episode's own watched state and the title's
-         own actions - so every control shares one top line and one height, whatever each one does. */
+      /** The band under the row that chose the episode: every control on it, where each one sits and
+         how tall it is. A season page carries one row of them - the watched state of the episode the
+         banner describes and the title's own actions - so every control shares one top line and one
+         height, whatever each one does. */
       actionsRow: (function () {
         var band = document.querySelector(".episode-actions")
         var controls = [].slice.call(band.querySelectorAll(".btn"))
@@ -223,8 +232,7 @@
           wraps: band.getBoundingClientRect().height > (controls[0] ? controls[0].getBoundingClientRect().height * 2 : 0),
         }
       })(),
-      /** The episode the remote is on, described under the row that selects it. */
-      spot: { top: design(spotBox.top), bottom: design(spotBox.bottom) },
+      /** The season the row is browsing, on its own row under the banner. */
       season: { top: design(seasonBlock.getBoundingClientRect().top), bottom: design(seasonBlock.getBoundingClientRect().bottom) },
       /** What the season selector's own box is made of, so a strip that grows can be explained. */
       seasonBox: (function () {
@@ -244,14 +252,15 @@
       row: { top: design(episodes.getBoundingClientRect().top), bottom: design(episodes.getBoundingClientRect().bottom) },
       art: { top: design(pristineArt.top), bottom: design(pristineArt.bottom), width: design(pristineArt.width), height: design(pristineArt.height) },
       actions: { top: design(actions.getBoundingClientRect().top) },
-      /* The one content boundary: the season's poster in the banner, the episode described under the
-         row, the season selector's first tab, the row's first still and the actions under the row all
-         begin on it. The banner's own copy sits to the right of the poster, as a title's page draws
-         its copy beside its poster. */
+      /* The one content boundary: the season's poster in the banner, the season selector's first tab,
+         the row's first still and the band under the row all begin on it. The banner's own copy - the
+         show's logo, the season line, the show's facts, the episode the remote is on and the show's
+         fact links - sits to the right of the poster, as a title's page draws its copy beside its
+         poster. */
       edges: {
         poster: design(posterBox.left),
         copy: design(document.querySelector(".hero-copy .eyebrow").getBoundingClientRect().left),
-        spot: design(document.querySelector(".episode-spot h2").getBoundingClientRect().left),
+        episode: design(document.querySelector(".hero-copy .hero-episode").getBoundingClientRect().left),
         season: design(seasons.querySelector(".season-tab").getBoundingClientRect().left),
         row: design(cards[0].getBoundingClientRect().left),
         actions: design(actions.firstElementChild.getBoundingClientRect().left),

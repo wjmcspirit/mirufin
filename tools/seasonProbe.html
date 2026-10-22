@@ -16,10 +16,10 @@
       with the remote moving right along the row, does the row follow?
 
       The structure is the real one - the shell's rail, the scrolling main, the detail body, and the
-      episode block (the cinematic banner that describes the show with the season's poster in it, the
-      season selector as a line of text tabs on its own row, the row of stills, the episode the remote
-      is on described under the row, and the one band under both) - and the cards are the app's own
-      `.episode` cards, twelve of them, which is more than any television shows at once.
+      episode block (the cinematic banner that names the show with the season's poster in it and the
+      episode the remote is on under its logo, the season selector as a line of text tabs on its own
+      row, the row of stills, and the one band under it) - and the cards are the app's own `.episode`
+      cards, twelve of them, which is more than any television shows at once.
       `tools/foldCheck.ts` drives this page in a headless browser at 1080p, 1440p and 4K and asserts
       what comes back.
     -->
@@ -38,21 +38,30 @@
         <div class="detail browse-page">
           <div class="detail-body">
             <section class="episode-block">
-              <!-- The banner: the season's own poster beside the show's own copy - the season it is
-                   on, the show's logo, its facts and its synopsis, and the show's fact links. -->
+              <!-- The banner: the season's own poster beside the show's copy and the episode the remote
+                   is on - the show's logo first, then the season it is browsing and the show's own
+                   facts, then the episode the row below is on with its own facts and synopsis. -->
               <header class="hero stage-copy browse-hero">
                 <span class="season-poster" data-season="S2">
                   <img alt="" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='360'%3E%3C/svg%3E" />
                 </span>
                 <div class="hero-copy">
-                  <p class="eyebrow">Season 2  ·  3 of 10 watched</p>
                   <div class="hero-title"><h1>Sheriff Country</h1></div>
+                  <p class="eyebrow">Season 2  ·  3 of 10 watched</p>
                   <p class="kicker">2019  ·  2 Seasons  ·  TV-14  ·  7.9 ★</p>
-                  <!-- The show's own synopsis, and under it the ellipsis the page draws when the text
-                       is longer than the two lines the banner holds for it. This synopsis fits, so
-                       there is no control here - `?full=1` is the variant that carries one. -->
-                  <div class="hero-synopsis">
-                    <p class="overview clamp">The show's own synopsis, of the sort a server actually sends: two lines of it at this width and no more.</p>
+                  <!-- The episode the remote is on, described under the show's logo: its own name with
+                       the row's flags, its facts - which lead with its number - and what it is about.
+                       The show's own description is not drawn here: the show is described on its own
+                       page, and this banner describes the episode the row below is on. -->
+                  <div class="hero-episode-info">
+                    <p class="hero-episode">Family Trust<span class="episode-flag">Up next</span></p>
+                    <p class="kicker">S2:E1  ·  October 16, 2026  ·  43m  ·  TV-14  ·  7.9 ★</p>
+                    <!-- The episode's own synopsis, and under it the ellipsis the page draws when the
+                         text is longer than the two lines the banner holds for it. This one fits, so
+                         there is no control here - `?full=1` is the variant that carries one. -->
+                    <div class="hero-synopsis">
+                      <p class="overview clamp">A synopsis of the sort a server actually sends: two lines of it at this width and no more, held to the space reserved for it whatever it says.</p>
+                    </div>
                   </div>
                   <p class="meta-links genre-pills"><a href="#">Drama</a><a href="#">Crime</a></p>
                 </div>
@@ -60,18 +69,8 @@
               <!-- The season selector, on its own row under the banner and above the row it browses. -->
               <nav class="scroller season-tabs" id="season-strip" aria-label="Seasons"></nav>
               <div class="scroller episode-scroller" id="episode-strip"></div>
-              <!-- The episode the remote is on, described under the row that selects it: its own
-                   title and the row's flags, its number and facts, what it is made of and what it
-                   is about. The show's own description is in the banner above, so one information
-                   area carries one subject. -->
-              <section class="episode-spot">
-                <h2><span class="episode-code">S2:E1</span><span class="episode-spot-gap"></span>Family Trust<span class="episode-flag">Up next</span></h2>
-                <p class="kicker">October 16, 2026  ·  43m  ·  TV-14  ·  7.9 ★</p>
-                <p class="chips"><span>720p</span><span>H.264</span><span>AC3</span><span>5.1</span><span>Subtitles</span></p>
-                <p class="overview clamp">A synopsis of the sort a server actually sends: two lines of it at this width and no more, held to the space reserved for it whatever it says.</p>
-              </section>
-              <!-- The one band a season page carries, on one row under the episode's details: the
-                   episode's own watched state, then the title's own actions. -->
+              <!-- The one band a season page carries, on one row under the row that chose the episode:
+                   the watched state of the episode the banner describes, then the title's own actions. -->
               <div class="actions episode-actions">
                 <button class="btn icon-btn" type="button">Mark Watched</button>
                 <a class="btn btn-primary" href="#">Play</a>

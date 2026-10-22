@@ -351,13 +351,17 @@ check("and a title's own Play still goes through the player", /to=\{`\/play\/\$\
 
 /* The page's banner, read from the page's own source and the stylesheet it is drawn with. The
    hierarchy is the one thing a viewer sees before pressing anything: the cinematic banner across
-   the top - the series' backdrop with the season's poster in it, the show's logo, its facts, its
-   genre links and the show's own synopsis - then the season selector on its own row, then the row
-   of stills, then the episode the remote is on described under that row, and then the one band under
-   both. The show is described in the banner and the episode is described under the row, so one
-   information area carries one subject; a banner that also described the episode, or a block under
-   the row that repeated the show, is the defect this check exists to stop coming back. */
+   the top - the series' backdrop with the season's poster in it, the show's logo level with the
+   poster's own top edge, the season line, the show's facts, the episode the remote is on described
+   under that logo, and the show's genre links - then the season selector on its own row, then the row
+   of stills, and then the one band under the row that settles the episode it chose.
+   One information area carries one subject: the banner describes the episode the row is on and
+   changes with it as the remote moves, the show's own description belongs to the show's own page,
+   and nothing under the row repeats the episode. A block under the row describing the episode again,
+   or the show's synopsis drawn in this banner, is the defect this check exists to stop coming back. */
 const css = readFileSync("src/styles.css", "utf8")
+/** The same stylesheet with its line breaks flattened, so a rule reads here as the one line it is. */
+const flat = css.replace(/\s+/g, " ")
 check(
   "a page that browses a season draws a cinematic banner over its episode row",
   page.includes("function BrowseHero") && page.includes('className="hero stage-copy browse-hero"'),
@@ -373,16 +377,23 @@ check(
   page.includes('<div className="hero-copy">') &&
     page.includes('<div className="hero-title">') &&
     page.includes("<MetaLine item={subject} />") &&
-    page.includes('<p className="overview clamp">'),
+    page.includes('className="overview clamp"'),
   "Item.tsx",
 )
 check(
-  "the banner describes the show - its logo, its facts, its genre links and its own synopsis - and never the episode",
+  "the banner names the show - its logo, its facts and its genre links - and describes the episode the page hands in",
   page.includes("const subject = series || season || item") &&
-    page.includes("{subject.Overview && (") &&
-    sourceOf("BrowseHero", "EpisodeSpot").includes('<p ref={synopsis} className="overview clamp">') &&
-    !sourceOf("BrowseHero", "EpisodeSpot").includes("episode.Overview") &&
-    !sourceOf("BrowseHero", "EpisodeSpot").includes("hero-episode"),
+    page.includes("const described = episode || (season ? null : subject)") &&
+    page.includes("<MetaLine item={subject} />") &&
+    sourceOf("BrowseHero", "EpisodeWatched").includes('<p ref={synopsis} className="overview clamp">') &&
+    sourceOf("BrowseHero", "EpisodeWatched").includes("{description}"),
+  "Item.tsx",
+)
+check(
+  "and on a page that browses a season it never draws the show's own synopsis, which belongs to the show's page",
+  page.includes("const described = episode || (season ? null : subject)") &&
+    sourceOf("BrowseHero", "EpisodeWatched").includes("{episode ? (") &&
+    !sourceOf("BrowseHero", "EpisodeWatched").includes("subject.Overview"),
   "Item.tsx",
 )
 /* The banner on a page that browses a season names the show and says which season is on screen: the
@@ -423,9 +434,9 @@ check(
   "Item.tsx",
 )
 check(
-  "and the episode's own details carry no action and no Play of their own: OK on a still is what plays the episode",
-  !sourceOf("EpisodeSpot", "EpisodeWatched").includes('className="actions') &&
-    !sourceOf("EpisodeSpot", "EpisodeWatched").includes("/play/"),
+  "and the episode's own information carries no action and no Play of its own: OK on a still is what plays the episode",
+  !sourceOf("BrowseHero", "EpisodeWatched").includes('className="actions') &&
+    !sourceOf("BrowseHero", "EpisodeWatched").includes("/play/"),
   "Item.tsx",
 )
 check(
@@ -434,38 +445,65 @@ check(
   "Item.tsx",
 )
 check(
-  "the line above it states the season the row is browsing, and how much of it is watched",
+  "the line beside it states the season the row is browsing, and how much of it is watched",
   page.includes("seasonLineText(season, progress)"),
   "Item.tsx",
 )
+/* The show's logo is the banner's first line on the page that browses a season, so its top is level
+   with the top edge of the season poster beside it, and the line that says which season the row below
+   belongs to follows it. Every other page keeps that line above the title, where it has always been. */
 check(
-  "the episode the remote is on is described under the row that selects it, with its own title, its number, its facts and its synopsis",
-  /<EpisodeSpot\s+episode=\{spot\}\s+upNext=\{spot\.Id === anchorId\}/.test(page) &&
-    page.includes('className="episode-spot"') &&
-    page.includes("<MetaLine item={episode} />") &&
-    page.includes("episode.Overview"),
+  "the show's logo is the banner's first line on the season's page, with the season line under it",
+  page.includes("{!episode && seasonLine}") &&
+    page.includes("{episode && seasonLine}") &&
+    page.indexOf("{!episode && seasonLine}") < page.indexOf('<div className="hero-title">') &&
+    page.indexOf('<div className="hero-title">') < page.indexOf("{episode && seasonLine}") &&
+    page.indexOf("{episode && seasonLine}") < page.indexOf('<div className="hero-episode-info">'),
   "Item.tsx",
 )
 check(
-  "the episode described under the row begins on the page's own content edge, like everything around it",
-  /\.detail-layout,\r?\n\.episode-spot,/.test(css),
+  "and the season's page stands its copy on the poster's own top edge, so the two begin on one line",
+  /\.episode-block \.browse-hero\s*\{\s*align-items:\s*flex-start;\s*\}/.test(css) &&
+    /\.episode-block \.browse-hero \.hero-copy\s*\{[^}]*height:\s*auto[^}]*justify-content:\s*flex-start[^}]*padding:\s*0 var\(--strip-pad\) 16px/.test(
+      css,
+    ) &&
+    /\.episode-block \.browse-hero \.hero-title\s*\{\s*justify-content:\s*flex-start;\s*\}/.test(css),
   "styles.css",
 )
 check(
-  "and its own title is one step down from the banner's, which names the show the viewer is browsing",
-  /\.episode-spot h2\s*\{[^}]*font-size:\s*28px/.test(css) && /\.browse-hero \.hero-title\s*\{\s*height:\s*72px/.test(css),
-  "styles.css",
-)
-check(
-  "and an episode's own line belongs to the page about that episode, not to the banner a season is browsed from",
-  page.includes("{episode && (") &&
+  "the episode the remote is on is described in the banner, under the show's logo, with its own title, its number, its facts and its synopsis",
+  page.includes("episode={spot}") &&
+    page.includes("upNext={spot.Id === anchorId}") &&
+    page.includes('<div className="hero-episode-info">') &&
     page.includes('<p className="hero-episode">') &&
-    !sourceOf("BrowseHero", "EpisodeSpot").includes("hero-episode"),
+    page.includes("<MetaLine item={episode} lead={episodeCode(episode)} />") &&
+    page.includes("{synopsisBlock}"),
   "Item.tsx",
 )
 check(
-  "what the episode is made of is said beside its facts: resolution, codecs and subtitles",
-  page.includes('[...techChips(episode), ...(hasSubtitles(episode) ? ["Subtitles"] : [])]') && page.includes('<p className="chips">'),
+  "and its description is the banner's own block, held to the lines the banner reserves and openable in the app's overlay",
+  page.includes("const description = described?.Overview || \"\"") &&
+    page.includes("useClamped(synopsis, description)") &&
+    page.includes("<DescriptionPopup title={described.Name || \"Description\"}"),
+  "Item.tsx",
+)
+check(
+  "the episode's information sits in the copy beside the poster rather than on a block under the row",
+  /\.hero-episode-info\s*\{\s*display:\s*grid;\s*gap:\s*6px;\s*\}/.test(css) && !page.includes("EpisodeSpot") && !css.includes(".episode-spot"),
+  "Item.tsx and styles.css",
+)
+check(
+  "and its name is the hero's own episode line, one line tall like the episode names Home's hero draws",
+  page.includes('<p className="hero-episode">') &&
+    /\.hero\.stage-copy \.hero-episode\s*\{[^}]*min-height:\s*1\.45em/.test(css) &&
+    /\.browse-hero \.hero-title\s*\{\s*height:\s*72px/.test(css),
+  "Item.tsx and styles.css",
+)
+check(
+  "and an episode's own line belongs to the banner a season is browsed from and to the page about that episode, and to nothing else",
+  page.includes("{episode && (") &&
+    sourceOf("BrowseHero", "EpisodeWatched").includes("hero-episode") &&
+    page.includes('<p className="hero-episode">'),
   "Item.tsx",
 )
 check(
@@ -474,18 +512,38 @@ check(
   "api.ts",
 )
 check(
-  "and the episode's number stands in the block's own title line, before its name",
-  /\{code \? <span className="episode-code">\{code\}<\/span> : null\}[\s\S]{0,140}?\{episode\.Name\}/.test(page),
-  "Item.tsx",
+  "and the episode's number leads its facts line, so the line reads S2:E1 · its date, runtime and rating",
+  page.includes("<MetaLine item={episode} lead={episodeCode(episode)} />") &&
+    /lead\?: string[\s\S]{0,600}?fields\.unshift\(lead\)/.test(readFileSync("src/components/Meta.tsx", "utf8")),
+  "Item.tsx and Meta.tsx",
 )
 check(
-  "moving along the row changes the episode described under it rather than taking it away",
+  "moving along the row changes the episode the banner describes rather than taking it away",
   page.includes("onPoint={() => setSpotId(episode.Id)}") && page.includes("episode={spot}") && page.includes("const spot = episodes.find"),
+  "Item.tsx",
+)
+/* Focus alone never plays anything: a still's own focus handler reports which episode it is, and the
+   only thing that follows the player's route is the card the viewer pressed OK on. */
+check(
+  "and a focused still only says which episode it is: nothing plays until OK is pressed on one",
+  page.includes("onFocus={() => onPoint?.()}") &&
+    !page.includes("onFocus={() => navigate") &&
+    page.includes("to={episodePlayHref(episode)}"),
+  "Item.tsx",
+)
+/* A season change re-reads the season's own episodes, and the episode the banner describes is chosen
+   from that list: the spot is cleared when the list belongs to another season, and the list is only
+   handed to the row once it is the one being browsed - so the banner can never describe an episode of
+   the season the viewer has left. */
+check(
+  "and changing season re-reads the episodes and picks the new season's focused episode",
+  page.includes('setSpotId("")') &&
+    page.includes("const spot = episodes.find((episode) => episode.Id === spotId) || episodes.find((episode) => episode.Id === anchorId) || episodes[0]"),
   "Item.tsx",
 )
 check(
   "and the banner is drawn before the season's episodes - or its seasons - have arrived",
-  (page.match(/<BrowseHero item=\{item\} series=\{series\} season=\{season\} progress=\{progress\} poster=\{poster\} \/>/g) || []).length >= 3 &&
+  (page.match(/<BrowseHero item=\{item\} series=\{series\} season=\{season\} progress=\{progress\} poster=\{poster\} \/>/g) || []).length >= 2 &&
     page.includes("<BrowseHero item={series} series={series} season={null} progress={null} />"),
   "Item.tsx",
 )
@@ -552,9 +610,9 @@ check(
   "Item.tsx",
 )
 check(
-  "and its own banner, selector, row, description and band are the episode row's, not a second composition",
+  "and its own banner, selector, row and band are the episode row's, not a second composition",
   episodeRow.includes("poster={poster}") &&
-    /<EpisodeSpot\s+episode=\{spot\}/.test(episodeRow) &&
+    /episode=\{spot\}/.test(episodeRow) &&
     episodeRow.includes('<div className="scroller episode-scroller">') &&
     episodeRow.includes('<div className="actions episode-actions">'),
   "Item.tsx",
@@ -642,8 +700,9 @@ check(
   "Item.tsx",
 )
 check(
-  "and the episode described under the row states its own rhythm: its own lines stay one group, and its synopsis stands clear of them",
-  /\.episode-spot\s*\{[^}]*gap:\s*6px/.test(css) && /\.episode-spot \.overview\s*\{[^}]*font-size:\s*15\.5px/.test(css),
+  "and the episode in the banner states its own rhythm: its own lines stay one group, and its description stands clear of them",
+  /\.hero-episode-info\s*\{\s*display:\s*grid;\s*gap:\s*6px;\s*\}/.test(css) &&
+    /\.browse-hero \.overview\s*\{\s*margin-top:\s*3px;\s*\}/.test(css),
   "styles.css",
 )
 check(
@@ -652,10 +711,10 @@ check(
     /\.season-tab\s*\{[^}]*padding:\s*4px 0 10px/.test(css),
   "styles.css",
 )
-/* The one band under the episode's details: the buttons are the app's own `.btn`, so they are all
-   one height, and the band states its own gap rather than letting each control carry one. */
+/* The one band under the row: the buttons are the app's own `.btn`, so they are all one height, and
+   the band states its own gap rather than letting each control carry one. */
 check(
-  "the one band under the episode's details is a row of the app's own buttons, at one height and one gap",
+  "the one band under the row that chose the episode is a row of the app's own buttons, at one height and one gap",
   /\.episode-actions\s*\{[^}]*margin-top:\s*14px[^}]*padding-inline:\s*var\(--strip-pad\)[^}]*align-items:\s*center[^}]*gap:\s*10px/.test(css) &&
     !/\.episode-spot-actions/.test(css),
   "styles.css",
@@ -713,7 +772,7 @@ check(
    what the line actually states is `tools/metaCheck.ts`'s to check, against the real `metaFields`. */
 const format = readFileSync("src/lib/format.ts", "utf8")
 const popup = readFileSync("src/components/DescriptionPopup.tsx", "utf8")
-const banner = sourceOf("BrowseHero", "EpisodeSpot")
+const banner = sourceOf("BrowseHero", "EpisodeWatched")
 
 check(
   "a show states the network it aired on in its metadata line, between its run of years and what it is",
@@ -796,7 +855,8 @@ check(
 )
 check(
   "and offers the rest of a description that does not fit, measured from the preview that is drawn",
-  banner.includes('const clipped = useClamped(synopsis, subject.Overview || "")') &&
+  banner.includes('const description = described?.Overview || ""') &&
+    banner.includes("const clipped = useClamped(synopsis, description)") &&
     /\{clipped && \(/.test(banner) &&
     /function useClamped\([\s\S]{0,900}?scrollHeight > element\.clientHeight/.test(page),
   "Item.tsx",
@@ -827,7 +887,7 @@ check(
 )
 check(
   "and the ellipsis says what it opens, for a viewer who cannot see the glyph",
-  /aria-label=\{`Read the full description of \$\{subject\.Name \|\| "this show"\}`\}/.test(banner),
+  /aria-label=\{`Read the full description of \$\{described\.Name \|\| \(episode \? "this episode" : "this show"\)\}`\}/.test(banner),
   "Item.tsx",
 )
 check(
