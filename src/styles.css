@@ -1,10 +1,17 @@
 :root {
   --bg: #09090b;
+  /* The page's own background as the numbers a gradient needs. Every wash over the artwork is
+     built from these, so a gradient can never introduce a colour the page does not have. */
+  --bg-rgb: 9, 9, 11;
   --raise: #13141a;
   --raise-2: #1c1e26;
   --line: rgba(244, 240, 230, 0.1);
   --text: #f4f7ff;
   --muted: #9aa3b5;
+  /* The step between a title and its metadata: a fact line, a card's subtitle and a section heading
+     are read from across the room over whatever artwork is behind them, and `--muted` is the tone
+     for text that sits on the page itself. */
+  --muted-strong: #b6bfd0;
   --faint: #6d7688;
   --accent: #3ec8ff;
   --accent-2: #d946ef;
@@ -626,28 +633,52 @@ h1, h2, h3 {
 @property --art-deep-g { syntax: "<number>"; inherits: true; initial-value: 9; }
 @property --art-deep-b { syntax: "<number>"; inherits: true; initial-value: 11; }
 
+/* The stage: one full-bleed picture behind every page that has a backdrop.
+   The artwork is placed and tinted from a reading of the artwork itself - its own shape decides
+   where the frame is held when it is cropped to the screen, and its own colour decides what the
+   wash under it is made of (see `Stage.tsx`). Everything the stage draws is built from those two
+   readings and the page's own background, so every screen shares one treatment instead of a
+   gradient of its own. */
 .stage {
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background: #09090b;
+  background: var(--bg);
   overflow: hidden;
+  /* Where the frame's subject is kept, as a position in the picture: the middle-right of it by
+     default, and read from the artwork's own shape once it has loaded. */
+  --art-focus-x: 58%;
+  --art-focus-y: 10%;
+  /* The artwork's own colour, and a deeper shade of it. Registered above, so an artwork that has
+     not been read yet - or one with no colour worth speaking of - leaves the page's background. */
+  --art-r: 9;
+  --art-g: 9;
+  --art-b: 11;
+  --art-deep-r: 9;
+  --art-deep-g: 9;
+  --art-deep-b: 11;
 }
 .stage-img {
   position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 100%;
+  inset: 0;
   background-repeat: no-repeat;
-  background-size: 100% auto;
-  background-position: center top;
+  /* The frame is filled rather than letterboxed: the artwork is cropped to the screen instead of
+     being given a band of its own, and the crop comes off the left of the picture - where the copy
+     stands and where a server's artwork usually puts nothing - so the subject it put right of
+     centre stays where it put it. */
+  background-size: cover;
+  background-position: var(--art-focus-x) var(--art-focus-y);
   opacity: 0;
-  filter: saturate(0.9) brightness(0.8);
+  /* Enough light left in the picture to be looked at, and enough taken out of it that a bright
+     frame does not fight the copy: the wash above carries the rest of the readability. */
+  filter: saturate(0.94) brightness(0.86);
   transition: opacity 1.25s ease-in-out !important;
-  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 42%, rgba(0, 0, 0, 0.78) 62%, rgba(0, 0, 0, 0.34) 78%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 0%, #000 42%, rgba(0, 0, 0, 0.78) 62%, rgba(0, 0, 0, 0.34) 78%, transparent 100%);
+  /* The picture leaves the screen through the wash rather than at an edge: the fade begins under
+     the copy and is complete by the bottom of the frame, so the hero and the rows below it stand
+     on one continuous picture and there is no line where the artwork stops. */
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 46%, rgba(0, 0, 0, 0.88) 62%, rgba(0, 0, 0, 0.46) 80%, rgba(0, 0, 0, 0.14) 92%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 46%, rgba(0, 0, 0, 0.88) 62%, rgba(0, 0, 0, 0.46) 80%, rgba(0, 0, 0, 0.14) 92%, transparent 100%);
 }
 .stage-img.on { opacity: 1; }
 /* Home's rotating hero: one controlled crossfade beat (900 ms) instead of the
@@ -665,25 +696,74 @@ h1, h2, h3 {
     --art-deep-g 0.9s ease-in-out,
     --art-deep-b 0.9s ease-in-out;
 }
-/* The hero's own wash over the shared one: the text side darkens a little sooner, and the
-   bottom ramp reaches the page's own background just below the hero, so the title block
-   stays readable over whatever the artwork happens to be bright in and the first row of
-   posters sits on the page rather than on a photograph. */
-.stage.pace-hero .stage-scrim {
+/* The wash over the artwork: the app's own one, whatever page is behind it.
+   One definition, four layers, read from the top down:
+     1. a pool of shadow where the copy stands, so text stays readable over a bright frame;
+     2. the header's own shade, so the logo, the clock and the account keep their contrast;
+     3. the left-to-right fade that quiets the side the copy is read on and leaves the picture alone
+        on the side the artwork put its subject;
+     4. the bottom ramp, where the picture dissolves through the colour read from itself and reaches
+        the page's own background - which is what lets the hero and the rows below it stand on one
+        continuous picture with no edge between them.
+   Every colour is either the page's own background or the artwork's own colour (see
+   `artworkTone`), so no page can be tinted with something that is neither. The pages that share
+   this wash differ only in its numbers - where the copy stands, and how much of the picture is
+   left alone beyond it - which is what the custom properties below are: one gradient, three sets
+   of figures, rather than three gradients. */
+.stage-scrim {
+  position: absolute;
+  inset: 0;
+  /* Where the copy's pool of shadow sits, how strong it is, and how much of the picture the left
+     fade and the bottom ramp are allowed to take. */
+  --scrim-pool: 12% 42%;
+  --scrim-pool-size: 124% 80%;
+  --scrim-copy: 0.58;
+  --scrim-top: 0.5;
+  --scrim-left: 0.86;
+  --scrim-art-at: 30%;
+  --scrim-art: 0.4;
+  transition:
+    --art-r 1.25s ease-in-out,
+    --art-g 1.25s ease-in-out,
+    --art-b 1.25s ease-in-out,
+    --art-deep-r 1.25s ease-in-out,
+    --art-deep-g 1.25s ease-in-out,
+    --art-deep-b 1.25s ease-in-out;
   background:
-    radial-gradient(130% 90% at 78% 8%, transparent 36%, rgba(9, 9, 11, 0.3) 100%),
-    linear-gradient(180deg, rgba(9, 9, 11, 0.26) 0%, transparent 14%),
-    linear-gradient(90deg, rgba(9, 9, 11, 0.86) 0%, rgba(9, 9, 11, 0.56) 20%, rgba(9, 9, 11, 0.2) 40%, transparent 62%),
+    radial-gradient(var(--scrim-pool-size) at var(--scrim-pool), rgba(var(--bg-rgb), var(--scrim-copy)) 0%, rgba(var(--bg-rgb), calc(var(--scrim-copy) * 0.5)) 42%, transparent 72%),
+    linear-gradient(180deg, rgba(var(--bg-rgb), var(--scrim-top)) 0%, rgba(var(--bg-rgb), calc(var(--scrim-top) * 0.3)) 13%, transparent 28%),
+    linear-gradient(90deg, rgba(var(--bg-rgb), var(--scrim-left)) 0%, rgba(var(--bg-rgb), calc(var(--scrim-left) * 0.72)) 24%, rgba(var(--bg-rgb), calc(var(--scrim-left) * 0.34)) 46%, transparent 70%),
     linear-gradient(
       180deg,
       transparent 0%,
-      transparent 30%,
-      rgba(var(--art-r), var(--art-g), var(--art-b), 0.34) 46%,
-      rgba(var(--art-r), var(--art-g), var(--art-b), 0.6) 60%,
-      rgba(var(--art-deep-r), var(--art-deep-g), var(--art-deep-b), 0.88) 72%,
-      rgba(9, 9, 11, 0.96) 86%,
-      #09090b 100%
+      transparent var(--scrim-art-at),
+      rgba(var(--art-r), var(--art-g), var(--art-b), calc(var(--scrim-art) * 0.55)) calc(var(--scrim-art-at) + 12%),
+      rgba(var(--art-r), var(--art-g), var(--art-b), var(--scrim-art)) calc(var(--scrim-art-at) + 26%),
+      rgba(var(--art-deep-r), var(--art-deep-g), var(--art-deep-b), calc(var(--scrim-art) * 1.7)) calc(var(--scrim-art-at) + 40%),
+      rgba(var(--bg-rgb), 0.94) 78%,
+      var(--bg) 90%,
+      var(--bg) 100%
     );
+}
+/* Home's and a library's hero: the copy is a fixed composition anchored to the bottom of the hero,
+   so its pool of shadow sits a little lower and the left of the screen is quietened a little
+   harder - the title, the facts and the description are read over the picture's own left edge. */
+.stage.pace-hero .stage-scrim {
+  --scrim-pool: 10% 48%;
+  --scrim-copy: 0.62;
+  --scrim-left: 0.9;
+  --scrim-art-at: 26%;
+}
+/* A person's filmography and a collection's page: the picture is wide, softly blurred artwork that
+   turns on its own beat, and the page below it is rows rather than a hero - so the wash reaches
+   further down and the picture is left alone only on its right. */
+.stage.pace-focus .stage-scrim {
+  --scrim-pool: 16% 38%;
+  --scrim-pool-size: 130% 74%;
+  --scrim-copy: 0.66;
+  --scrim-left: 0.94;
+  --scrim-art-at: 34%;
+  --scrim-art: 0.36;
 }
 /* The person page's filmography backdrop: wide, softly blurred artwork that
    rotates on a fifteen-second beat. One controlled 900 ms crossfade — the same
@@ -691,37 +771,16 @@ h1, h2, h3 {
    the next one settles. Hover-driven changes on the same screen still take
    .pace-quick below. */
 .stage.pace-focus .stage-img {
-  background-size: cover;
-  background-position: center 18%;
-  filter: blur(2px) saturate(0.92) brightness(0.74);
+  /* The same framing rules as every other page - the frame is filled and held where the artwork
+     put its subject - softened: this picture is decoration behind a portrait and a biography
+     rather than the subject of the page. */
+  background-position: var(--art-focus-x) var(--art-focus-y);
+  filter: blur(2px) saturate(0.92) brightness(0.78);
   transform: scale(1.02);
   transition: opacity 0.9s ease-in-out !important;
 }
 .stage.pace-quick .stage-img {
   transition: opacity 0.2s ease-out !important;
-}
-.stage.pace-focus .stage-scrim {
-  transition:
-    --art-r 0.9s ease-in-out,
-    --art-g 0.9s ease-in-out,
-    --art-b 0.9s ease-in-out,
-    --art-deep-r 0.9s ease-in-out,
-    --art-deep-g 0.9s ease-in-out,
-    --art-deep-b 0.9s ease-in-out;
-  background:
-    radial-gradient(120% 80% at 82% 10%, transparent 22%, rgba(var(--art-deep-r), var(--art-deep-g), var(--art-deep-b), 0.42) 100%),
-    linear-gradient(180deg, rgba(9, 9, 11, 0.34) 0%, transparent 18%),
-    linear-gradient(90deg, rgba(9, 9, 11, 0.94) 0%, rgba(9, 9, 11, 0.78) 18%, rgba(var(--art-deep-r), var(--art-deep-g), var(--art-deep-b), 0.5) 36%, rgba(var(--art-r), var(--art-g), var(--art-b), 0.22) 58%, transparent 80%),
-    linear-gradient(
-      180deg,
-      transparent 0%,
-      transparent 22%,
-      rgba(var(--art-r), var(--art-g), var(--art-b), 0.3) 44%,
-      rgba(var(--art-r), var(--art-g), var(--art-b), 0.58) 60%,
-      rgba(var(--art-deep-r), var(--art-deep-g), var(--art-deep-b), 0.9) 76%,
-      rgba(9, 9, 11, 0.97) 90%,
-      #09090b 100%
-    );
 }
 .stage.pace-quick .stage-scrim {
   transition:
@@ -766,37 +825,6 @@ h1, h2, h3 {
   mask-image: linear-gradient(to bottom, #000 0%, #000 40%, rgba(0, 0, 0, 0.78) 58%, rgba(0, 0, 0, 0.34) 76%, transparent 100%);
 }
 .stage-reel.on { opacity: 1; }
-.stage-scrim {
-  --art-r: 9;
-  --art-g: 9;
-  --art-b: 11;
-  --art-deep-r: 9;
-  --art-deep-g: 9;
-  --art-deep-b: 11;
-  position: absolute;
-  inset: 0;
-  transition:
-    --art-r 1.25s ease-in-out,
-    --art-g 1.25s ease-in-out,
-    --art-b 1.25s ease-in-out,
-    --art-deep-r 1.25s ease-in-out,
-    --art-deep-g 1.25s ease-in-out,
-    --art-deep-b 1.25s ease-in-out;
-  background:
-    radial-gradient(130% 90% at 78% 8%, transparent 36%, rgba(9, 9, 11, 0.28) 100%),
-    linear-gradient(180deg, rgba(9, 9, 11, 0.22) 0%, transparent 14%),
-    linear-gradient(90deg, rgba(9, 9, 11, 0.78) 0%, rgba(9, 9, 11, 0.46) 18%, rgba(9, 9, 11, 0.16) 38%, transparent 58%),
-    linear-gradient(
-      180deg,
-      transparent 0%,
-      transparent 30%,
-      rgba(var(--art-r), var(--art-g), var(--art-b), 0.34) 48%,
-      rgba(var(--art-r), var(--art-g), var(--art-b), 0.62) 62%,
-      rgba(var(--art-deep-r), var(--art-deep-g), var(--art-deep-b), 0.9) 76%,
-      rgba(9, 9, 11, 0.96) 90%,
-      #09090b 100%
-    );
-}
 @media (prefers-reduced-motion: reduce) {
   .stage-scrim,
   .stage.pace-focus .stage-scrim,
@@ -1170,6 +1198,7 @@ html:not(.remote) .nav:hover .nav-label {
 }
 .hero.stage-copy .hero-episode {
   font-size: 20px;
+  font-weight: 500;
   min-height: 1.45em;
   display: -webkit-box;
   -webkit-line-clamp: 1;
@@ -1178,14 +1207,21 @@ html:not(.remote) .nav:hover .nav-label {
 }
 .hero.stage-copy .kicker {
   font-size: 17px;
+  font-weight: 500;
   min-height: 2.9em;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+/* The description, read over the artwork: one step heavier and one step brighter than a paragraph
+   on a flat page, and never clamped on the pages whose whole point is to read it - see the browse
+   hero and a title's own page below, which state `line-clamp: none`. What is held to two lines here
+   is the rotating hero's own composition, which reserves the height of those two lines. */
 .hero.stage-copy .overview {
   font-size: 17px;
+  font-weight: 500;
+  color: #dbe2ee;
   -webkit-line-clamp: 2;
   min-height: 2.9em;
 }
@@ -1216,7 +1252,8 @@ html:not(.remote) .nav:hover .nav-label {
 }
 .hero-copy .kicker,
 .detail-copy .kicker {
-  color: #b7c0d0;
+  color: #c9d2e0;
+  font-weight: 500;
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
 }
 .meta-links {
@@ -1227,8 +1264,9 @@ html:not(.remote) .nav:hover .nav-label {
 }
 .meta-links a,
 .meta-links span {
-  color: #b7c0d0;
+  color: #c9d2e0;
   font-size: 18px;
+  font-weight: 500;
 }
 .meta-links a:focus,
 .meta-links a:focus-visible,
@@ -1344,7 +1382,8 @@ html:not(.remote) .nav:hover .nav-label {
 }
 .hero-copy .overview,
 .detail-copy .overview {
-  color: #d5dce8;
+  color: #dbe2ee;
+  font-weight: 500;
   text-shadow: 0 1px 10px rgba(0, 0, 0, 0.6);
 }
 /* A title's own page is where the whole of its description is read. The app's heroes and a person's
@@ -1744,13 +1783,17 @@ html:not(.remote) .nav:hover .nav-label {
   gap: 12px;
 }
 .row-head { margin-bottom: 12px; }
+/* A section heading, a fact line and a card's own metadata are read from across the room and often
+   over artwork, so they are set a step heavier and a step brighter than the text that sits on the
+   page itself (`--muted`). Nothing here moves: every size, line height and box is the one the
+   composition reserves, and what changes is the weight and the tone of the ink. */
 .row-head h2, .search-group h2, .setting h2 {
   font-family: Outfit, "Segoe UI", sans-serif;
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--muted-strong);
 }
 .scroller {
   position: relative;
@@ -1903,17 +1946,21 @@ html:not(.remote) .nav:hover .nav-label {
 .card-copy { display: grid; gap: 2px; padding: 8px 2px 0; }
 .card-title {
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 /* The caption under a poster is the poster's own name first and its detail second, so the
    two are one step apart rather than the same size: the detail line used to inherit the
-   page's 16px and read louder than the title it belongs to. */
+   page's 16px and read louder than the title it belongs to. The name carries the weight of a
+   name and the detail line the weight of a fact, which is what keeps the two apart at a
+   distance now that both are read over artwork rather than on a flat page. */
 .card-copy .card-sub {
   font-size: 13px;
+  font-weight: 500;
   line-height: 1.3;
+  color: var(--muted-strong);
 }
 .card.labeled .card-title,
 .card.labeled .card-sub {
@@ -2538,8 +2585,9 @@ select {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #9aa3b5;
+  color: var(--muted-strong);
   font-size: 14px;
+  font-weight: 500;
 }
 .episode-meta .episode-flag { margin-left: 0; }
 /* The one band a season page carries: the watched state of the episode the banner describes - which

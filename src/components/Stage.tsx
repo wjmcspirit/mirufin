@@ -174,6 +174,39 @@ export function StageProvider({ children }: { children: ReactNode }) {
   )
 }
 
+/**
+ * Where the artwork's subject is kept when the frame is cropped to the screen.
+ *
+ * A backdrop is not always the shape of the screen, and the app fills the frame with it rather than
+ * showing letterbox bands: the crop comes off the sides. A server's own artwork puts its cast right
+ * of centre and its title treatment on the left, and the left of the screen is where Mirufin's copy
+ * stands, so the crop is taken from the left - the further the artwork is from the screen's own
+ * shape, the further right the frame is held. A frame as wide as the screen is not cropped sideways
+ * at all and is left where the artwork put it.
+ *
+ * The vertical anchor keeps the top of the frame - faces, a title treatment, a skyline - and only
+ * gives way as the artwork gets taller than the screen.
+ */
+function artworkFocus(image: HTMLImageElement) {
+  const width = image.naturalWidth
+  const height = image.naturalHeight
+  if (!width || !height) return { x: 58, y: 10 }
+  const ratio = width / height
+  if (ratio >= 1.85) return { x: 50, y: 6 }
+  if (ratio >= 1.6) return { x: 58, y: 10 }
+  if (ratio >= 1.3) return { x: 64, y: 8 }
+  return { x: 70, y: 4 }
+}
+
+/**
+ * The artwork's own colour, as the wash under it is tinted.
+ *
+ * Read from the part of the frame the viewer is actually looking at - the right of it, above the
+ * bottom ramp - rather than from the whole picture: the left of the frame is behind the copy and
+ * under the darkest part of the wash, so sampling it would tint the page with a colour nobody sees.
+ * Saturated pixels are what the wash is drawn from, and a frame with no colour worth speaking of
+ * leaves the page's own background in place.
+ */
 function artworkTone(image: HTMLImageElement) {
   try {
     const canvas = document.createElement("canvas")
@@ -182,7 +215,7 @@ function artworkTone(image: HTMLImageElement) {
     const context = canvas.getContext("2d", { willReadFrequently: true })
     if (!context) return null
     context.drawImage(image, 0, 0, 32, 20)
-    const { data } = context.getImageData(0, 4, 32, 14)
+    const { data } = context.getImageData(11, 4, 21, 12)
     let red = 0
     let green = 0
     let blue = 0
@@ -206,8 +239,8 @@ function artworkTone(image: HTMLImageElement) {
     const raw = [red / weight, green / weight, blue / weight]
     const spread = Math.max(...raw) - Math.min(...raw)
     if (spread < 14) return null
-    const tone = raw.map((value) => Math.round(Math.min(118, value * 0.42))) as [number, number, number]
-    const deep = tone.map((value) => Math.round(value * 0.48)) as [number, number, number]
+    const tone = raw.map((value) => Math.round(Math.min(126, value * 0.46))) as [number, number, number]
+    const deep = tone.map((value) => Math.round(value * 0.5)) as [number, number, number]
     return { tone, deep }
   } catch {
     return null
@@ -234,6 +267,7 @@ function StageArt({
   const [settled, setSettled] = useState(false)
   const [tone, setTone] = useState<[number, number, number]>([9, 9, 11])
   const [deep, setDeep] = useState<[number, number, number]>([9, 9, 11])
+  const [focus, setFocus] = useState({ x: 58, y: 10 })
 
   useEffect(() => {
     if (!src) {
@@ -243,6 +277,7 @@ function StageArt({
       setSettled(false)
       setTone([9, 9, 11])
       setDeep([9, 9, 11])
+      setFocus({ x: 58, y: 10 })
       return
     }
     if (src === current) return
@@ -263,6 +298,7 @@ function StageArt({
       const next = artworkTone(image)
       setTone(next?.tone || [9, 9, 11])
       setDeep(next?.deep || [9, 9, 11])
+      setFocus(artworkFocus(image))
       setSettled(false)
       setPrevious(current)
       setCurrent(src)
@@ -295,15 +331,20 @@ function StageArt({
     "--art-deep-r": deep[0],
     "--art-deep-g": deep[1],
     "--art-deep-b": deep[2],
+    // Where the frame is held when it is cropped to the screen: read from the artwork's own shape
+    // by `artworkFocus`, so the subject stays where the artwork put it and the left of the screen
+    // stays the quiet side the copy is read on.
+    "--art-focus-x": `${focus.x}%`,
+    "--art-focus-y": `${focus.y}%`,
   } as CSSProperties
 
   return (
-    <div className={["stage", PACE_CLASS[pace], quick ? "pace-quick" : ""].filter(Boolean).join(" ")} aria-hidden="true">
+    <div className={["stage", PACE_CLASS[pace], quick ? "pace-quick" : ""].filter(Boolean).join(" ")} style={tint} aria-hidden="true">
       {atmosphere && (!current || (!previous && !settled)) && <div className="stage-atmosphere" />}
       {previous && previous !== current && <div key={previous} className="stage-img on" style={{ backgroundImage: `url("${previous}")` }} />}
       {current && <div key={current} className={settled ? "stage-img on" : "stage-img"} style={{ backgroundImage: `url("${current}")` }} />}
       <StageReel itemId={reelId} />
-      <div className="stage-scrim" style={tint} />
+      <div className="stage-scrim" />
     </div>
   )
 }
