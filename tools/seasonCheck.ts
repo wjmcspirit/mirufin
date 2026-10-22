@@ -16,6 +16,7 @@
  * a suite: delete it when the project grows a real test runner.
  */
 import { readFileSync } from "node:fs"
+import { artWidth } from "../src/lib/images"
 import { episodePlayHref, lastSeason, rememberSeason, resolveSeason, seasonLineText, seasonProgress, seasonProgressBySeason, seasonStart } from "../src/lib/seasons"
 import type { Item } from "../src/lib/types"
 
@@ -378,7 +379,8 @@ check(
 check(
   "the banner describes the show - its logo, its facts, its genre links and its own synopsis - and never the episode",
   page.includes("const subject = series || season || item") &&
-    page.includes('{subject.Overview && <p className="overview clamp">{subject.Overview}</p>}') &&
+    page.includes("{subject.Overview && (") &&
+    sourceOf("BrowseHero", "EpisodeSpot").includes('<p ref={synopsis} className="overview clamp">') &&
     !sourceOf("BrowseHero", "EpisodeSpot").includes("episode.Overview") &&
     !sourceOf("BrowseHero", "EpisodeSpot").includes("hero-episode"),
   "Item.tsx",
@@ -388,13 +390,15 @@ check(
    show's logo, the show's facts, the show's synopsis and the show's own fact links. The poster is a
    fixed 2:3 box on the page's content boundary, so the head of the page is the same height at every
    panel size and the selector and the whole row of stills are on screen under it at 1080p. */
+/** The season's own poster in the banner: the function drawn just before the show's own page. */
+const seasonPoster = sourceOf("SeasonPoster", "SeriesBody")
 check(
   "the banner carries the season's own poster, from the season's record or from the show's",
   page.includes("poster={<SeasonPoster season={browsed} series={series} />}") &&
     page.includes("function SeasonPoster(") &&
     page.includes('className="season-poster"') &&
-    page.includes("seasonArtSrc(season, series)") &&
-    page.includes('fallback={series ? primarySrc(series, artWidth("poster")) : null}'),
+    seasonPoster.includes("seasonArtSrc(season, series, width)") &&
+    seasonPoster.includes("fallback={series ? primarySrc(series, width) : null}"),
   "Item.tsx",
 )
 check(
@@ -525,13 +529,13 @@ check(
   "the show's page draws the seasons as posters, with the season's own artwork",
   seriesScreen.includes("<SeasonCard") &&
     seasonCard.includes('className={current ? "card poster season-card on" : "card poster season-card"}') &&
-    seasonCard.includes("<MediaImage src={seasonArtSrc(season, series)}") &&
+    seasonCard.includes("<MediaImage src={seasonArtSrc(season, series, width)}") &&
     seasonCard.includes('<span className="card-art">'),
   "Item.tsx",
 )
 check(
   "and a season the server has no poster for borrows the show's own rather than a bare tile",
-  seasonCard.includes("seasonArtSrc(season, series)") && seasonCard.includes('fallback={primarySrc(series, artWidth("poster"))}'),
+  seasonCard.includes("seasonArtSrc(season, series, width)") && seasonCard.includes("fallback={primarySrc(series, width)}"),
   "Item.tsx",
 )
 check("the show's page is labelled with how many seasons it holds", seriesScreen.includes("{`Seasons (${seasons.length})`}"), "Item.tsx")
@@ -689,6 +693,153 @@ check(
 check(
   "the stills keep the size and shape the row is designed at",
   /\.episode-block \.episode-scroller\s*\{[^}]*width:\s*100%/.test(css) && /\.episode\s*\{[^}]*width:\s*360px/.test(css),
+  "styles.css",
+)
+
+/* --------------------------------------------------------------------------- the show's own facts,
+   its seasons at the app's poster size, and the description it holds
+
+   Three things the show's page says about the show. The network it aired on is a fact about the show
+   - the channel, not a door - so it is stated in the metadata line under the title with the run of
+   years, the status and the rating (`metaFields`), and the page draws no separate row for it; a
+   film's studio is untouched, because a film's studio is a door to browse the library by. The seasons
+   are posters, so they are drawn at the app's one poster size - the same three widths every other
+   strip and grid uses, with Medium the size the app opens on - rather than at a size of their own.
+   And the show's description keeps the truncated preview the banner has always drawn, with the app's
+   own control to read the rest of it drawn only when there is a rest to read, opening the whole text
+   in the app's own overlay instead of re-laying the page out under the viewer.
+
+   Everything here is read from the page, the stylesheet, the metadata module and the overlay itself;
+   what the line actually states is `tools/metaCheck.ts`'s to check, against the real `metaFields`. */
+const format = readFileSync("src/lib/format.ts", "utf8")
+const popup = readFileSync("src/components/DescriptionPopup.tsx", "utf8")
+const banner = sourceOf("BrowseHero", "EpisodeSpot")
+
+check(
+  "a show states the network it aired on in its metadata line, between its run of years and what it is",
+  format.includes("for (const network of networkNames(item)) bits.push(network)") &&
+    /export function networkNames\(item: Item\): string\[\] \{\s*if \(item\.Type !== "Series"\) return \[\]\s*return studioLinks\(item\)\.map\(\(studio\) => studio\.name\)\s*\}/.test(
+      format,
+    ),
+  "format.ts",
+)
+check(
+  "and the show's page never draws that network a second time as a row of its own",
+  page.includes('const studios = item.Type === "Series" ? [] : studioLinks(item)'),
+  "Item.tsx",
+)
+check(
+  "while every other title keeps its studios, which are doors to browse the library by",
+  page.includes('<p className="meta-links">') && page.includes("studioName="),
+  "Item.tsx",
+)
+
+check(
+  "the seasons are drawn as a strip at the app's one poster size",
+  seriesScreen.includes("className={`scroller season-scroller size-${prefs.posterSize}`}") && seriesScreen.includes("const { prefs } = usePrefs()"),
+  "Item.tsx",
+)
+check(
+  "and a season's artwork is asked for at the size its card is drawn at",
+  seasonCard.includes('const width = artWidth("poster", prefs.posterSize)') &&
+    seasonCard.includes("seasonArtSrc(season, series, width)") &&
+    seasonCard.includes("primarySrc(series, width)"),
+  "Item.tsx",
+)
+check(
+  "and the season's poster in the banner is that size's artwork too, in its own fixed box",
+  seasonPoster.includes('const width = artWidth("poster", prefs.posterSize)') && seasonPoster.includes("seasonArtSrc(season, series, width)"),
+  "Item.tsx",
+)
+check(
+  "the season posters take the app's own three widths rather than a size of their own",
+  css.includes(".row.size-small .card, .season-scroller.size-small .card { width: 132px; }") &&
+    css.includes(".row.size-medium .card, .season-scroller.size-medium .card { width: 168px; }") &&
+    css.includes(".row.size-large .card, .season-scroller.size-large .card { width: 220px; }") &&
+    !/\.season-card\s*\{[^}]*width:/.test(css),
+  "styles.css",
+)
+same("and Medium is what the app opens on, for the artwork as for the row", artWidth("poster"), artWidth("poster", "medium"))
+check(
+  "with Small below it and Large above, so a change of size is one the viewer can see",
+  artWidth("poster", "small") < artWidth("poster", "medium") && artWidth("poster", "medium") < artWidth("poster", "large"),
+  "images.ts",
+)
+check(
+  "and a bigger or smaller season poster is still the app's own 2:3 poster",
+  /\.card-art,\s*\.poster-lg,\s*\.episode-art,\s*\.photo-frame,\s*\.still-lg\s*\{[^}]*aspect-ratio:\s*2 \/ 3/.test(css) &&
+    /\.card-art img,\s*\.card-art \.ph,[^}]*object-fit:\s*cover/.test(css),
+  "styles.css",
+)
+check(
+  "and the card keeps its own name, its watched count and its progress at every size",
+  seasonCard.includes('className="card-sub"') &&
+    seasonCard.includes("seasonSubtitle(count, progress)") &&
+    seasonCard.includes('className="season-bar"'),
+  "Item.tsx",
+)
+check(
+  "and the seasons strip takes a tighter top padding than the shared strip, so the posters clear the fold under the banner",
+  /\.season-block \.season-scroller\s*\{[^}]*align-items:\s*start[^}]*padding-top:\s*16px/.test(css),
+  "styles.css",
+)
+
+check(
+  "the description and the genre chips under it are set apart rather than a line apart",
+  /\.browse-hero \.hero-synopsis\s*\{[^}]*margin-bottom:\s*9px/.test(css) && /\.browse-hero \.overview\s*\{\s*margin-top:\s*3px;\s*\}/.test(css),
+  "styles.css",
+)
+check(
+  "the banner keeps the truncated preview it has always drawn",
+  banner.includes('<p ref={synopsis} className="overview clamp">'),
+  "Item.tsx",
+)
+check(
+  "and offers the rest of a description that does not fit, measured from the preview that is drawn",
+  banner.includes('const clipped = useClamped(synopsis, subject.Overview || "")') &&
+    /\{clipped && \(/.test(banner) &&
+    /function useClamped\([\s\S]{0,900}?scrollHeight > element\.clientHeight/.test(page),
+  "Item.tsx",
+)
+check(
+  "the whole description opens in the app's own overlay, on the sheet media info draws",
+  banner.includes("<DescriptionPopup") &&
+    popup.includes('className="info-pop"') &&
+    popup.includes('className="info-sheet description-sheet"') &&
+    popup.includes('role="dialog"') &&
+    popup.includes('aria-modal="true"'),
+  "Item.tsx and DescriptionPopup.tsx",
+)
+check(
+  "which the remote's Back closes, on both paths a television delivers it",
+  popup.includes("ownBack(() =>") && popup.includes("isBackKey(event)") && popup.includes("noteBackKeydown()"),
+  "DescriptionPopup.tsx",
+)
+check(
+  "and closing it puts the viewer back on the control they opened it with",
+  page.includes("if (reveal.current) placeFocus(reveal.current)") && popup.includes("autoFocus"),
+  "Item.tsx and DescriptionPopup.tsx",
+)
+check(
+  "and the description itself is not a control: only the ellipsis opens the overlay",
+  /<button[\s\S]{0,300}?onClick=\{\(\) => setReading\(true\)\}/.test(banner) && !/<p ref=\{synopsis\}[\s\S]{0,140}?onClick/.test(banner),
+  "Item.tsx",
+)
+check(
+  "and the ellipsis says what it opens, for a viewer who cannot see the glyph",
+  /aria-label=\{`Read the full description of \$\{subject\.Name \|\| "this show"\}`\}/.test(banner),
+  "Item.tsx",
+)
+check(
+  "and it is a control the remote can land on, drawn as one rather than as punctuation",
+  /\.browse-hero \.hero-more\s*\{[^}]*min-height:\s*34px[^}]*border-radius:\s*999px/.test(css) &&
+    css.includes(".more-link:focus") &&
+    css.includes(".more-link.dpad-focus"),
+  "styles.css",
+)
+check(
+  "and the whole of it is read at a reading size, on a sheet rather than at the banner's preview size",
+  /\.description-text\s*\{[^}]*font-size:\s*18px/.test(css) && /\.description-sheet\s*\{[^}]*width:\s*min\(880px/.test(css),
   "styles.css",
 )
 

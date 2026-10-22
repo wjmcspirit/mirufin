@@ -638,12 +638,13 @@ check(
   "Home.tsx",
 )
 check(
-  "and a screen with no size control of its own still draws at it: favorites, search results and a collection's own page",
+  "and a screen with no size control of its own still draws at it: favorites, search results, a collection's own page and a show's own seasons",
   favoritesPage.includes("className={`card-board size-${prefs.posterSize}`}") &&
     favoritesPage.includes("size={prefs.posterSize}") &&
     searchPage.includes("className={`search-hits size-${prefs.posterSize}`}") &&
     searchPage.includes("size={prefs.posterSize}") &&
-    itemPage.includes("className={`grid poster size-${prefs.posterSize}`}"),
+    itemPage.includes("className={`grid poster size-${prefs.posterSize}`}") &&
+    itemPage.includes("className={`scroller season-scroller size-${prefs.posterSize}`}"),
   "Favorites.tsx, Search.tsx and Item.tsx",
 )
 check(
@@ -651,7 +652,8 @@ check(
   css.includes(".grid.poster.size-small { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); }") &&
     css.includes(".grid.poster.size-large { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }") &&
     css.includes(".card-board.size-large { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }") &&
-    css.includes(".search-hits.size-large .card { width: 220px; }"),
+    css.includes(".search-hits.size-large .card { width: 220px; }") &&
+    css.includes(".row.size-large .card, .season-scroller.size-large .card { width: 220px; }"),
   "styles.css",
 )
 check(

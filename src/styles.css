@@ -1241,9 +1241,16 @@ html:not(.remote) .nav:hover .nav-label {
    whole of the space between one row and the next, so a page of rows reads as one wall of
    artwork rather than a stack of posters with a gap between each. */
 .row { margin: 6px 0 12px; }
-.row.size-small .card { width: 132px; }
-.row.size-medium .card { width: 168px; }
-.row.size-large .card { width: 220px; }
+/* One poster size, everywhere a strip of posters is drawn: a row, and the seasons a show's page
+   draws as a strip of its own. The size is the app's one `posterSize` preference and the class is
+   the one every grid and every other strip already carries - `size-small`, `size-medium`,
+   `size-large` - so a season poster is the same object, at the same width, as the poster beside it
+   on any other screen. Medium is the size the app opens on, and the width this row has always been
+   drawn at; the artwork inside the card is asked for at the same size (`artWidth` in `lib/images`),
+   so a poster is never a large picture drawn small or a small one stretched. */
+.row.size-small .card, .season-scroller.size-small .card { width: 132px; }
+.row.size-medium .card, .season-scroller.size-medium .card { width: 168px; }
+.row.size-large .card, .season-scroller.size-large .card { width: 220px; }
 .row.size-small .card.wide { width: 240px; }
 .row.size-medium .card.wide { width: 300px; }
 .row.size-large .card.wide { width: 420px; }
@@ -1342,6 +1349,17 @@ html:not(.remote) .nav:hover .nav-label {
 .info-facts div { display: flex; gap: 8px; min-width: 0; }
 .info-facts dt { color: #8b93a3; }
 .info-facts dd { margin: 0; }
+/* A title's whole description, in the app's own overlay: the same sheet media info draws, with the
+   text set at a reading size rather than at the two-line preview a banner holds, and held to a
+   column that is read comfortably from across the room. */
+.description-sheet { width: min(880px, 92vw); }
+.description-text {
+  max-width: 68ch;
+  margin: 0;
+  color: #d5dce8;
+  font-size: 18px;
+  line-height: 1.6;
+}
 .trailer-backdrop {
   position: absolute;
   inset: 0;
@@ -2075,6 +2093,47 @@ select {
    and the show's fact links follow it as the page's own controls. */
 .browse-hero .hero-copy { gap: 7px; }
 .browse-hero .overview { margin-top: 3px; }
+/* The show's synopsis and the control that reveals the rest of it are one block: the preview, and
+   under it - only when the preview is cut short - the app's own reveal control. The block is what
+   the banner's rhythm spaces, so the show's fact links below stand the same distance from the
+   description whether or not the ellipsis is drawn, and the description and the genre chips under it
+   are no longer set one line apart, which is what read as cramped. The copy's own gap still spaces
+   everything else. */
+.browse-hero .hero-synopsis {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 9px;
+}
+/* The ellipsis under a description that is longer than the banner shows. It is a control the remote
+   lands on, so it is drawn as one - the genre pills' own outline and wash, at the size of the copy
+   around it - rather than as the plain text link a synopsis uses further down a page, and it is the
+   only thing on the banner that opens the full description: the text itself is not a control, so a
+   press that misses it does nothing. */
+.browse-hero .hero-more {
+  margin-top: 0;
+  min-width: 44px;
+  min-height: 34px;
+  padding: 4px 14px;
+  border: 1px solid rgba(62, 200, 255, 0.45);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.34);
+  color: #d9e6f2;
+  font-size: 18px;
+  line-height: 1;
+  letter-spacing: 0.1em;
+}
+.browse-hero .hero-more:hover {
+  background: rgba(62, 200, 255, 0.16);
+  border-color: rgba(62, 200, 255, 0.75);
+  color: #fff;
+}
+/* The shared reveal control's focus ring is drawn on its own 8px radius; this one is a pill, and the
+   ring has to follow the shape it is drawn around. */
+.browse-hero .hero-more:focus,
+.browse-hero .hero-more:focus-visible,
+.browse-hero .hero-more.dpad-focus {
+  border-radius: 999px;
+}
 /* The title's box steps down with the banner: a logo is still read from across the room, and the
    room the copy gives back is what pays for the episode described under it and the season selector
    below that. */
@@ -2098,7 +2157,17 @@ select {
    poster the viewer was last in carries a violet rule along its bottom edge. The season's artwork
    is the point of this row: a season is chosen by recognising its picture, and a season the server
    has no picture for borrows the show's own rather than showing a bare tile. */
-.season-block .season-scroller { align-items: start; }
+.season-block .season-scroller {
+  align-items: start;
+  /* The strip's shared top padding is cut back here, the way the episode row's is and for the same
+     reason: this row stands under the show's banner and under the band of the show's own actions,
+     and what is above it is what decides whether the posters are on the screen the page opens on.
+     The shared padding is the room a focused card's ring is drawn into, and 16 is that room - Home's
+     rows take the same figure - so the row is drawn tighter without clipping the ring of the poster
+     the remote is on. It is measured: `tools/foldCheck.ts` walks the show's page at 1080p, 1440p and
+     4K and asserts the first season poster's artwork is above the bottom edge at every poster size. */
+  padding-top: 16px;
+}
 .season-card .card-copy { gap: 4px; }
 .season-card .card-sub { color: #9aa3b5; }
 /* How much of a season is watched, under its name - the same bar the rest of the app draws on a

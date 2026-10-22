@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { MediaImage, PosterCard } from "../components/Cards"
+import { DescriptionPopup } from "../components/DescriptionPopup"
 import { CheckIcon, HeartIcon, InfoIcon, PlayIcon, SeasonIcon } from "../components/Icons"
 import { TrailerButton } from "../components/TrailerButton"
 import { MediaInfo } from "../components/MediaInfo"
@@ -16,6 +17,7 @@ import { creditsOf, filmographyRows, type Credit } from "../lib/people"
 import { genreLinks, studioLinks } from "../lib/discovery"
 import { canFavorite, canMarkWatched, canPlayDirectly, episodeCode, formatRuntime, hasSubtitles, isInProgress, metaLine, personFacts, progressPct, techChips } from "../lib/format"
 import { hasMediaInfo } from "../lib/mediaInfo"
+import { placeFocus } from "../lib/remote"
 import { episodePlayHref, lastSeason, rememberSeason, resolveSeason, seasonLineText, seasonProgress, seasonProgressBySeason, seasonStart, type SeasonProgress } from "../lib/seasons"
 import { knownFor, type KnownWork } from "../lib/knownFor"
 import { artWidth, backdropSrc, episodeStillSrc, episodeWideStill, imageUrl, loadImage, primarySrc, seasonArtSrc, thumbSrc, warmImage, wideBackdrop } from "../lib/images"
@@ -284,20 +286,40 @@ export function ItemPage() {
   )
 }
 
+/**
+ * Whether a block of text is longer than the lines its own clamp shows.
+ *
+ * Read from the element that is drawn rather than guessed from the length of the string: the clamp
+ * is a rule of the stylesheet, and how much of a synopsis fits in the lines a page holds for it
+ * depends on the width of the copy column and the size of the type - both of which change with the
+ * panel. A block that fits says so, so a page can leave its own "the rest of this" control out
+ * instead of drawing one that reveals nothing.
+ *
+ * `measure` is false while a block is expanded: the viewer is already reading the whole of it, and
+ * the caller keeps the answer it had rather than watching the control it drew disappear. The height
+ * is read again when the panel changes size, because the television canvas is a share of the screen.
+ */
+function useClamped(node: RefObject<HTMLElement | null>, text: string, measure = true) {
+  const [clamped, setClamped] = useState(false)
+  useEffect(() => {
+    const element = node.current
+    if (!element || !measure) return
+    const read = () => setClamped(element.scrollHeight > element.clientHeight + 1)
+    read()
+    window.addEventListener("resize", read)
+    return () => window.removeEventListener("resize", read)
+  }, [measure, node, text])
+  return clamped
+}
+
 function Bio({ text }: { text: string }) {
   const copy = useRef<HTMLParagraphElement>(null)
   const [open, setOpen] = useState(false)
-  const [overflows, setOverflows] = useState(false)
+  const overflows = useClamped(copy, text, !open)
 
   useEffect(() => {
     setOpen(false)
   }, [text])
-
-  useEffect(() => {
-    const node = copy.current
-    if (!node || open) return
-    setOverflows(node.scrollHeight > node.clientHeight + 1)
-  }, [open, text])
 
   return (
     <>
@@ -745,8 +767,15 @@ function SeasonCard({
   current: boolean
   progress: SeasonProgress | undefined
 }) {
+  const { prefs } = usePrefs()
   const title = season.Name || (season.IndexNumber != null ? `Season ${season.IndexNumber}` : "Season")
   const count = season.ChildCount ?? season.RecursiveItemCount
+  // The artwork is asked for at the size this card is drawn at, from the app's one poster scale:
+  // the card's own width is the shared `size-*` rule the row's class carries, and the image is
+  // fetched for that size rather than at the medium one whatever the viewer chose. The season
+  // poster therefore follows the app's Poster size setting exactly as every other poster does,
+  // and a season the server has no picture for borrows the show's own art at the same size.
+  const width = artWidth("poster", prefs.posterSize)
   return (
     <Link
       className={current ? "card poster season-card on" : "card poster season-card"}
@@ -756,7 +785,7 @@ function SeasonCard({
       onClick={() => rememberSeason(series.Id, season.Id)}
     >
       <span className="card-art">
-        <MediaImage src={seasonArtSrc(season, series)} fallback={primarySrc(series, artWidth("poster"))} alt="" label={title} />
+        <MediaImage src={seasonArtSrc(season, series, width)} fallback={primarySrc(series, width)} alt="" label={title} />
       </span>
       <span className="card-copy">
         <span className="card-title">{title}</span>
@@ -797,12 +826,18 @@ function SeasonCard({
  * the first thing the viewer reads, and the show's own details follow it.
  */
 function SeasonPoster({ season, series }: { season: Item; series: Item | null }) {
+  const { prefs } = usePrefs()
   const title = season.Name || (season.IndexNumber != null ? `Season ${season.IndexNumber}` : "Season")
+  // The artwork is asked for at the size the viewer chose, as the seasons row under it is: this box
+  // is a fixed 240 of the app's own poster shape - the head of the page is the same height at every
+  // panel size - but the picture in it is the one the app's Poster size setting names, so one
+  // setting decides the season's artwork wherever a season is drawn.
+  const width = artWidth("poster", prefs.posterSize)
   return (
     <span className="season-poster" data-season={season.Id}>
       <MediaImage
-        src={seasonArtSrc(season, series)}
-        fallback={series ? primarySrc(series, artWidth("poster")) : null}
+        src={seasonArtSrc(season, series, width)}
+        fallback={series ? primarySrc(series, width) : null}
         alt=""
         label={title}
       />
@@ -821,6 +856,7 @@ function SeriesBody({
   refreshKey?: number
 }) {
   const { userId } = useSession()
+  const { prefs } = usePrefs()
   const [params] = useSearchParams()
   const seasonId = params.get("season") || ""
   const [seasons, setSeasons] = useState<Item[] | null>(null)
@@ -867,7 +903,11 @@ function SeriesBody({
           <div className="row-head">
             <h2>{`Seasons (${seasons.length})`}</h2>
           </div>
-          <div className="scroller season-scroller">
+          {/* The seasons are posters, so the row is drawn at the app's own poster size: the same
+              `size-*` class every other strip and grid carries, so the viewer's Poster size setting
+              decides these cards' width exactly as it decides theirs. Medium is the default, which
+              is the size this row has always been drawn at. */}
+          <div className={`scroller season-scroller size-${prefs.posterSize}`}>
             {seasons.map((season) => (
               <SeasonCard
                 key={season.Id}
@@ -1172,6 +1212,22 @@ function BrowseHero({
   // walks the row.
   const subject = series || season || item
   const context = season ? seasonLineText(season, progress) : kindLabel(item)
+  // The synopsis is the show's own and is held to the lines this banner reserves for it, so the
+  // composition is the same for every show. What does not fit is not lost: the preview keeps its
+  // place and the ellipsis under it opens the whole of the text in the app's own overlay. Whether
+  // there is anything to reveal is measured from the preview that is drawn (`useClamped`), so a show
+  // whose description fits says nothing and draws no control at all.
+  const synopsis = useRef<HTMLParagraphElement>(null)
+  const reveal = useRef<HTMLButtonElement>(null)
+  const [reading, setReading] = useState(false)
+  const clipped = useClamped(synopsis, subject.Overview || "")
+  // Closing puts the remote back on the control the viewer opened the overlay with, which is what
+  // the app does wherever a menu closes over a page (`SettingsControls`): the press that closed it
+  // is answered by the page they were reading, not by the page body.
+  const closeReading = useCallback(() => {
+    setReading(false)
+    if (reveal.current) placeFocus(reveal.current)
+  }, [])
   return (
     <header className="hero stage-copy browse-hero">
       {poster}
@@ -1185,11 +1241,35 @@ function BrowseHero({
           {series ? <TitleLogo item={series} /> : <h1>{season?.SeriesName || item.Name || "Untitled"}</h1>}
         </div>
         <MetaLine item={subject} />
-        {subject.Overview && <p className="overview clamp">{subject.Overview}</p>}
+        {subject.Overview && (
+          // The description and the control that reveals the rest of it are one block, so the
+          // banner's rhythm spaces them together and the fact links below stand the same distance
+          // from the description whether or not the ellipsis is drawn. The description itself is
+          // not a control: nothing opens the overlay but the ellipsis.
+          <div className="hero-synopsis">
+            <p ref={synopsis} className="overview clamp">
+              {subject.Overview}
+            </p>
+            {clipped && (
+              <button
+                ref={reveal}
+                className="more-link hero-more"
+                type="button"
+                onClick={() => setReading(true)}
+                aria-label={`Read the full description of ${subject.Name || "this show"}`}
+              >
+                …
+              </button>
+            )}
+          </div>
+        )}
         {/* The page's own controls, where every other page keeps them: the head is the title's
             facts, and the episode row follows them. */}
         <FactLinks item={item} />
       </div>
+      {reading && (
+        <DescriptionPopup title={subject.Name || "Description"} text={subject.Overview || ""} onClose={closeReading} />
+      )}
     </header>
   )
 }
@@ -1758,7 +1838,11 @@ function FactLinks({ item }: { item: Item }) {
   const { libraries } = useSession()
   const libraryId = libraryTarget(item, libraries)
   const genres = genreLinks(item)
-  const studios = studioLinks(item)
+  // A show's network is a fact about the show rather than a door: it is stated in the metadata line
+  // with the year, the status and the rating (`metaFields`), which is why a series draws no studio
+  // row of its own here. Every other title keeps its studios as links - a film's studio is a thing
+  // the viewer browses the library by - and a title the server gave no studios keeps drawing nothing.
+  const studios = item.Type === "Series" ? [] : studioLinks(item)
   if (genres.length === 0 && studios.length === 0) return null
   return (
     <>

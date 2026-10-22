@@ -83,6 +83,19 @@
       extra.textContent = "Genre " + (g + 1)
       links.appendChild(extra)
     }
+    /*
+     * And a description longer than the two lines the banner holds for it, so the copy carries the
+     * ellipsis the page draws under the preview. The control is what the page adds to the banner, so
+     * the tallest copy a banner is ever drawn with is this one, and this is where the room for it is
+     * measured rather than assumed.
+     */
+    document.querySelector(".hero-synopsis .overview").textContent =
+      "A synopsis of the sort a server actually sends, and then keeps sending: this one runs to several times the two lines the banner holds for it, so the page draws its own reveal control under the preview and the copy the banner carries is taller than the share of the screen the banner takes on its own."
+    var reveal = document.createElement("button")
+    reveal.className = "more-link hero-more"
+    reveal.setAttribute("type", "button")
+    reveal.textContent = "…"
+    document.querySelector(".hero-synopsis").appendChild(reveal)
   }
 
   var remote = window.mirufinRemote
@@ -157,6 +170,18 @@
       poster: { top: design(posterBox.top), bottom: design(posterBox.bottom), width: design(posterBox.width), height: design(posterBox.height) },
       /** The copy the banner carries: it has to fit inside the banner rather than be clipped by it. */
       copy: { top: design(copyBox.top), bottom: design(copyBox.bottom), height: design(copyBox.height) },
+      /**
+       * The control that reveals the rest of a description longer than the banner shows, when the
+       * page draws one. It is the one control the banner adds for a description that does not fit,
+       * so where it sits and how tall it is is what says whether the copy still fits inside the
+       * banner and whether the row under it is still on the screen.
+       */
+      reveal: (function () {
+        var node = document.querySelector(".hero-synopsis .hero-more")
+        if (!node) return null
+        var box = node.getBoundingClientRect()
+        return { top: design(box.top), bottom: design(box.bottom), width: design(box.width), height: design(box.height) }
+      })(),
       /** The order the page is read in, top to bottom: the banner's own copy - the show's title, its
          facts and its fact links - then the season selector, then the row it browses, then the episode
          the remote is on described under the row, and then the one band under both. */

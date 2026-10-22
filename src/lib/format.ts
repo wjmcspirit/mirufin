@@ -1,3 +1,4 @@
+import { studioLinks } from "./discovery"
 import { HERO_DECK_LIMIT } from "./heroDeck"
 import type { Item, MediaStream, RatingsDisplay } from "./types"
 
@@ -250,20 +251,41 @@ export function endsAtLabel(item: Item, now = Date.now()) {
 }
 
 /**
+ * The networks a show aired on, in the order the server listed them.
+ *
+ * Jellyfin keeps a series' network in the same `Studios` field a film keeps its studio in, so the
+ * reading of that field is shared with the links a page draws for every other kind of title - one
+ * place decides what a studio entry means, and a nameless entry is nothing either way. Only a show
+ * has networks: a season and an episode belong to the show that carries them, and a film's studio is
+ * a door to browse a library by rather than a fact about the film, so neither is stated here.
+ */
+export function networkNames(item: Item): string[] {
+  if (item.Type !== "Series") return []
+  return studioLinks(item).map((studio) => studio.name)
+}
+
+/**
  * The fields of a title's metadata line, in the order the line reads them.
  *
- * The release year - or, for an episode, the day it aired - then how long it runs, then how much is
- * left when the viewer is part way through, then what it is rated, then the scores the server
- * reports and finally when it would finish. A field the server did not send is left out rather
- * than filled with a placeholder, and nothing is stated twice: a series says how its run of years
- * goes and how many seasons, never a runtime, and a collection says its year and its scores but
- * never when it would end.
+ * The release year - or, for an episode, the day it aired - then, for a show, the network it aired
+ * on, then how long it runs, then how much is left when the viewer is part way through, then what it
+ * is rated, then the scores the server reports and finally when it would finish. A field the server
+ * did not send is left out rather than filled with a placeholder, and nothing is stated twice: a
+ * series says how its run of years goes and how many seasons, never a runtime, and a collection says
+ * its year and its scores but never when it would end.
+ *
+ * A show's network belongs here rather than in a row of its own under the genres: it is a fact about
+ * the show - the channel it was broadcast on - and it reads with the year, the status and the rating
+ * as one line, `2008–2014 · HBO · Ended · TV-MA · 7.6 ★`. The page therefore draws no separate
+ * network row (see `FactLinks` in `pages/Item.tsx`), and every network the server reports is stated,
+ * in the order it reported them, so removing that row cannot silently drop the second of two.
  */
 export function metaFields(item: Item, ratings: RatingsDisplay = "both", now = Date.now()): string[] {
   const bits: string[] = []
   if (item.Type === "Series") {
     const span = seriesSpan(item)
     if (span) bits.push(span)
+    for (const network of networkNames(item)) bits.push(network)
     if (item.Status === "Continuing" || item.Status === "Ended") bits.push(item.Status)
   } else if (item.Type === "Episode") {
     const aired = airedLabel(item)

@@ -13,6 +13,12 @@
 ;(function () {
   var params = new URLSearchParams(window.location.search)
   var shape = params.get("shape") === "series" ? "series" : "season"
+  /*
+   * Which of the app's own poster sizes the season posters are drawn at: the show's page draws its
+   * seasons at the viewer's Poster size setting, and all three of them have to leave the row on the
+   * screen the page opens on - the largest most of all. Medium is what the app opens on.
+   */
+  var size = ["small", "medium", "large"].indexOf(params.get("size")) >= 0 ? params.get("size") : "medium"
   var width = window.innerWidth
   var height = window.innerHeight
   var scale = width / 1500
@@ -134,7 +140,7 @@
     var seasonTitle = element("h2", "", "")
     seasonTitle.textContent = "Seasons (9)"
     seasonHead.appendChild(seasonTitle)
-    var seasonStrip = element("div", "scroller season-scroller", "season-strip")
+    var seasonStrip = element("div", "scroller season-scroller size-" + size, "season-strip")
     seasons.appendChild(seasonHead)
     seasons.appendChild(seasonStrip)
     seasonCards = fill(seasonStrip, 9, seasonCard)
@@ -164,10 +170,22 @@
   var factsLine = element("p", "kicker", "hero-facts")
   factsLine.textContent = "2019  ·  2 Seasons  ·  TV-14  ·  7.9"
   copy.appendChild(factsLine)
+  // The show's own synopsis, held to the two lines the banner reserves for it, with the app's own
+  // reveal control under it when the description is longer than that - which this one is. It is the
+  // copy the banner carries on the real page, so it is the copy measured here.
+  var synopsis = element("div", "hero-synopsis", "hero-synopsis")
+  var preview = element("p", "overview clamp", "hero-overview")
+  preview.textContent = "A synopsis of the sort a server actually sends, and then keeps sending: this one runs to several times the two lines the banner holds for it."
+  synopsis.appendChild(preview)
+  var reveal = element("button", "more-link hero-more", "hero-more")
+  reveal.setAttribute("type", "button")
+  reveal.textContent = "…"
+  synopsis.appendChild(reveal)
+  copy.appendChild(synopsis)
   // The show's own fact links, where every other page keeps them: in the head, which here is the
-  // banner. The show's own synopsis is not drawn on this page: the episode under the banner is
-  // described in full, and the room is what keeps that description, the selector and the row of
-  // stills on screen together.
+  // banner. The episode the remote is on is described in full under the row, and the room the
+  // description gives back is what keeps that description, the selector and the row of stills on
+  // screen together.
   var facts = element("p", "meta-links genre-pills", "hero-links")
   var pills = [element("a", "", "genre-drama"), element("a", "", "genre-crime")]
   pills[0].textContent = "Drama"
@@ -442,6 +460,8 @@
         bottom: design(rowBox.bottom),
         cardTop: design(cardBox.top),
         cardBottom: design(cardBox.bottom),
+        cardWidth: design(cardBox.width),
+        art: { width: design(cardArt.width), height: design(cardArt.height) },
         artBottom: design(cardArt.bottom),
       }
     }

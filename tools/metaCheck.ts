@@ -138,6 +138,42 @@ same(
   ),
   ["2025–", "Continuing", "8.3 ★"],
 )
+/* A show's network is a fact about the show, so it is stated with the rest of them rather than in a
+   row of its own under the genres: the year span, the network, the status, the rating and the
+   scores, in that order, separated by the app's own dot. A show the server gave no network for says
+   nothing rather than an empty field, and a film's studio is never stated here - that is a door to
+   browse the library by, and it stays a link on the film's own page. */
+const aired = { Id: "s", Name: "Show", Type: "Series", ProductionYear: 2008, EndDate: "2014-05-01T00:00:00Z", Status: "Ended", OfficialRating: "TV-MA", CommunityRating: 7.6 }
+same(
+  "a series states the network it aired on, between its run of years and what it is",
+  metaFields({ ...aired, Studios: [{ Id: "n1", Name: "HBO" }] }, "both", at),
+  ["2008–2014", "HBO", "Ended", "TV-MA", "7.6 ★"],
+)
+same(
+  "and the whole line reads as the one row the reference states",
+  metaLine({ ...aired, Studios: [{ Id: "n1", Name: "HBO" }] }, "both", at),
+  "2008–2014  ·  HBO  ·  Ended  ·  TV-MA  ·  7.6 ★",
+)
+same(
+  "a show the server gave no network for states nothing rather than an empty field",
+  metaFields({ Id: "s", Name: "Show", Type: "Series", ProductionYear: 2025, Status: "Continuing", Studios: [] }, "both", at),
+  ["2025–", "Continuing"],
+)
+same(
+  "and every network a show aired on is stated, in the order the server listed them",
+  metaFields({ Id: "s", Name: "Show", Type: "Series", Studios: [{ Id: "n1", Name: "HBO" }, { Id: "n2", Name: "HBO Max" }] }, "both", at),
+  ["HBO", "HBO Max"],
+)
+same(
+  "a studio with no name is not a fact either, so nothing is stated for it",
+  metaFields({ Id: "s", Name: "Show", Type: "Series", Studios: [{ Id: "n1" }] }, "both", at),
+  [],
+)
+same(
+  "and a film's studio is never stated here: the film's own page keeps it as a link",
+  metaFields(movie({ Studios: [{ Id: "s1", Name: "A24" }] }), "both", at).includes("A24"),
+  false,
+)
 same(
   "a collection states what it is and how long the whole of it runs, never when it would end",
   metaFields({ Id: "b", Name: "Box", Type: "BoxSet", ProductionYear: 2020, RunTimeTicks: 88 * MINUTE }, "both", at),

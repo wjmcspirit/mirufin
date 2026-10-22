@@ -279,6 +279,11 @@ interface BrowseShape {
   poster: { top: number; bottom: number; width: number; height: number }
   /** The copy the banner carries: it has to fit inside the banner rather than be clipped by it. */
   copy: { top: number; bottom: number; height: number }
+  /**
+   * The control that reveals the rest of a description longer than the banner shows, when the page
+   * draws one: `null` when the whole description fits and there is nothing to reveal.
+   */
+  reveal: { top: number; bottom: number; width: number; height: number } | null
   /** The episode the remote is on, described under the row that selects it. */
   spot: { top: number; bottom: number }
   season: { top: number; bottom: number }
@@ -330,7 +335,18 @@ interface SeasonWalkReport {
   /** The same measurement taken before the remote touched the page. */
   rowArt: { width: number; height: number }
   /** On a show's page: where the seasons row and its first poster sit, in design units. */
-  seasonRow: { fold: number; top: number; bottom: number; cardTop: number; cardBottom: number; artBottom: number } | null
+  seasonRow: {
+    fold: number
+    top: number
+    bottom: number
+    cardTop: number
+    cardBottom: number
+    /** The card's own width, which is the app's poster size the page was drawn at. */
+    cardWidth: number
+    /** The artwork inside the card, which has to keep the app's 2:3 poster shape. */
+    art: { width: number; height: number }
+    artBottom: number
+  } | null
 }
 
 /** Where one press of the library walk left the remote, and which group of the page that is. */
@@ -926,14 +942,29 @@ console.log("\nThe same page with a long episode name and a full row of fact lin
 
 for (const { panel, report } of await measureSeason(browser, seasonProbe, PANELS, "?full=1")) {
   const shape = report.pristine
+  const reveal = shape.reveal
   console.log(
     `     ${panel.name}: copy ${shape.copy.height} tall inside a banner of ${shape.bannerHeight}, ` +
+      `reveal ${reveal ? `${reveal.width}x${reveal.height} at ${reveal.top}..${reveal.bottom}` : "none"}, ` +
       `row ${shape.row.top}..${shape.row.bottom} of ${shape.fold}`,
   )
   check(
     `${panel.name} (long copy): the banner is not clipped by the copy it carries`,
     shape.copy.top >= shape.banner.top - 0.5 && shape.copy.bottom <= shape.banner.bottom + 0.5,
     `copy ${shape.copy.top}..${shape.copy.bottom} inside banner ${shape.banner.top}..${shape.banner.bottom}`,
+  )
+  /* The control that reveals the rest of a description that does not fit: it is drawn in the banner
+     the viewer is reading, inside it and above the fold, and it is large enough to be a target the
+     remote can land on rather than a line of punctuation at the end of the text. */
+  check(
+    `${panel.name} (long copy): the control that reveals the rest of the description is drawn on the banner, inside it and above the fold`,
+    reveal !== null &&
+      reveal.height >= 30 &&
+      reveal.width >= 40 &&
+      reveal.top >= shape.banner.top - 0.5 &&
+      reveal.bottom <= shape.banner.bottom + 0.5 &&
+      reveal.bottom <= shape.fold,
+    `reveal ${JSON.stringify(reveal)} inside banner ${shape.banner.top}..${shape.banner.bottom} of ${shape.fold}`,
   )
   check(
     `${panel.name} (long copy): and the row of stills is still on the screen under it`,
@@ -1492,6 +1523,59 @@ for (const { shape } of WALK_SHAPES) {
       report.fromRail[0] !== undefined && report.fromRail[0].group !== "rail" && report.railAgain[0]?.group !== "rail",
       `${landed(report.fromRail)} / ${landed(report.railAgain)}`,
     )
+    console.log("")
+  }
+}
+
+/* The show's page draws its seasons as posters, and it draws them at the app's one poster size - the
+   viewer's Poster size setting, which is Medium on a fresh install. All three have to be drawn, each
+   at the app's own width for that size and still in the app's 2:3 poster shape, and the row has to
+   begin on the screen the page opens on at every one of them: the seasons are this page's browse
+   surface, and a poster the viewer cannot see is not one they can choose.
+
+   Small and Medium - the size the app ships with - also hold the whole of the first poster on that
+   screen without a scroll, which is what this page has always promised, and what the check above
+   states for the size the page is drawn at. Large does not, and that is measured here rather than
+   left to be discovered: 220 wide makes the artwork 330 tall, and on a 1440p or 4K panel the first
+   poster's artwork reaches about 15 to 24 design units past the bottom edge, so the page scrolls for
+   the rest of it. Choosing Large means larger posters and more scrolling everywhere else in the app -
+   a library grid's rows run past the fold too - and the one alternative this page must not take is a
+   size of the season's own, because the seasons are drawn at the app's poster size and nothing else. */
+const SEASON_SIZES: { size: "small" | "medium" | "large"; card: number; fits: boolean }[] = [
+  { size: "small", card: 132, fits: true },
+  { size: "medium", card: 168, fits: true },
+  { size: "large", card: 220, fits: false },
+]
+console.log("\nThe show's seasons at each of the app's poster sizes\n")
+for (const { size, card, fits } of SEASON_SIZES) {
+  for (const { panel, report } of await measurePage<SeasonWalkReport>(browser, seasonWalkProbe, PANELS, `?shape=series&size=${size}`)) {
+    const row = report.seasonRow
+    console.log(
+      `     ${panel.name} (${size}): poster ${row ? `${row.cardWidth} wide, art ${row.art.width}x${row.art.height}` : "none"}, ` +
+        `art ends at ${row ? row.artBottom : -1} of ${row ? row.fold : -1}`,
+    )
+    check(
+      `${panel.name} (${size} posters): the seasons are drawn at the app's own ${size} width`,
+      row !== null && Math.abs(row.cardWidth - card) <= 1,
+      `card ${row ? row.cardWidth : "no row"} against ${card}`,
+    )
+    check(
+      `${panel.name} (${size} posters): and the artwork keeps the app's 2:3 poster shape rather than stretching`,
+      row !== null && Math.abs(row.art.width / row.art.height - 2 / 3) < 0.01,
+      row ? `art ${row.art.width}x${row.art.height}` : "no row",
+    )
+    check(
+      `${panel.name} (${size} posters): and the row of seasons begins on the screen the page opens on`,
+      row !== null && row.top < row.fold && row.cardTop < row.fold,
+      row ? `row at ${row.top}, poster starts at ${row.cardTop}, of ${row.fold}` : "no row",
+    )
+    if (fits) {
+      check(
+        `${panel.name} (${size} posters): and the whole of the first poster is on it, without a scroll`,
+        row !== null && row.artBottom <= row.fold,
+        row ? `poster art ends at ${row.artBottom}, of ${row.fold}` : "no row",
+      )
+    }
     console.log("")
   }
 }

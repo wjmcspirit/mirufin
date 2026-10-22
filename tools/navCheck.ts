@@ -3020,6 +3020,15 @@ function testLandingPolicy() {
     landingControl(nodes([rail, selectedPill, firstPill, episode])) === (episode as unknown as HTMLElement),
     label(landingControl(nodes([rail, selectedPill, firstPill, episode])) as unknown as El),
   )
+  // The control that reveals the rest of a description is the description's own, so a page is never
+  // entered on it: the remote lands on the page's own content, and arriving somewhere cannot open an
+  // overlay the viewer did not ask for.
+  const more = box("button", "more-link hero-more", hero)
+  check(
+    "and the ellipsis that reveals the rest of a description is not where a page lands either",
+    landingControl(nodes([rail, more, episode])) === (episode as unknown as HTMLElement),
+    label(landingControl(nodes([rail, more, episode])) as unknown as El),
+  )
 
   // A hero's primary action is where a library or a show opens: it outranks the cards under it.
   const play = box("a", "btn btn-primary", hero)
@@ -3050,6 +3059,50 @@ function testLandingPolicy() {
   )
 }
 
+/**
+ * The show's description, and the ellipsis that reveals the rest of it.
+ *
+ * A description longer than the lines the banner holds for it keeps its truncated preview and has the
+ * app's own reveal control drawn under it. That control is the only thing that opens the full
+ * description - the text itself is not a control, so a press on the description does nothing - and it
+ * is reached with the remote like any other control: up from the genre chips under it, and back down
+ * again. It is never where a page lands (see `testLandingPolicy`), so arriving at a show's page can
+ * never open the overlay by itself.
+ */
+function testSynopsisReveal() {
+  clearSeats()
+  resetFocusState()
+  const { main } = shell()
+  const hero = new El("header", "hero stage-copy browse-hero")
+  hero.place(60, 0, 1920, 300)
+  const synopsis = new El("div", "hero-synopsis")
+  const preview = new El("p", "overview clamp")
+  preview.text = "A description longer than the two lines this banner holds for it."
+  preview.place(120, 240, 720, 60)
+  const more = new El("button", "more-link hero-more").attr("type", "button")
+  more.text = "…"
+  more.place(188, 240, 44, 34)
+  synopsis.add(preview, more)
+  const links = new El("p", "meta-links genre-pills")
+  const chips = ["/library/L1?genre=Drama", "/library/L1?genre=Crime"].map((href, index) => {
+    const chip = new El("a", "").attr("href", href)
+    chip.text = index === 0 ? "Drama" : "Crime"
+    chip.place(240 + index * 150, 240, 110, 40)
+    links.add(chip)
+    return chip
+  })
+  hero.add(synopsis, links)
+  main.add(hero)
+  episodeRow(main, 12)
+  noteRoute("/item/SERIES")
+
+  placeFocus(chips[0])
+  moveFocus("ArrowUp")
+  check("Up from the genre chips reaches the ellipsis the banner draws under the description", active === more, label(active))
+  moveFocus("ArrowDown")
+  check("and Down comes back to the chips", active === chips[0], label(active))
+}
+
 installDom()
 trackSeats()
 testLandingPolicy()
@@ -3064,6 +3117,7 @@ testMissingTarget()
 testRailIsNotASeat()
 testSeasonWalk()
 testSeasonPageWalk()
+testSynopsisReveal()
 testRailEntry()
 testLibraryToolbar()
 testLibraryToolbarShapes()
