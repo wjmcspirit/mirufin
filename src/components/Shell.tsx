@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode, type SyntheticEvent } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type SyntheticEvent } from "react"
 import { NavLink, Outlet, useLocation } from "react-router-dom"
 import { railLibraries } from "../lib/homeLayout"
+import { openAtTop } from "../lib/remote"
 import { usePrefs, useSession } from "../session"
 import { ErrorBoundary } from "./ErrorBoundary"
 import { HeartIcon, HomeIcon, LibraryIcon, SearchIcon, SettingsIcon } from "./Icons"
@@ -53,6 +54,7 @@ export function Shell() {
   const { prefs } = usePrefs()
   const location = useLocation()
   const rail = useRef<HTMLElement>(null)
+  const column = useRef<HTMLDivElement>(null)
   const [clock, setClock] = useState(() => new Date())
   const icon = 22
   // Home and Favorites are always here, and the libraries a server reports fill the middle - in
@@ -66,6 +68,22 @@ export function Shell() {
     const timer = window.setInterval(() => setClock(new Date()), 30_000)
     return () => window.clearInterval(timer)
   }, [prefs.showClock])
+
+  /**
+   * A screen opens at its own top.
+   *
+   * The column below the rail is one element for the life of the app, so the screen the viewer
+   * opens would otherwise inherit the offset of the screen they left: a season opened from a
+   * show's seasons row began part way down its own banner, with the show's logo and the top of
+   * the season poster above the top of the column and the episode stills clipped by it. It is
+   * put back in the layout pass, before the browser paints the new screen, so the offset is
+   * never seen. A press of Back is the exception: the screen it returns to is the one the
+   * viewer left, and the offset they left it at is theirs - the restoration applies it after
+   * this has run. See `openAtTop`.
+   */
+  useLayoutEffect(() => {
+    openAtTop(column.current)
+  }, [location.pathname])
 
   // The active page's own name is on the screen whether or not the remote is on that tab, so it is
   // placed when the page changes rather than when the tab is focused: it is the one name the rail
@@ -151,7 +169,7 @@ export function Shell() {
           )}
         </div>
       </header>
-      <div className="main">
+      <div className="main" ref={column}>
         {/* A screen that throws is contained here rather than at the root, so the rail stays on
             screen and the remote can still walk out of it: the boundary is keyed on the route,
             so leaving the broken page clears it and the app carries on. */}

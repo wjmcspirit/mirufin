@@ -3,7 +3,7 @@ import { Capacitor } from "@capacitor/core"
 import { useEffect } from "react"
 import { useLocation, useNavigate, useNavigationType } from "react-router-dom"
 import { useLocalProxy } from "../lib/media"
-import { backHeld, clearSeats, focusables, isBackKey, isTextField, landingControl, moveFocus, noteRoute, placeFocus, remoteKey, resetFocusState, restoreSeat, takeBack, trackSeats } from "../lib/remote"
+import { backHeld, clearSeats, focusables, isBackKey, isTextField, landingControl, landOn, moveFocus, noteRoute, remoteKey, resetFocusState, restoreSeat, takeBack, trackSeats } from "../lib/remote"
 import { useSession } from "../session"
 
 const ARROWS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])
@@ -96,14 +96,14 @@ export function RemoteNav() {
       const content = landingControl(items)
       if (content) {
         held = null
-        placeFocus(content)
+        landOn(content)
         return
       }
       // Nothing of the page's own is drawn yet: the rail holds the remote in the meantime,
       // and the looking below is what takes it to the page the moment the page arrives.
       if (!held && items[0]) {
         held = items[0]
-        placeFocus(items[0])
+        landOn(items[0])
       }
       if (attempts < LAND_LOOKS) {
         attempts += 1

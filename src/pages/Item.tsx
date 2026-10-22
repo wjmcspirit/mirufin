@@ -904,6 +904,10 @@ function SeriesBody({
         <BrowseHero item={series} series={series} season={null} progress={null} />
         {actions && <div className="actions episode-actions">{actions}</div>}
       </section>
+      {/* The row of seasons is this page's browse surface, and the page says it is still being
+          read rather than showing nothing where it will be: the remote waits for the row the
+          viewer came for instead of resting on the cast drawn below it. See `landingControl`. */}
+      {!seasons && <Loading label="Loading seasons" />}
       {seasons && seasons.length > 0 && (
         <section className="season-block">
           <div className="row-head">

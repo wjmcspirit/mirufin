@@ -16,9 +16,11 @@ import {
   clearSeats,
   focusables,
   landingControl,
+  landOn,
   moveFocus,
   noteRoute,
   noteBackKeydown,
+  openAtTop as openAtTopScreen,
   ownBack,
   placeFocus as placeFocusOn,
   resetFocusState,
@@ -3082,7 +3084,7 @@ function testFocusDeclarations() {
   const nav = readFileSync("src/components/RemoteNav.tsx", "utf8")
   check(
     "the landing holds the rail only while the page has no content of its own",
-    /if \(!held && items\[0\]\)[\s\S]{0,200}?placeFocus\(items\[0\]\)/.test(nav),
+    /if \(!held && items\[0\]\)[\s\S]{0,200}?landOn\(items\[0\]\)/.test(nav),
     "RemoteNav.tsx",
   )
   check(
@@ -3136,6 +3138,154 @@ function testFocusDeclarations() {
 }
 
 /**
+ * Where a screen opens, and which container says so.
+ *
+ * The column below the rail is one element for the life of the app: only the screen inside it
+ * changes, so a screen the viewer opens inherited the offset of the screen they left. On a
+ * television, selecting a season from a show's seasons row opened the season page part way down -
+ * the banner above the episode row already scrolled off, the stills clipped by the top of the
+ * column - because the landing had rested the remote on a row the page drew before its episodes
+ * and parked the column there, and the column was never put back when the page's own content
+ * arrived above it. What has to hold instead: a screen opens at its own top, the page's own
+ * placement never moves the column, and a plain visit never inherits the offsets a Back is meant
+ * to bring back.
+ */
+function testScreenOpensAtTop() {
+  clearSeats()
+  resetFocusState()
+
+  // A column with a page in it, scrolled down by the viewer's own browsing.
+  const { main } = shell()
+  main.place(70, 0, 1920, 400)
+  main.clientHeight = 400
+  main.scrollHeight = 2400
+  main.scrollTop = 620
+  openAtTopScreen(main)
+  check("a screen opened in the column is put at its own top", main.scrollTop === 0, String(main.scrollTop))
+  openAtTopScreen(main)
+  check("and a column already at its top is left alone", main.scrollTop === 0, String(main.scrollTop))
+  check("a screen with no column at all is not a failure", (openAtTopScreen(null), true))
+
+  // The page's own placement: the season's first still sits under the fold, so revealing it the way
+  // a press does would move the column - and the landing must not, because the viewer is looking at
+  // the top of a screen they have not touched yet.
+  const landing = shell()
+  landing.main.place(70, 0, 1920, 400)
+  landing.main.clientHeight = 400
+  landing.main.scrollHeight = 2400
+  const block = episodeRow(landing.main, 4)
+  noteRoute("/item/S1")
+  landOn(block.cards[0] as unknown as HTMLElement)
+  run(120)
+  check(
+    "the check is set up the way the bug appeared: the still the landing rests on is below the fold",
+    block.cards[0].rect.bottom > 70 + landing.main.clientHeight,
+    `still ends ${block.cards[0].rect.bottom}, column ends ${70 + landing.main.clientHeight}`,
+  )
+  check("the page's own placement does not move the column", landing.main.scrollTop === 0, String(landing.main.scrollTop))
+  check("but it does put the remote on the page's own row", active === block.cards[0], label(active))
+  moveFocus("ArrowDown")
+  check(
+    "and the viewer's own press still brings what it reaches into view",
+    landing.main.scrollTop > 0,
+    String(landing.main.scrollTop),
+  )
+
+  // A season the viewer walked down its own page, left by pressing OK on an episode: the seat
+  // remembers the episode, the column and the row. Back brings all three back; opening the season
+  // again from the show's page brings back the episode and nothing else.
+  clearSeats()
+  resetFocusState()
+  const walked = shell()
+  walked.main.place(70, 0, 1920, 1080)
+  walked.main.clientHeight = 1080
+  walked.main.scrollHeight = 2400
+  const walkedBlock = episodeRow(walked.main, 12)
+  noteRoute("/item/S1")
+  placeFocus(walkedBlock.cards[2])
+  walked.main.scrollTop = 178
+  walkedBlock.scroller.scrollLeft = 640
+  activate(walkedBlock.cards[2])
+
+  const back = shell()
+  back.main.place(70, 0, 1920, 1080)
+  back.main.clientHeight = 1080
+  back.main.scrollHeight = 2400
+  const backBlock = episodeRow(back.main, 12)
+  noteRoute("/item/S1")
+  const cancelBack = restoreSeat("/item/S1", true, () => {})
+  run(200)
+  check("Back opens the screen where the viewer left it", back.main.scrollTop === 178, String(back.main.scrollTop))
+  check(
+    "with the row the episode was in where it was",
+    backBlock.scroller.scrollLeft === 640,
+    String(backBlock.scroller.scrollLeft),
+  )
+  check("and the remote on the episode it was played from", active === backBlock.cards[2], label(active))
+  cancelBack()
+
+  const again = shell()
+  again.main.place(70, 0, 1920, 1080)
+  again.main.clientHeight = 1080
+  again.main.scrollHeight = 2400
+  const againBlock = episodeRow(again.main, 12)
+  noteRoute("/item/S1")
+  let landed = false
+  const cancelPlain = restoreSeat("/item/S1", false, () => {
+    landed = true
+  })
+  run(200)
+  check("a season opened again begins at its own top", again.main.scrollTop === 0, String(again.main.scrollTop))
+  check("the episode it was left on is still where the remote rests", active === againBlock.cards[2], label(active))
+  check(
+    "and the row shows that episode rather than the offset it was left at",
+    inWindow(againBlock.scroller, againBlock.cards[2]) && againBlock.scroller.scrollLeft !== 640,
+    `scrolled ${againBlock.scroller.scrollLeft}, episode at ${againBlock.cards[2].rect.left}`,
+  )
+  check("and the page's own landing was not needed", !landed)
+  cancelPlain()
+
+  // The wiring: the column is reset in the layout pass of the screen the viewer opens, before the
+  // browser paints it - not on a timer, and not by a margin or a hidden block.
+  const shellSource = readFileSync("src/components/Shell.tsx", "utf8")
+  check(
+    "the page column is the one the reset is applied to",
+    /<div className="main" ref=\{column\}>/.test(shellSource) &&
+      shellSource.includes('import { openAtTop } from "../lib/remote"'),
+    "Shell.tsx",
+  )
+  check(
+    "and it is put back before the new screen is painted",
+    /useLayoutEffect\(\(\) => \{\s*openAtTop\(column\.current\)\s*\}, \[location\.pathname\]\)/.test(shellSource),
+    "Shell.tsx",
+  )
+  check(
+    "a page still reading its own row says so, so the landing waits for it",
+    readFileSync("src/pages/Item.tsx", "utf8").includes('{!seasons && <Loading label="Loading seasons" />}'),
+    "Item.tsx",
+  )
+  const remoteSource = readFileSync("src/lib/remote.ts", "utf8")
+  check(
+    "the landing is the one placement that does not move the column",
+    /export function landOn\(node: HTMLElement\) \{[\s\S]{0,200}?focusNode\(node, false\)/.test(remoteSource) &&
+      /export function placeFocus\(node: HTMLElement\) \{\s*stopRestore\(\)\s*focusNode\(node\)/.test(remoteSource),
+    "remote.ts",
+  )
+  check(
+    "and the landing is what the navigation uses",
+    /const content = landingControl\(items\)[\s\S]{0,160}?landOn\(content\)/.test(
+      readFileSync("src/components/RemoteNav.tsx", "utf8"),
+    ),
+    "RemoteNav.tsx",
+  )
+  check(
+    "and only a Back puts the remembered offsets back",
+    remoteSource.includes("if (insist) applySeat(seat)") && remoteSource.includes("if (insist) nudge(seat, node)"),
+    "remote.ts",
+  )
+}
+
+/**
  * The control a page is entered on.
  *
  * The order the landing looks in is the order a viewer reads a page: the hero's primary action, then
@@ -3147,6 +3297,14 @@ function testFocusDeclarations() {
  * linking to another season - and returning to that page put the focus ring back on the first
  * season's tab, however late the season being browsed was. That is the defect these checks are here
  * to keep out.
+ *
+ * The landing is answered from the screen the page opens on, and only once the page has finished
+ * drawing its own content - the season page's defect, measured on a television: the episodes are the
+ * last thing a season page reads, and while they were in the air the first card drawn was the cast's.
+ * The remote rested on a cast card, the page was parked at that row, and when the episodes arrived
+ * above it the season page was left part way down - banner gone, stills clipped by the top of the
+ * column. What has to hold instead is that the landing waits for the row the viewer came for, and
+ * that it never rests on a control the viewer cannot see.
  */
 function testLandingPolicy() {
   const nodes = (list: El[]) => list as unknown as HTMLElement[]
@@ -3160,18 +3318,21 @@ function testLandingPolicy() {
     return node
   }
 
-  const page = box("div", "detail browse-page")
-  const main = box("div", "main", page)
-  const hero = box("header", "hero stage-copy browse-hero", main)
+  // The page's own column, in the design units a 1080p television draws: the rail takes the top of
+  // the screen, and the column under it is what the viewer looks through.
+  const { main, rail } = shell()
+  main.place(70, 0, 1920, 774)
+  main.clientHeight = 774
+  main.scrollHeight = 2400
+  const hero = box("header", "hero stage-copy browse-hero", main).place(102, 0, 1920, 496)
   box("div", "hero-copy", hero)
   // The season selector is the page's own control row, drawn under the episode it describes and
   // above the row it browses - not a control of the hero's.
-  const pills = box("nav", "scroller season-tabs", main)
-  const firstPill = box("a", "season-tab", pills)
-  const selectedPill = box("a", "season-tab on", pills)
-  const row = box("div", "scroller episode-scroller", main)
-  const episode = box("a", "episode", row)
-  const rail = box("a", "nav", box("nav", "side-nav", box("header", "side", page)))
+  const pills = box("nav", "scroller season-tabs", main).place(606, 50, 1336, 49)
+  const firstPill = box("a", "season-tab", pills).place(606, 50, 110, 22)
+  const selectedPill = box("a", "season-tab on", pills).place(606, 170, 110, 22)
+  const row = box("div", "scroller episode-scroller", main).place(655, 50, 1336, 288)
+  const episode = box("a", "episode", row).place(663, 50, 360, 202)
 
   check(
     "a page that browses a season is entered on its episode row, not on its season selector",
@@ -3186,7 +3347,7 @@ function testLandingPolicy() {
   // A control that opens the rest of a description is the description's own, so a page is never
   // entered on it: the remote lands on the page's own content, and arriving somewhere cannot open
   // text the viewer did not ask for.
-  const more = box("button", "more-link", hero)
+  const more = box("button", "more-link", hero).place(560, 380, 120, 40)
   check(
     "and a description's own reveal control is not where a page lands either",
     landingControl(nodes([rail, more, episode])) === (episode as unknown as HTMLElement),
@@ -3194,14 +3355,14 @@ function testLandingPolicy() {
   )
 
   // A hero's primary action is where a library or a show opens: it outranks the cards under it.
-  const play = box("a", "btn btn-primary", hero)
+  const play = box("a", "btn btn-primary", hero).place(500, 380, 176, 48)
   check(
     "a page whose hero carries the play action is entered on that action",
     landingControl(nodes([rail, play, episode])) === (play as unknown as HTMLElement),
     label(landingControl(nodes([rail, play, episode])) as unknown as El),
   )
 
-  const poster = box("a", "card poster", main)
+  const poster = box("a", "card poster", main).place(600, 50, 168, 252)
   check(
     "a page of cards is entered on its first card",
     landingControl(nodes([rail, poster, episode])) === (poster as unknown as HTMLElement),
@@ -3214,11 +3375,52 @@ function testLandingPolicy() {
   )
   check("and the rail is never the landing, even when it is all the page has", landingControl(nodes([rail])) === null)
 
-  const field = new InputEl("input", "search-field")
+  const field = new InputEl("input", "search-field").place(600, 400, 400, 48)
   check(
     "a text field is never the landing: entering a page must not open the television's keyboard",
     landingControl(nodes([rail, field, poster])) === (poster as unknown as HTMLElement),
     label(landingControl(nodes([rail, field, poster])) as unknown as El),
+  )
+
+  // A row below the bottom of the column is not a place the remote may rest: the page opens at its
+  // own top, so a control there is one the viewer cannot see, and the focus ring with it.
+  const below = box("a", "card poster", main).place(1200, 50, 168, 252)
+  check(
+    "a card below the screen the page opens on is not the landing",
+    landingControl(nodes([rail, below, episode])) === (episode as unknown as HTMLElement),
+    label(landingControl(nodes([rail, below, episode])) as unknown as El),
+  )
+  check(
+    "and a page whose only content is below that screen is not landed on at all",
+    landingControl(nodes([rail, below])) === null,
+    label(landingControl(nodes([rail, below])) as unknown as El),
+  )
+
+  // The season page's own defect: the episodes are the last thing it reads, and the cast is drawn
+  // first. While the page is still drawing, the remote waits for the row the viewer came for.
+  const castRow = box("div", "row people-row", main).place(700, 50, 1600, 280)
+  const castCard = box("a", "card person", castRow).place(700, 50, 168, 252)
+  const loading = box("div", "status", main).place(600, 50, 240, 24)
+  check(
+    "the check is set up the way the bug appeared: the cast is drawn on the screen where the episode row will be",
+    castCard.rect.top > 70 && castCard.rect.top < 836,
+    `cast ${castCard.rect.top}..${castCard.rect.bottom} against the column's 70..844`,
+  )
+  check(
+    "a page still drawing its own content is not landed on a card, even one on the screen",
+    landingControl(nodes([rail, castCard])) === null,
+    label(landingControl(nodes([rail, castCard])) as unknown as El),
+  )
+  main.children = main.children.filter((child) => child !== loading)
+  check(
+    "and the row the viewer came for is taken once it is drawn",
+    landingControl(nodes([rail, episode, castCard])) === (episode as unknown as HTMLElement),
+    label(landingControl(nodes([rail, episode, castCard])) as unknown as El),
+  )
+  check(
+    "with nothing left to draw, a page of cards is landed on its first card again",
+    landingControl(nodes([rail, castCard])) === (castCard as unknown as HTMLElement),
+    label(landingControl(nodes([rail, castCard])) as unknown as El),
   )
 }
 
@@ -3310,6 +3512,7 @@ testStudioStrip()
 testClearingAndOverlays()
 testFadedPanel()
 testFocusDeclarations()
+testScreenOpensAtTop()
 console.log(failures === 0 ? "\nAll navigation checks passed." : `\n${failures} navigation check(s) failed.`)
 if (failures > 0) throw new Error(`${failures} navigation check(s) failed`)
 

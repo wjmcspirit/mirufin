@@ -131,6 +131,18 @@ export function isTextField(node: HTMLElement) {
 }
 
 /**
+ * Is the page still drawing something of its own?
+ *
+ * A title's page is read in pieces - the show, its seasons, a season's episodes - and the rows
+ * that arrive first are the ones drawn below the row the viewer came for. While a loading block
+ * is on the page, the row the viewer came for may still be to come, so neither the landing nor a
+ * borrowed seat rests the remote on a row of cards yet. See `landingControl`.
+ */
+function pageIsDrawing() {
+  return Boolean(document.querySelector(".main .status"))
+}
+
+/**
  * The control a page is entered on when the viewer has nothing to come back to.
  *
  * The page's own content, in the order a viewer reads it: the hero's primary action first - the Play
@@ -143,6 +155,14 @@ export function isTextField(node: HTMLElement) {
  * another season - and returning to it put the focus ring back on the first season's tab however late
  * the season being browsed was.
  *
+ * Only a control that is on the screen the page opens on is answered with, and while the page is
+ * still drawing its own content nothing but the hero's primary action is. A title's own page is read
+ * in pieces - the show, its seasons, a season's episodes - and the rows that arrive first are the ones
+ * drawn below the row the viewer came for: the cast and the titles under it. Landing on one of those
+ * rested the remote on a control the page was about to push off the bottom of the screen, and the page
+ * was parked at that row rather than at its own head. The looking continues instead, and the page's
+ * own row is taken the moment it is drawn.
+ *
  * A page with none of those - settings, a form, a list of text - keeps the first control it offers,
  * and a text field is never chosen: entering a page must not open the television's keyboard. The
  * navigation rail is never chosen either, because a press of Down from the rail is how the viewer
@@ -150,11 +170,16 @@ export function isTextField(node: HTMLElement) {
  */
 export function landingControl(nodes: HTMLElement[]): HTMLElement | null {
   const controls = nodes.filter((node) => !node.closest(".side") && !isTextField(node))
+  const shown = controls.filter(onScreen)
+  const primary = shown.find((node) => node.closest(".hero .btn-primary, .detail-hero .btn-primary"))
+  if (primary) return primary
+  // The page is still reading something of its own: the row the viewer came for may be to come,
+  // so no row of cards is the landing yet. The navigation holds the remote in the meantime.
+  if (pageIsDrawing()) return null
   return (
-    controls.find((node) => node.closest(".hero .btn-primary, .detail-hero .btn-primary")) ||
-    controls.find((node) => node.closest(".episode, .card")) ||
-    controls.find((node) => node.closest(".hero, .detail-hero")) ||
-    controls[0] ||
+    shown.find((node) => node.closest(".episode, .card")) ||
+    shown.find((node) => node.closest(".hero, .detail-hero")) ||
+    shown[0] ||
     null
   )
 }
@@ -205,11 +230,54 @@ function markFocus(node: HTMLElement) {
   node.classList.add("dpad-focus")
 }
 
-export function placeFocus(node: HTMLElement) {
+/**
+ * Land the remote on the control the page itself chose, without moving the page column.
+ *
+ * This is the landing: the page choosing where the viewer starts on a screen they have not
+ * touched yet. The column is the viewer's, so the screen keeps the top its own navigation gave it
+ * and only the rows are scrolled to show the control the remote rests on. A title's own page is
+ * read in pieces, and the row the landing rests on while it is still being read is not the row the
+ * viewer came for: moving the column for it left the season page parked part way down - the banner
+ * above the episode row already scrolled off, the stills clipped by the top of the column - and the
+ * page's own content arriving above it never put it back. See `openAtTop`, which is where a
+ * screen's top comes from.
+ *
+ * A page putting the remote back on a control of its own - after a filter, a toggle, a list that
+ * re-rendered - is `placeFocus`, which does bring that control into view: there the viewer is
+ * already somewhere on the page, and the page is keeping them there. The landing is the one
+ * placement that happens before the viewer has chosen anything.
+ */
+export function landOn(node: HTMLElement) {
   // A page that hands focus to a control of its own is the page deciding where the viewer
   // is; a restoration still waiting for that route is no longer what they asked for.
   stopRestore()
+  focusNode(node, false)
+}
+
+/** Put the remote on a control, bringing it into view where the viewer already is. */
+export function placeFocus(node: HTMLElement) {
+  stopRestore()
   focusNode(node)
+}
+
+/**
+ * Open a screen at its own top.
+ *
+ * The page column is one element for the life of the app - `Shell` draws it once and only the
+ * screen inside it changes - so a screen the viewer opens would otherwise inherit the offset of
+ * the screen they left, and the season opened from a show's seasons row began part way down its
+ * own banner: the poster and the show's logo above the top of the column, the stills clipped by
+ * it. It is put back here, at the moment the screen changes and before the browser paints the
+ * new one, so the offset is neither seen nor inherited. It is also what keeps a page's own
+ * drawing - a row arriving late, a heading that grows - from being read as a place to be.
+ *
+ * A Back is not this: the screen the viewer returns to is the one they left, and the offset
+ * they left it at is theirs. The restoration applies it after this has run, and it wins.
+ */
+export function openAtTop(column: HTMLElement | null) {
+  if (!column) return
+  if (column.scrollTop !== 0) column.scrollTop = 0
+  if (column.scrollLeft !== 0) column.scrollLeft = 0
 }
 
 /**
@@ -223,7 +291,7 @@ function menuOptions(pop: HTMLElement) {
   return [...pop.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(visible)
 }
 
-function focusNode(node: HTMLElement) {
+function focusNode(node: HTMLElement, column = true) {
   markFocus(node)
   if (place(node) === "main" && !node.closest(".tool-pop, .trailer-pop")) returnMain = node
   rememberSeat(node)
@@ -242,17 +310,17 @@ function focusNode(node: HTMLElement) {
     scrollInside(pop, node)
     return
   }
-  reveal(node)
+  reveal(node, column)
 }
 
 let revealToken = 0
 
-function reveal(node: HTMLElement) {
+function reveal(node: HTMLElement, column = true) {
   if (node.closest(".tool-pop, .trailer-pop")) return
   const token = ++revealToken
   const run = () => {
     if (token !== revealToken || !node.isConnected) return
-    placeReveal(node)
+    placeReveal(node, column)
   }
   run()
   requestAnimationFrame(() => {
@@ -261,11 +329,15 @@ function reveal(node: HTMLElement) {
   })
 }
 
-function placeReveal(node: HTMLElement) {
+/**
+ * Bring a control into view: its own row sideways, and - unless the page's own placement is
+ * what put the remote here - the column as well. See `placeFocus`.
+ */
+function placeReveal(node: HTMLElement, column = true) {
   const scroller = node.closest(".scroller")
   if (scroller instanceof HTMLElement) scrollRow(scroller, node)
   const main = node.closest(".main")
-  if (!(main instanceof HTMLElement)) return
+  if (!(main instanceof HTMLElement) || !column) return
   const view = () => main.getBoundingClientRect()
   const hero = node.closest(".hero, .detail-hero")
   // A settings row is one question: its name, its hint and its control belong on screen together.
@@ -965,11 +1037,15 @@ function nudge(seat: NavSeat, node: HTMLElement) {
 /**
  * Put focus back on the seat recorded for `route`, waiting for the page to render it.
  *
- * `insist` is a press of Back: then the item the viewer left is what the press asked for,
- * and it wins even over a page that has put focus somewhere of its own. A plain visit only
- * borrows the seat, and leaves the page's own landing alone if the page has already chosen.
- * `onGiveUp` runs when nothing of the origin can be recovered at all - the caller's own
- * landing, which is the only generic fallback in this path.
+ * `insist` is a press of Back: then the item the viewer left is what the press asked for, it
+ * wins even over a page that has put focus somewhere of its own, and the offsets the viewer
+ * left - the column and every row - go back with it, because the screen they are returning to
+ * is the one they left. A plain visit only borrows the seat's control, and only once the page
+ * has drawn it: the screen keeps the top its own navigation gave it, so a season opened again
+ * from a show's seasons row begins at its own head rather than at the offset it was left at,
+ * and the rows are not put back where they were either. `onGiveUp` runs when nothing of the
+ * origin can be recovered at all - the caller's own landing, which is the only generic fallback
+ * in this path.
  */
 export function restoreSeat(route: string, insist: boolean, onGiveUp: () => void): () => void {
   stopRestore()
@@ -995,8 +1071,11 @@ export function restoreSeat(route: string, insist: boolean, onGiveUp: () => void
   const settle = (node: HTMLElement) => {
     stop()
     cancelRestore = null
-    focusNode(node)
-    nudge(seat, node)
+    focusNode(node, insist)
+    // The remembered offsets are the viewer's place on the screen they left. A Back puts them
+    // back and keeps them while the focus that follows settles; a plain visit does not move the
+    // column at all, so the screen it opens stays at its own top.
+    if (insist) nudge(seat, node)
   }
 
   const giveUp = () => {
@@ -1019,20 +1098,35 @@ export function restoreSeat(route: string, insist: boolean, onGiveUp: () => void
     }
     // The offsets go back first: a library grid that pages in as it scrolls then loads the
     // page the item was on while the search below is still running.
-    applySeat(seat)
+    if (insist) applySeat(seat)
     const exact = seatTarget(seat)
-    if (exact) {
+    // A plain visit borrows the seat's control only once the page has stopped drawing and only
+    // when the viewer can see it: the screen keeps the top its own navigation gave it, so a
+    // control the remembered offset used to bring into view is not one the viewer is looking at,
+    // and resting the remote on it would leave the focus ring off the screen until they pressed
+    // something. The page's own landing runs instead - the row the viewer came for.
+    if (exact && (insist || (!pageIsDrawing() && onScreen(exact)))) {
       settle(exact)
       return
     }
-    const row = bandFor(seat.band)
-    if (row) {
-      if (!rowSeen) rowSeen = performance.now()
-      const grace = document.querySelector(".more-sentinel") ? SEAT_GRACE_MORE_MS : SEAT_GRACE_MS
-      const first = firstControl(row)
-      if (first && performance.now() - rowSeen >= grace) {
-        settle(first)
+    if (!insist) {
+      // Nothing else of the seat is borrowed by a plain visit: the row's first card is not the
+      // place the viewer left, and the page's own landing answers better. While the page is still
+      // drawing, the wait below is what gives it the chance to.
+      if (!pageIsDrawing()) {
+        giveUp()
         return
+      }
+    } else {
+      const row = bandFor(seat.band)
+      if (row) {
+        if (!rowSeen) rowSeen = performance.now()
+        const grace = document.querySelector(".more-sentinel") ? SEAT_GRACE_MORE_MS : SEAT_GRACE_MS
+        const first = firstControl(row)
+        if (first && performance.now() - rowSeen >= grace) {
+          settle(first)
+          return
+        }
       }
     }
     if (performance.now() - started >= limit) {
