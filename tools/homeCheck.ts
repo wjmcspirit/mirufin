@@ -476,6 +476,103 @@ check(
   rule(".brand").trim(),
 )
 
+/* The rail's two states, which are two different things and must not be drawn as one. The page the
+   viewer is on is a persistent mark: the app's own cyan icon, a rule under it as wide as the icon,
+   and the page's own name under that - all three drawn whether or not the remote is on the tab.
+   Where the remote is is the app's own television ring: the light cyan ring and the cyan halo every
+   button, poster and profile card in the app wears, drawn on a plate around the icon, with the icon
+   at full white. The two can be on two different tabs at once, and each still has to read for what
+   it is. What a television makes of that cannot be measured here - `tools/foldCheck.ts` is the only
+   harness with a layout engine - so what is held is the shape of the rules that keep them apart.
+
+   `rule` above looks for a selector and its opening brace on the same line, which is how most of
+   this stylesheet is written. The rail's focus rules are not: one rule answers the keyboard, the
+   remote and the pointer, so its selector list is written over three lines. `listed` looks a rule up
+   by the first selector of its list, whatever the rest of the list grows to. */
+const flat = css.replace(/\r\n/g, "\n")
+function listed(selector: string) {
+  for (const tail of [",\n", " {"]) {
+    const at = flat.indexOf(`\n${selector}${tail}`)
+    if (at >= 0) return flat.slice(at, flat.indexOf("}", at))
+  }
+  return ""
+}
+const railTab = listed(".nav")
+const railName = listed(".nav-label")
+const activeTab = listed(".nav.active")
+const activeRule = listed(".nav.active::after")
+const activeName = listed(".nav.active .nav-label")
+const focusedTab = listed(".nav:focus")
+const focusedName = listed(".nav:focus .nav-label")
+const plate = listed(".nav::before")
+const plateOn = listed(".nav:focus::before")
+check(
+  "one tab's box is the size the rail names, and it is what holds the icon, the rule under it and the name under that",
+  railTab.includes("height: var(--rail-item)") && css.includes("--rail-item: 50px"),
+  railTab.trim(),
+)
+check(
+  "and the name is placed under that box at the rail's own spacing, so the three parts of a tab read as one object",
+  railName.includes("top: calc(100% + var(--rail-name-gap))"),
+  railName.trim(),
+)
+/* The rail's own height is a budget rather than a preference: the box plus the padding above and
+   below it is what pushes the hero and the first row of posters down. The fold has about 12 units
+   of room at 1080p with the medium posters under it, measured by `tools/foldCheck.ts`, so the rail
+   may grow a little and no further. */
+const railPad = Number(rule(".side").match(/padding:\s*(\d+)px var\(--content-pad\)/)?.[1] ?? "0")
+const railItem = Number(css.match(/--rail-item:\s*(\d+)px/)?.[1] ?? "0")
+check(
+  "and the rail's own height stays inside what the fold can pay for",
+  railPad > 0 && railItem > 0 && railPad * 2 + railItem <= 72,
+  `${railPad}px above and below a ${railItem}px box is ${railPad * 2 + railItem} of the 844-unit canvas`,
+)
+check(
+  "the page the viewer is on is drawn in the app's own cyan, and not in the colour the remote's own state is drawn in",
+  activeTab.includes("color: var(--accent)") && focusedTab.includes("color: #fff"),
+  `active ${activeTab.trim()} / focused ${focusedTab.trim()}`,
+)
+check(
+  "and its rule is exactly as wide as the icon and begins at the icon's own bottom edge, so it belongs to the tab rather than floating below it",
+  activeRule.includes("width: var(--rail-icon)") &&
+    activeRule.includes("top: calc(var(--rail-icon-top) + var(--rail-icon) + var(--rail-rule-gap))"),
+  activeRule.trim(),
+)
+check(
+  "and the page's own name is drawn with the remote nowhere near the tab, and quieter than a focused tab's",
+  activeName.includes("visibility: visible") && activeName.includes("opacity: 0.82") && focusedName.includes("opacity: 1"),
+  `${activeName.trim()} / ${focusedName.trim()}`,
+)
+const namedBy = listed(".side-nav.rail-named .nav.active .nav-label")
+check(
+  "and only one name is drawn at a time, so two names on tabs a few units apart cannot land on each other",
+  namedBy.includes("visibility: hidden") && namedBy.includes("opacity: 0"),
+  namedBy.trim(),
+)
+const shell = readFileSync("src/components/Shell.tsx", "utf8")
+check(
+  "and the rail is told when another tab has taken its one name",
+  /rail\.current\?\.classList\.toggle\("rail-named"/.test(shell) && /nameRail\(link\)/.test(shell),
+  "Shell.tsx",
+)
+check(
+  "the tab the remote is on draws its icon at full white, which is not the cyan the page the viewer is on is drawn in",
+  focusedTab.includes("color: #fff"),
+  focusedTab.trim(),
+)
+check(
+  "and it wears the app's own television ring - the light cyan ring and the cyan halo every button, poster and profile card in the app wears - drawn on a plate around the icon",
+  plate.includes("width: var(--rail-plate)") &&
+    plate.includes("outline: 3px solid #8ee6ff") &&
+    plate.includes("box-shadow: 0 0 0 6px rgba(62, 200, 255, 0.28)"),
+  plate.trim(),
+)
+check(
+  "and that plate is nothing until the remote is on the tab, so it can never read as the active page's mark",
+  plate.includes("opacity: 0") && plateOn.includes("opacity: 1"),
+  `${plate.trim()} / ${plateOn.trim()}`,
+)
+
 /** One media query's block, as it is written. */
 function mediaBlock(query: string) {
   const match = css.match(new RegExp(`@media ${query.replace(/[()]/g, "\\$&")} \\{[\\s\\S]*?\\r?\\n\\}`))

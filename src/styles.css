@@ -812,6 +812,30 @@ h1, h2, h3 {
   gap: 22px;
   min-width: 0;
   overflow: visible;
+  /* The rail's own rhythm, named once, because three things have to agree about it: the box one
+     navigation item is drawn in, the size every rail icon is drawn at, and where the rule and the
+     name under it begin.
+
+     The box is what holds all three parts of a tab - the icon, the rule under it and the name under
+     that - so they read as one object rather than as an icon with a name hanging off the bottom of
+     the rail. At 50 units against the 844-unit television canvas it is a comfortable television
+     target, and it is the whole of the rail's growth: the rail is 70 units where it was 66, which
+     the fold still pays for (`tools/foldCheck.ts` measures it at every panel size). */
+  --rail-item: 50px;
+  --rail-icon: 22px;
+  /* Where one tab's icon begins in its own box, and what stands under it. The rule and the name are
+     both placed from the icon's own bottom edge rather than from the box's, so the three keep their
+     spacing whatever the box's height is. */
+  --rail-icon-top: calc((var(--rail-item) - var(--rail-icon)) / 2);
+  --rail-rule-gap: 4px;
+  --rail-rule: 2px;
+  --rail-name-gap: 3px;
+  /* The plate the focused tab's ring is drawn on: the icon and the rule under it with 6 units of
+     room around them, and nothing else. The ring therefore stops above the name rather than
+     crossing it, and it reads as the thing the remote is on rather than as a box the tab happens to
+     sit in. */
+  --rail-plate-pad: 6px;
+  --rail-plate: calc(var(--rail-icon) + var(--rail-rule-gap) + var(--rail-rule) + var(--rail-plate-pad) * 2);
   /* The header is inset by the content boundary itself, which is where the content below it
      begins: the logo's left edge and the right-hand group's outer edge line up with the
      hero's copy and with the first and last poster of a row. Stated as the sum rather than as a
@@ -842,7 +866,7 @@ h1, h2, h3 {
   place-items: center;
   flex: 0 0 auto;
   width: 46px;
-  height: 46px;
+  height: var(--rail-item);
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -851,44 +875,85 @@ h1, h2, h3 {
   transition: color 0.12s ease;
 }
 .nav svg {
-  width: 22px;
-  height: 22px;
+  width: var(--rail-icon);
+  height: var(--rail-icon);
   transition: transform 0.12s ease, filter 0.12s ease;
 }
-.nav.active { color: #fff; }
+/* The page the viewer is on: a state, not a control, and not the same thing as where the remote is.
+   The icon and the rule under it are the mark, in the app's own cyan - the colour a state that is
+   not the remote's is drawn in - and the name under the rule is the page's own, drawn quietly
+   enough to be read without competing with the ring that says where the remote is. All three are
+   drawn whether or not the remote is on the tab, so leaving the active tab never takes its mark
+   away, and a focused tab never looks like the active one. */
+.nav.active { color: var(--accent); }
 .nav.active::after {
   content: "";
   position: absolute;
   left: 50%;
-  bottom: 4px;
-  width: 14px;
-  height: 2px;
-  border-radius: 2px;
-  background: rgba(122, 223, 255, 0.9);
+  /* Directly under the icon and exactly as wide as it, so the rule belongs to the icon rather than
+     floating in the middle of the box below it. */
+  top: calc(var(--rail-icon-top) + var(--rail-icon) + var(--rail-rule-gap));
+  width: var(--rail-icon);
+  height: var(--rail-rule);
+  border-radius: var(--rail-rule);
+  background: var(--accent);
   box-shadow: 0 0 8px rgba(62, 200, 255, 0.55);
   transform: translateX(-50%);
 }
+.nav.active .nav-label {
+  visibility: visible;
+  opacity: 0.82;
+  color: #c9ecff;
+}
 html:not(.remote) .nav:hover {
   color: #fff;
-  background: transparent;
 }
+/* The plate the ring is drawn on, and it is nothing until the remote is on the tab: a wash and the
+   app's own television ring - the light cyan ring with the cyan halo behind it that every button,
+   poster and profile card in the app wears - drawn around the icon. */
+.nav::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: calc(var(--rail-icon-top) - var(--rail-plate-pad));
+  width: var(--rail-plate);
+  height: var(--rail-plate);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.12);
+  outline: 3px solid #8ee6ff;
+  box-shadow: 0 0 0 6px rgba(62, 200, 255, 0.28);
+  transform: translateX(-50%);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+}
+.nav:focus::before,
+.nav:focus-visible::before,
+.nav.dpad-focus::before {
+  opacity: 1;
+}
+/* Where the remote is, and it has to be unmistakable from across the room: the icon at full white
+   inside the ring, with the name at full white under it - the one label the rail draws loud. It is
+   deliberately not the active page's mark, which is cyan and carries no ring. */
 .nav:focus,
 .nav:focus-visible,
 .nav.dpad-focus {
   z-index: 2;
-  color: #9be8ff;
-  background: transparent;
-  box-shadow: none;
+  color: #fff;
 }
 .nav:focus svg,
 .nav:focus-visible svg,
 .nav.dpad-focus svg {
   transform: scale(1.16);
-  filter: drop-shadow(0 0 6px rgba(62, 200, 255, 0.95)) drop-shadow(0 0 14px rgba(62, 200, 255, 0.55));
+  /* A dark shadow rather than the cyan glow this used to draw: the glow was what made a focused tab
+     look like the active one, and the icon has to read at white over whatever artwork is behind it. */
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.55));
 }
 .nav-label {
   position: absolute;
-  top: calc(100% + 2px);
+  /* Under the tab's own box, at the same spacing the rule keeps from the icon, so the three parts of
+     a tab read as one object. */
+  top: calc(100% + var(--rail-name-gap));
   left: 50%;
   z-index: 6;
   padding: 0;
@@ -917,7 +982,18 @@ html:not(.remote) .nav:hover {
 html:not(.remote) .nav:hover .nav-label {
   opacity: 1;
   visibility: visible;
+  color: #fff;
   transition: opacity 0.12s ease;
+}
+/* One name at a time. A tab the remote is on names itself - loud, which is what makes it
+   unmistakable from across the room - and the active page's quiet name steps aside while that is
+   another tab: two names on tabs a few units apart land on top of each other, and the page the
+   viewer is on is still marked either way, by the cyan icon and the rule under it. The rail is told
+   which of the two it is drawing by `Shell`, which sets this class while another tab holds the
+   remote or the pointer. */
+.side-nav.rail-named .nav.active .nav-label {
+  opacity: 0;
+  visibility: hidden;
 }
 .account {
   display: flex;

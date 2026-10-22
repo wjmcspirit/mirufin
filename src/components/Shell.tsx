@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode, type SyntheticEvent } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode, type SyntheticEvent } from "react"
 import { NavLink, Outlet, useLocation } from "react-router-dom"
 import { railLibraries } from "../lib/homeLayout"
 import { usePrefs, useSession } from "../session"
@@ -18,10 +18,41 @@ function NavItem({ to, end = false, label, children }: { to: string; end?: boole
   )
 }
 
+/** The tab a focus or a mouse event arrived on. */
+function navTab(event: SyntheticEvent) {
+  return event.target instanceof HTMLElement ? event.target.closest<HTMLElement>(".nav") : null
+}
+
+/**
+ * Keep a tab's name inside the screen.
+ *
+ * A name is drawn centred on its own icon and, being as long as a library's own name, can run past
+ * the edge of the screen: the tab nearest an edge has its name pushed back inside it. The rail's
+ * right-hand group is what a name must not run under, but only for the tabs to its left: a tab that
+ * lives in that group is centred on its own icon already, and clamping it against the group's own
+ * left edge would push its name off the icon.
+ */
+function clampLabel(link: HTMLElement) {
+  const label = link.querySelector<HTMLElement>(".nav-label")
+  if (!label) return
+  label.style.removeProperty("margin-left")
+  const rect = label.getBoundingClientRect()
+  if (rect.width < 2) return
+  const pad = 20
+  const end = link.closest(".side")?.querySelector(".side-end")
+  const room = end instanceof HTMLElement && !end.contains(link) ? end.getBoundingClientRect().left - 12 : window.innerWidth - pad
+  const limit = Math.min(window.innerWidth - pad, room)
+  let shift = 0
+  if (rect.left < pad) shift = pad - rect.left
+  else if (rect.right > limit) shift = limit - rect.right
+  if (shift) label.style.marginLeft = `${shift}px`
+}
+
 export function Shell() {
   const { libraries, userName } = useSession()
   const { prefs } = usePrefs()
   const location = useLocation()
+  const rail = useRef<HTMLElement>(null)
   const [clock, setClock] = useState(() => new Date())
   const icon = 22
   // Home and Favorites are always here, and the libraries a server reports fill the middle - in
@@ -36,33 +67,42 @@ export function Shell() {
     return () => window.clearInterval(timer)
   }, [prefs.showClock])
 
+  // The active page's own name is on the screen whether or not the remote is on that tab, so it is
+  // placed when the page changes rather than when the tab is focused: it is the one name the rail
+  // always draws, and it must not run off the edge when the viewer moves to another page.
+  useEffect(() => {
+    const active = rail.current?.querySelector<HTMLElement>(".nav.active")
+    if (active) clampLabel(active)
+  }, [location.pathname])
+
+  /**
+   * The rail draws one name at a time. A tab the remote is on names itself - loud, which is what
+   * makes it unmistakable from across the room - and the active page's quiet name steps aside while
+   * that is another tab, because two names on tabs a few units apart land on top of each other. The
+   * page the viewer is on is still marked either way: its cyan icon and the rule under it are drawn
+   * whether or not the remote is on the tab.
+   */
+  function nameRail(link: HTMLElement | null) {
+    rail.current?.classList.toggle("rail-named", Boolean(link && !link.classList.contains("active")))
+  }
+
   function resetLabel(event: SyntheticEvent) {
-    const link = event.target instanceof HTMLElement ? event.target.closest(".nav") : null
-    const label = link?.querySelector<HTMLElement>(".nav-label")
-    if (label) label.style.removeProperty("margin-left")
+    const link = navTab(event)
+    if (link) link.querySelector<HTMLElement>(".nav-label")?.style.removeProperty("margin-left")
+    nameRail(null)
+    // The active page keeps its name: the room the tab that has just been left was using is given
+    // back to the tab that is still drawing one.
+    const active = rail.current?.querySelector<HTMLElement>(".nav.active")
+    if (active) clampLabel(active)
   }
 
   function placeLabel(event: SyntheticEvent) {
-    const link = event.target instanceof HTMLElement ? event.target.closest(".nav") : null
-    if (!(link instanceof HTMLElement)) return
-    const label = link.querySelector<HTMLElement>(".nav-label")
-    if (!label) return
+    const link = navTab(event)
+    if (!link) return
+    nameRail(link)
     requestAnimationFrame(() => {
       if (!link.isConnected || !link.matches(":hover, :focus-visible, .dpad-focus")) return
-      label.style.removeProperty("margin-left")
-      const rect = label.getBoundingClientRect()
-      if (rect.width < 2) return
-      const pad = 20
-      // The rail's right-hand group is what a label must not run under, but only for the tabs
-      // to its left: a tab that lives in that group is centred on its own icon already, and
-      // clamping it against the group's own left edge would push its label off the icon.
-      const end = link.closest(".side")?.querySelector(".side-end")
-      const room = end instanceof HTMLElement && !end.contains(link) ? end.getBoundingClientRect().left - 12 : window.innerWidth - pad
-      const limit = Math.min(window.innerWidth - pad, room)
-      let shift = 0
-      if (rect.left < pad) shift = pad - rect.left
-      else if (rect.right > limit) shift = limit - rect.right
-      if (shift) label.style.marginLeft = `${shift}px`
+      clampLabel(link)
     })
   }
 
@@ -75,6 +115,7 @@ export function Shell() {
         </div>
         <nav
           className="side-nav"
+          ref={rail}
           aria-label="Main"
           onFocus={placeLabel}
           onMouseOver={placeLabel}
