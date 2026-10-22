@@ -2061,26 +2061,20 @@ select {
 }
 /* The season's own poster, at the head of the page that browses it: the season the viewer is in, in
    the artwork the show's own page draws it with. It is a child of the banner, so it stands on the
-   banner's bottom edge beside the copy - the relationship a title's own page draws between its
-   poster and its copy - and it begins on the page's content boundary, which is where the season
-   selector, the stills and the actions under them all begin. Its size is stated here rather than
-   taken from the copy, so a long show name can never grow the artwork, and the 2:3 box is the app's
-   own poster shape: a season reads as the same object here as it does on the show's page. A season
+   page's content boundary beside the copy - the relationship a title's own page draws between its
+   poster and its copy - and the season selector, the stills and the actions under them all begin on
+   that same edge.
+   It is this page's *featured* artwork, so its box is the app's shared `.poster-lg` - the same 320 of
+   the app's own units, the same 2:3 shape and the same 14 of radius a film's own page draws its
+   poster in - and this rule states only what is the banner's own: that it is a flex item that keeps
+   its width, where it stands, and the shadow it is lifted with over the full-bleed stage. The size
+   is stated by that one shared rule rather than here, so the film's head and a season's head can
+   never drift apart, and the copy beside it is never what decides how big the artwork is. A season
    the server has no picture for borrows the show's own, so the head of the page is never blank. */
 .season-poster {
   flex: 0 0 auto;
-  width: 240px;
-  aspect-ratio: 2 / 3;
   margin: 0 0 16px var(--strip-pad);
-  border-radius: 14px;
-  overflow: hidden;
-  background: #12151c;
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
-}
-.season-poster img, .season-poster .ph {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 /* The banner draws no layer of its own. The shared `.hero.stage-copy` rule already turns a block's
    own gradient off, because the app's heroes stand on the full-bleed stage and the stage's own scrim
@@ -2171,6 +2165,17 @@ select {
 .browse-hero .hero-episode-info .kicker {
   min-height: 0;
   -webkit-line-clamp: 1;
+}
+/* The episode's own description is read in full where it stands. It is not the show's synopsis: the
+   banner is sized by the season's featured artwork and the season selector and the row of stills
+   follow the banner, so the text is free to wrap over as many lines as it needs and the page gives it
+   the room rather than cutting it to the two lines the banner holds for a show and hiding the rest
+   behind a control. The two-line floor the shared rule sets is kept, so a one-line description does
+   not let the show's fact links under it ride up, and `line-clamp` is stated as none here as well as
+   by the class the page does not add, so no engine can clamp this text. */
+.browse-hero .hero-episode-info .overview {
+  display: block;
+  -webkit-line-clamp: none;
 }
 /* The page's own rhythm: the season selector sits close under the banner, the row follows the
    selector, and the band under the row settles the episode the banner describes. */

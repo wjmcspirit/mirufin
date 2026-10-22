@@ -11,6 +11,13 @@ export function artWidth(layout: "poster" | "wide", size: HomeCardSize = "medium
   return ART_WIDTH[layout][size]
 }
 
+/**
+ * The width the featured artwork on a title's own page is asked for at: a film's poster box is 320
+ * of the app's own units, and this is the same figure for the poster at the head of a season's page.
+ * One name states it for both, so the two pages cannot drift apart.
+ */
+export const FEATURED_ART_WIDTH = 900
+
 function withKey(params: URLSearchParams) {
   const token = getToken()
   if (token) params.set("api_key", token)

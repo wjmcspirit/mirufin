@@ -277,8 +277,10 @@ interface BrowseShape {
   fold: number
   banner: { top: number; bottom: number }
   bannerHeight: number
-  /** The season's own poster, in the banner beside the copy. */
-  poster: { top: number; bottom: number; width: number; height: number }
+  /** The season's own poster, in the banner beside the copy: the page's featured artwork. */
+  poster: { top: number; bottom: number; width: number; height: number; radius: string }
+  /** The film page's own featured poster, measured in the same engine: the box a season's has to be. */
+  filmPoster: { width: number; height: number; radius: string }
   /** The show's own logo, and the title's box it sits in at the top of the banner's copy. */
   logo: { top: number; bottom: number; height: number }
   title: { top: number; bottom: number; height: number }
@@ -287,8 +289,14 @@ interface BrowseShape {
   /** The copy the banner carries: it has to fit inside the banner rather than be clipped by it. */
   copy: { top: number; bottom: number; height: number }
   /**
-   * The control that reveals the rest of a description longer than the banner shows, when the page
-   * draws one: `null` when the whole description fits and there is nothing to reveal.
+   * The episode's own description, drawn in full in the banner: its box, how many lines it takes,
+   * and whether any of it is hidden. Nothing is cut off it and no control is drawn under it.
+   */
+  description: { top: number; bottom: number; height: number; lines: number; clamped: string; clipped: boolean } | null
+  /**
+   * The control that reveals the rest of the show's own synopsis when it does not fit, when a page
+   * draws one: `null` on a page that draws none, which is every page whose description is an
+   * episode's.
    */
   reveal: { top: number; bottom: number; width: number; height: number } | null
   season: { top: number; bottom: number }
@@ -834,6 +842,8 @@ for (const { panel, report } of await measureSeason(browser, seasonProbe, PANELS
       `still ${shape.art.top}..${shape.art.bottom} of the ${shape.fold}-unit canvas\n` +
       `     copy ${shape.copy.top}..${shape.copy.bottom} (${shape.copy.height} tall)  ` +
       `logo ${shape.logo.top}..${shape.logo.bottom}  episode ${shape.episode.top}..${shape.episode.bottom}\n` +
+      `     description ${shape.description ? `${shape.description.lines} lines ${shape.description.top}..${shape.description.bottom}` : "none"}  ` +
+      `reveal ${shape.reveal ? "drawn" : "none"}  film poster ${shape.filmPoster.width}x${shape.filmPoster.height} r${shape.filmPoster.radius}\n` +
       `     edges poster/copy/episode/season/row/actions ${shape.edges.poster}/${shape.edges.copy}/${shape.edges.episode}/${shape.edges.season}/${shape.edges.row}/${shape.edges.actions}\n` +
       `     selector ${shape.seasonBox.height} tall, tab ${shape.seasonBox.tab.width}x${shape.seasonBox.tab.height}, ` +
       `padding ${shape.seasonBox.padding}, gap ${shape.seasonBox.gap}, font ${shape.seasonBox.font}, wrap ${shape.seasonBox.wrap}`,
@@ -845,9 +855,21 @@ for (const { panel, report } of await measureSeason(browser, seasonProbe, PANELS
       shape.edges.copy > shape.edges.poster,
     `poster ${shape.poster.top}..${shape.poster.bottom} in banner ${shape.banner.top}..${shape.banner.bottom}, copy at ${shape.edges.copy}`,
   )
+  /* The featured artwork is the film page's own box, measured in this same engine: the season's head
+     and a film's head are drawn at one size, in the app's one 2:3 poster shape, so a season poster is
+     never a size of its own and the viewer's Poster size setting never decides it. */
+  check(
+    `${panel.name}: and it is the featured poster a film's own page draws, to the unit and to the radius`,
+    shape.poster.width === shape.filmPoster.width &&
+      shape.poster.height === shape.filmPoster.height &&
+      shape.poster.radius === shape.filmPoster.radius &&
+      Math.abs(shape.poster.width - 320) < 1 &&
+      Math.abs(shape.poster.height - 480) < 1,
+    `season ${shape.poster.width}x${shape.poster.height} r${shape.poster.radius}, film ${shape.filmPoster.width}x${shape.filmPoster.height} r${shape.filmPoster.radius}`,
+  )
   check(
     `${panel.name}: and it is drawn as the app's own 2:3 poster box`,
-    Math.abs(shape.poster.width / shape.poster.height - 2 / 3) < 0.01 && Math.abs(shape.poster.width - 240) < 1,
+    Math.abs(shape.poster.width / shape.poster.height - 2 / 3) < 0.01,
     `${shape.poster.width}x${shape.poster.height}`,
   )
   /* The show's logo is the banner's first line on this page, and the season's poster is the banner's
@@ -857,6 +879,20 @@ for (const { panel, report } of await measureSeason(browser, seasonProbe, PANELS
     `${panel.name}: the show's logo begins level with the season poster's own top edge`,
     Math.abs(shape.logo.top - shape.poster.top) <= 0.5 && Math.abs(shape.title.top - shape.poster.top) <= 0.5,
     `logo at ${shape.logo.top}, title's box at ${shape.title.top}, poster at ${shape.poster.top}`,
+  )
+  /* The head of the page is on the screen the page opens on: the whole of the featured artwork and
+     the whole of the season selector. The banner is as tall as that artwork - a film's head is as
+     tall as its poster for the same reason - so the row of stills below it is entered on screen and
+     its caption is a short scroll away, which is measured here rather than assumed. */
+  check(
+    `${panel.name}: the featured artwork and the season selector are on screen when the page opens`,
+    shape.poster.top >= 0 && shape.poster.bottom <= shape.fold && shape.season.bottom <= shape.fold,
+    `poster ${shape.poster.top}..${shape.poster.bottom} and selector to ${shape.season.bottom} of the ${shape.fold}-unit canvas`,
+  )
+  check(
+    `${panel.name}: and the carousel has been entered on screen, under the selector`,
+    shape.art.top < shape.fold && shape.art.top >= shape.season.bottom - 1,
+    `stills start at ${shape.art.top}, selector ends at ${shape.season.bottom}, of ${shape.fold}`,
   )
   check(
     `${panel.name}: the season selector sits under the banner, and the row of stills under the selector`,
@@ -870,6 +906,20 @@ for (const { panel, report } of await measureSeason(browser, seasonProbe, PANELS
     `${panel.name}: the episode the remote is on is described in the banner, under the show's logo`,
     shape.episode.top >= shape.logo.bottom - 0.5 && shape.episode.bottom <= shape.banner.bottom + 0.5,
     `episode ${shape.episode.top}..${shape.episode.bottom}, logo ends at ${shape.logo.bottom}, banner ${shape.banner.top}..${shape.banner.bottom}`,
+  )
+  /* The episode's description is drawn in full where it stands: nothing is clamped off it, nothing is
+     hidden, and no control is drawn under it - the banner holds the whole of the text and the season
+     selector and the row of stills follow the banner it grows into. */
+  const written = shape.description
+  check(
+    `${panel.name}: the episode's own description is drawn in full, with nothing cut off it and no control under it`,
+    written !== null &&
+      written.clipped === false &&
+      written.lines >= 2 &&
+      written.top >= shape.episode.top - 0.5 &&
+      written.bottom <= shape.banner.bottom + 0.5 &&
+      shape.reveal === null,
+    `description ${written ? `${written.lines} lines ${written.top}..${written.bottom}, clamped ${written.clamped}, clipped ${written.clipped}` : "none"}, reveal ${shape.reveal ? "drawn" : "none"}, banner ${shape.banner.top}..${shape.banner.bottom}`,
   )
   check(
     `${panel.name}: and the row and the band under it are the only things below the banner`,
@@ -926,15 +976,15 @@ for (const { panel, report } of await measureSeason(browser, seasonProbe, PANELS
     shape.bannerHeight >= shape.poster.height - 1 && shape.bannerHeight >= shape.fold * 0.4 - 1,
     `banner ${shape.bannerHeight} of ${shape.fold}, poster ${shape.poster.height}`,
   )
+  /* The head of the page is what the screen the page opens on has to hold, and the carousel under it
+     is what the viewer scrolls to: the featured artwork is a film's own featured artwork, so the row
+     of stills and its caption are a scroll away rather than crushed to fit - which is what the two
+     checks above measure. What this states is that the banner itself is still on the screen the page
+     opens on, rather than scrolled past. */
   check(
-    `${panel.name}: the banner and the whole row - stills and the caption under them - are on screen without a scroll`,
-    shape.banner.top < shape.fold && shape.art.bottom <= shape.fold && shape.row.bottom <= shape.fold,
-    `banner at ${shape.banner.top}, stills end at ${shape.art.bottom}, row ends at ${shape.row.bottom}, of ${shape.fold}`,
-  )
-  check(
-    `${panel.name}: the row is entered below the selector rather than off the bottom edge`,
-    shape.art.top > shape.season.bottom && shape.art.top < shape.fold,
-    `stills start at ${shape.art.top}, selector ends at ${shape.season.bottom}, of ${shape.fold}`,
+    `${panel.name}: the banner begins on screen, so the show the page is about is the first thing read`,
+    shape.banner.top < shape.fold,
+    `banner at ${shape.banner.top} of ${shape.fold}`,
   )
   check(
     `${panel.name}: the season's poster, the season selector, the first still and the band under the row share one left edge`,
@@ -961,44 +1011,47 @@ for (const { panel, report } of await measureSeason(browser, seasonProbe, PANELS
   console.log("")
 }
 
-/* The same page with the worst copy a banner can carry: an episode whose name runs long, a
-   description longer than the two lines the banner holds for it, and a show with more genres and
-   studios than one row of fact links can hold. The banner's height is a floor rather than a fixed
-   height for exactly this case, so what is asserted here is that the copy is not clipped and that the
-   row of stills is still on the screen under it - the page may give the copy the room it needs, but it
-   may not lose the row. */
+/* The same page with the worst copy a banner can carry: an episode whose name runs long, a description
+   several times the length of a usual one, and a show with more genres and studios than one row of
+   fact links can hold. The episode's description is read in full, so the banner grows with the text
+   rather than cutting it off: what is asserted here is that the whole of it is drawn, that the copy is
+   inside the banner, and that the season selector and the row of stills follow the banner rather than
+   being overlapped by it. */
 console.log("\nThe same page with a long episode name, a long description and a full row of fact links\n")
 
 for (const { panel, report } of await measureSeason(browser, seasonProbe, PANELS, "?full=1")) {
   const shape = report.pristine
-  const reveal = shape.reveal
+  const written = shape.description
   console.log(
     `     ${panel.name}: copy ${shape.copy.height} tall inside a banner of ${shape.bannerHeight}, ` +
-      `reveal ${reveal ? `${reveal.width}x${reveal.height} at ${reveal.top}..${reveal.bottom}` : "none"}, ` +
-      `row ${shape.row.top}..${shape.row.bottom} of ${shape.fold}`,
+      `description ${written ? `${written.lines} lines ${written.top}..${written.bottom}` : "none"} ` +
+      `(clipped ${written ? written.clipped : "?"}), ` +
+      `selector ${shape.season.top}..${shape.season.bottom}, row ${shape.row.top}..${shape.row.bottom} of ${shape.fold}`,
   )
   check(
     `${panel.name} (long copy): the banner is not clipped by the copy it carries`,
     shape.copy.top >= shape.banner.top - 0.5 && shape.copy.bottom <= shape.banner.bottom + 0.5,
     `copy ${shape.copy.top}..${shape.copy.bottom} inside banner ${shape.banner.top}..${shape.banner.bottom}`,
   )
-  /* The control that reveals the rest of a description that does not fit: it is drawn in the banner
-     the viewer is reading, inside it and above the fold, and it is large enough to be a target the
-     remote can land on rather than a line of punctuation at the end of the text. */
+  /* The whole of the description is drawn, however long it is: the banner gives it as many lines as
+     it needs, nothing is cut off it, and the page draws no control to reveal the rest - there is no
+     rest. */
   check(
-    `${panel.name} (long copy): the control that reveals the rest of the episode's description is drawn on the banner, inside it and above the fold`,
-    reveal !== null &&
-      reveal.height >= 30 &&
-      reveal.width >= 40 &&
-      reveal.top >= shape.banner.top - 0.5 &&
-      reveal.bottom <= shape.banner.bottom + 0.5 &&
-      reveal.bottom <= shape.fold,
-    `reveal ${JSON.stringify(reveal)} inside banner ${shape.banner.top}..${shape.banner.bottom} of ${shape.fold}`,
+    `${panel.name} (long copy): the whole of the episode's description is drawn in the banner, with nothing cut off it and no control to press`,
+    written !== null &&
+      written.clipped === false &&
+      written.lines > 2 &&
+      written.top >= shape.episode.top - 0.5 &&
+      written.bottom <= shape.banner.bottom + 0.5 &&
+      shape.reveal === null,
+    `description ${written ? `${written.lines} lines ${written.top}..${written.bottom}, clamped ${written.clamped}, clipped ${written.clipped}` : "none"}, reveal ${shape.reveal ? "drawn" : "none"}, banner ${shape.banner.top}..${shape.banner.bottom}`,
   )
+  /* And the page below the banner follows it: the season selector, the row of stills and the band
+     under the row stand in order under the text rather than under it. */
   check(
-    `${panel.name} (long copy): and the row of stills is still on the screen under it`,
-    shape.art.bottom <= shape.fold && shape.row.top >= shape.banner.bottom,
-    `stills end at ${shape.art.bottom} of ${shape.fold}, row starts at ${shape.row.top}`,
+    `${panel.name} (long copy): and the season selector and the row of stills follow the banner rather than overlapping it`,
+    shape.season.top >= shape.banner.bottom - 1 && shape.row.top >= shape.season.bottom - 1 && shape.actions.top >= shape.row.bottom - 1,
+    `banner ends ${shape.banner.bottom}, selector ${shape.season.top}..${shape.season.bottom}, row ${shape.row.top}..${shape.row.bottom}, band at ${shape.actions.top}`,
   )
   console.log("")
 }

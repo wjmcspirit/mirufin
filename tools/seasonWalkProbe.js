@@ -188,8 +188,8 @@
   var spotFacts = element("p", "kicker", "hero-episode-facts")
   spotFacts.textContent = "S2:E1  ·  October 16, 2026  ·  43m  ·  TV-14  ·  7.9"
   spot.appendChild(spotFacts)
-  var overview = element("p", "overview clamp", "hero-episode-overview")
-  overview.textContent = "A synopsis of the sort a server actually sends: two lines of it at this width."
+  var overview = element("p", "overview", "hero-episode-overview")
+  overview.textContent = "A description of the sort a server actually sends, read in full where it stands."
   spot.appendChild(overview)
   copy.appendChild(spot)
   // The show's own fact links, where every other page keeps them: in the head, which here is the
@@ -202,11 +202,12 @@
   pills[1].textContent = "Crime"
   for (var p = 0; p < pills.length; p += 1) facts.appendChild(pills[p])
   copy.appendChild(facts)
-  // The season's own poster, at the head of the page that browses it: a child of the banner, so it
-  // stands on the banner's bottom edge beside the copy, on the page's content boundary.
+  // The season's own poster, at the head of the page that browses it: a child of the banner, in the
+  // app's shared `.poster-lg` box - the size a film's own page draws its featured poster at - and on
+  // the page's content boundary, with the copy beside it.
   var poster = null
   if (shape !== "series") {
-    poster = element("span", "season-poster", "season-poster")
+    poster = element("span", "season-poster poster-lg", "season-poster")
     poster.setAttribute("data-season", "S2")
     var posterImg = document.createElement("img")
     posterImg.setAttribute("alt", "")

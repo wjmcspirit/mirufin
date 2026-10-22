@@ -38,12 +38,13 @@
         <div class="detail browse-page">
           <div class="detail-body">
             <section class="episode-block">
-              <!-- The banner: the season's own poster beside the show's copy and the episode the remote
-                   is on - the show's logo first, then the season it is browsing and the show's own
-                   facts, then the episode the row below is on with its own facts and synopsis. -->
+              <!-- The banner: the season's featured poster beside the show's copy and the episode the
+                   remote is on - the show's logo first, then the season it is browsing and the show's
+                   own facts, then the episode the row below is on with its own facts and its
+                   description, which is read in full where it stands. -->
               <header class="hero stage-copy browse-hero">
-                <span class="season-poster" data-season="S2">
-                  <img alt="" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='360'%3E%3C/svg%3E" />
+                <span class="season-poster poster-lg" data-season="S2">
+                  <img alt="" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='480'%3E%3C/svg%3E" />
                 </span>
                 <div class="hero-copy">
                   <div class="hero-title"><h1>Sheriff Country</h1></div>
@@ -56,11 +57,12 @@
                   <div class="hero-episode-info">
                     <p class="hero-episode">Family Trust<span class="episode-flag">Up next</span></p>
                     <p class="kicker">S2:E1  ·  October 16, 2026  ·  43m  ·  TV-14  ·  7.9 ★</p>
-                    <!-- The episode's own synopsis, and under it the ellipsis the page draws when the
-                         text is longer than the two lines the banner holds for it. This one fits, so
-                         there is no control here - `?full=1` is the variant that carries one. -->
+                    <!-- The episode's own description, read in full where it stands: it wraps over as
+                         many lines as it needs, the banner grows with it, and the season selector and
+                         the row of stills follow the banner. There is no control under it and no
+                         overlay: nothing here is hidden from the viewer. -->
                     <div class="hero-synopsis">
-                      <p class="overview clamp">A synopsis of the sort a server actually sends: two lines of it at this width and no more, held to the space reserved for it whatever it says.</p>
+                      <p class="overview">A description of the sort a server actually sends, read in full where it stands: the episode the remote is on says what it is about, and the season selector and the row of stills under it follow the banner rather than being overlapped by it.</p>
                     </div>
                   </div>
                   <p class="meta-links genre-pills"><a href="#">Drama</a><a href="#">Crime</a></p>
@@ -78,6 +80,20 @@
               </div>
             </section>
           </div>
+        </div>
+      </div>
+    </div>
+    <!--
+      The film page's own head, drawn off-screen from the same stylesheet: a film's featured poster in
+      the app's shared `.poster-lg` box, inside the app's own `.detail-layout`. It is here so the probe
+      can measure the two featured posters in one engine - the same box the film's page draws and the
+      season poster in the banner above - and prove that a season's featured artwork is the size a
+      film's is rather than a size of its own. Nothing in it is painted on screen.
+    -->
+    <div class="detail-hero stage-copy" id="film-head" style="position: fixed; left: -10000px; top: 0; width: 1500px">
+      <div class="detail-layout">
+        <div class="poster-lg">
+          <img alt="" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='480'%3E%3C/svg%3E" />
         </div>
       </div>
     </div>

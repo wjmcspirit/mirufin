@@ -20,7 +20,7 @@ import { hasMediaInfo } from "../lib/mediaInfo"
 import { placeFocus } from "../lib/remote"
 import { episodePlayHref, lastSeason, rememberSeason, resolveSeason, seasonLineText, seasonProgress, seasonProgressBySeason, seasonStart, type SeasonProgress } from "../lib/seasons"
 import { knownFor, type KnownWork } from "../lib/knownFor"
-import { artWidth, backdropSrc, episodeStillSrc, episodeWideStill, imageUrl, loadImage, primarySrc, seasonArtSrc, thumbSrc, warmImage, wideBackdrop } from "../lib/images"
+import { artWidth, backdropSrc, episodeStillSrc, episodeWideStill, FEATURED_ART_WIDTH, imageUrl, loadImage, primarySrc, seasonArtSrc, thumbSrc, warmImage, wideBackdrop } from "../lib/images"
 import type { Item } from "../lib/types"
 import { usePrefs, useSession } from "../session"
 
@@ -148,7 +148,7 @@ export function ItemPage() {
   // figure the server reports until that arrives. A collection holding nothing says nothing.
   const collectionLine =
     item.Type === "BoxSet" ? collectionSizeLabel(bodyItems ? bodyItems.length : item.ChildCount ?? item.RecursiveItemCount) : ""
-  const poster = primarySrc(item, 900)
+  const poster = primarySrc(item, FEATURED_ART_WIDTH)
   // An episode's panel is a 16:9 still, never a portrait poster stretched into it.
   const panelArt = episode ? episodeWideStill(item, 1600) : item.Type === "Person" ? poster : poster || backdropSrc(item)
   const progress = progressPct(item)
@@ -824,20 +824,22 @@ function SeasonCard({
  * drawn as the app's one poster shape, so a season reads as the same object here as it does on the
  * show's page, and it stands on the page's content boundary like everything under it: the poster is
  * the first thing the viewer reads, and the show's own details follow it.
+ *
+ * It is the *featured* artwork of this page, so it is the size a film's own page draws its poster at
+ * rather than the size a card in a strip is drawn at: the box is the app's shared `.poster-lg` - the
+ * same 320 of the app's own units, the same 2:3 shape, the same 14 of radius - and the artwork is
+ * asked for at the same width that page asks for its own (`FEATURED_ART_WIDTH`), so the two heads
+ * are the same object at the same size. The viewer's Poster size setting is not consulted here: that
+ * setting is the size a card in a strip or a grid is drawn at, and the season's own card on the
+ * show's page still follows it.
  */
 function SeasonPoster({ season, series }: { season: Item; series: Item | null }) {
-  const { prefs } = usePrefs()
   const title = season.Name || (season.IndexNumber != null ? `Season ${season.IndexNumber}` : "Season")
-  // The artwork is asked for at the size the viewer chose, as the seasons row under it is: this box
-  // is a fixed 240 of the app's own poster shape - the head of the page is the same height at every
-  // panel size - but the picture in it is the one the app's Poster size setting names, so one
-  // setting decides the season's artwork wherever a season is drawn.
-  const width = artWidth("poster", prefs.posterSize)
   return (
-    <span className="season-poster" data-season={season.Id}>
+    <span className="season-poster poster-lg" data-season={season.Id}>
       <MediaImage
-        src={seasonArtSrc(season, series, width)}
-        fallback={series ? primarySrc(series, width) : null}
+        src={seasonArtSrc(season, series, FEATURED_ART_WIDTH)}
+        fallback={series ? primarySrc(series, FEATURED_ART_WIDTH) : null}
         alt=""
         label={title}
       />
@@ -1247,16 +1249,18 @@ function BrowseHero({
   // the remote is on.
   const described = episode || (season ? null : subject)
   const context = season ? seasonLineText(season, progress) : kindLabel(item)
-  // The description is held to the lines this banner reserves for it, so the composition is the same
-  // for every episode and every show. What does not fit is not lost: the preview keeps its place and
-  // the ellipsis under it opens the whole of the text in the app's own overlay. Whether there is
-  // anything to reveal is measured from the preview that is drawn (`useClamped`), so a description
-  // that fits says nothing and draws no control at all.
+  // What the description is: the whole of it, either way. An episode's is read in full where it
+  // stands - the banner is sized by the season's featured artwork and the row below follows the
+  // banner, so there is nothing to reveal and no control to press - while the show's own synopsis on
+  // the show's page keeps the truncated preview it has always drawn, with the ellipsis under it
+  // opening the whole of the text in the app's own overlay. Whether the show's preview is cut short
+  // is measured from the preview that is drawn (`useClamped`), so a synopsis that fits says nothing
+  // and draws no control at all.
   const synopsis = useRef<HTMLParagraphElement>(null)
   const reveal = useRef<HTMLButtonElement>(null)
   const [reading, setReading] = useState(false)
   const description = described?.Overview || ""
-  const clipped = useClamped(synopsis, description)
+  const clipped = useClamped(synopsis, description, !episode)
   // Closing puts the remote back on the control the viewer opened the overlay with, which is what
   // the app does wherever a menu closes over a page (`SettingsControls`): the press that closed it
   // is answered by the page they were reading, not by the page body.
@@ -1269,23 +1273,23 @@ function BrowseHero({
   // is level with the season poster's own top edge, and the line that says which season the row
   // below belongs to follows it.
   const seasonLine = <p className="eyebrow">{context}</p>
-  // The description and the control that reveals the rest of it are one block, so the banner's
-  // rhythm spaces them together and the fact links below stand the same distance from the
-  // description whether or not the ellipsis is drawn. The description itself is not a control:
-  // nothing opens the overlay but the ellipsis.
+  // The description, and - for the show's synopsis alone - the control that reveals the rest of it,
+  // in one block so the banner's rhythm spaces them together and the fact links below stand the same
+  // distance from the description whether or not the ellipsis is drawn. The description itself is
+  // not a control: nothing opens the overlay but the ellipsis.
   const synopsisBlock =
     described && description ? (
       <div className="hero-synopsis">
-        <p ref={synopsis} className="overview clamp">
+        <p ref={synopsis} className={episode ? "overview" : "overview clamp"}>
           {description}
         </p>
-        {clipped && (
+        {!episode && clipped && (
           <button
             ref={reveal}
             className="more-link hero-more"
             type="button"
             onClick={() => setReading(true)}
-            aria-label={`Read the full description of ${described.Name || (episode ? "this episode" : "this show")}`}
+            aria-label={`Read the full description of ${described.Name || "this show"}`}
           >
             …
           </button>

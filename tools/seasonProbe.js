@@ -67,10 +67,10 @@
 
   /*
    * The worst case the banner has to hold: an episode whose name runs long, a show with more genres
-   * and studios than one row of fact links can carry, and an episode's description longer than the
-   * two lines the banner holds for it. Measured separately from the page as it usually opens, because
-   * what it checks is different - the copy may not be clipped by the banner, and the row may not be
-   * pushed off the bottom edge by a copy that is taller than the share of the screen the banner takes.
+   * and studios than one row of fact links can carry, and an episode's description several times the
+   * length of a usual one. Measured separately from the page as it usually opens, because what it
+   * checks is different - the whole description has to be drawn, and the season selector and the row
+   * of stills have to follow the banner it grows into rather than being overlapped by it.
    */
   var full = new URLSearchParams(window.location.search).get("full") === "1"
   if (full) {
@@ -83,19 +83,8 @@
       extra.textContent = "Genre " + (g + 1)
       links.appendChild(extra)
     }
-    /*
-     * And a description longer than the two lines the banner holds for it, so the copy carries the
-     * ellipsis the page draws under the preview. The control is what the page adds to the banner, so
-     * the tallest copy a banner is ever drawn with is this one, and this is where the room for it is
-     * measured rather than assumed.
-     */
     document.querySelector(".hero-episode-info .hero-synopsis .overview").textContent =
-      "A synopsis of the sort a server actually sends, and then keeps sending: this one runs to several times the two lines the banner holds for it, so the page draws its own reveal control under the preview and the copy the banner carries is taller than the share of the screen the banner takes on its own."
-    var reveal = document.createElement("button")
-    reveal.className = "more-link hero-more"
-    reveal.setAttribute("type", "button")
-    reveal.textContent = "…"
-    document.querySelector(".hero-episode-info .hero-synopsis").appendChild(reveal)
+      "A description of the sort a server actually sends, and then keeps sending: this one runs to several times the length of a usual episode's, so it is the tallest copy a season's banner is ever drawn with. It is read in full where it stands - the banner is sized by the season's featured artwork and grows with the text - and the season selector and the row of stills under it follow the banner, so nothing is hidden behind a control and nothing is overlapped. The episode the remote is on says what it is about, and moving the remote along the row changes this text rather than taking it away."
   }
 
   var remote = window.mirufinRemote
@@ -158,6 +147,7 @@
     var seasonBlock = document.querySelector(".season-tabs")
     var block = document.querySelector(".episode-block")
     var posterBox = document.querySelector(".season-poster").getBoundingClientRect()
+    var filmBox = document.querySelector("#film-head .poster-lg").getBoundingClientRect()
     var titleBox = document.querySelector(".hero-title").getBoundingClientRect()
     var logoBox = document.querySelector(".hero-title > *").getBoundingClientRect()
     var episodeBox = document.querySelector(".hero-episode-info").getBoundingClientRect()
@@ -168,8 +158,14 @@
       fold: Math.round(height / zoom),
       banner: { top: design(banner.getBoundingClientRect().top), bottom: design(banner.getBoundingClientRect().bottom) },
       bannerHeight: design(banner.getBoundingClientRect().height),
-      /** The season's own poster, at the head of the banner beside the copy. */
-      poster: { top: design(posterBox.top), bottom: design(posterBox.bottom), width: design(posterBox.width), height: design(posterBox.height) },
+      /** The season's own poster, at the head of the banner beside the copy, and the film page's own
+         featured poster measured in the same engine - the box a season's artwork has to be. */
+      poster: { top: design(posterBox.top), bottom: design(posterBox.bottom), width: design(posterBox.width), height: design(posterBox.height), radius: getComputedStyle(document.querySelector(".season-poster")).borderTopLeftRadius },
+      filmPoster: {
+        width: design(filmBox.width),
+        height: design(filmBox.height),
+        radius: getComputedStyle(document.querySelector("#film-head .poster-lg")).borderTopLeftRadius,
+      },
       /** The show's own logo, in the title's box at the top of the copy, and the box it sits in. */
       logo: { top: design(logoBox.top), bottom: design(logoBox.bottom), height: design(logoBox.height) },
       title: { top: design(titleBox.top), bottom: design(titleBox.bottom), height: design(titleBox.height) },
@@ -178,13 +174,29 @@
       /** The copy the banner carries: it has to fit inside the banner rather than be clipped by it. */
       copy: { top: design(copyBox.top), bottom: design(copyBox.bottom), height: design(copyBox.height) },
       /**
-       * The control that reveals the rest of a description longer than the banner shows, when the
-       * page draws one. It is the one control the banner adds for a description that does not fit,
-       * so where it sits and how tall it is is what says whether the copy still fits inside the
-       * banner and whether the row under it is still on the screen.
+       * The episode's own description, as the banner draws it: the whole of it, with the height it
+       * takes and how many lines that is. `clipped` says whether any of it is hidden - the page cuts
+       * nothing off an episode's description and draws no control under it, so this has to be false
+       * however long the text is, and the lines say how much room the banner gave it.
        */
+      description: (function () {
+        var node = document.querySelector(".hero-episode-info .hero-synopsis .overview")
+        if (!node) return null
+        var box = node.getBoundingClientRect()
+        var style = getComputedStyle(node)
+        var line = parseFloat(style.lineHeight) || 0
+        return {
+          top: design(box.top),
+          bottom: design(box.bottom),
+          height: design(box.height),
+          lines: line > 0 ? Math.round((box.height / line) * 10) / 10 : 0,
+          clamped: style.webkitLineClamp,
+          clipped: node.scrollHeight > node.clientHeight + 1,
+        }
+      })(),
+      /** The control the show's own synopsis draws when it does not fit, when a page draws one. */
       reveal: (function () {
-        var node = document.querySelector(".hero-episode-info .hero-synopsis .hero-more")
+        var node = document.querySelector(".hero-copy .hero-more")
         if (!node) return null
         var box = node.getBoundingClientRect()
         return { top: design(box.top), bottom: design(box.bottom), width: design(box.width), height: design(box.height) }

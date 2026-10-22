@@ -377,7 +377,7 @@ check(
   page.includes('<div className="hero-copy">') &&
     page.includes('<div className="hero-title">') &&
     page.includes("<MetaLine item={subject} />") &&
-    page.includes('className="overview clamp"'),
+    page.includes('"overview clamp"'),
   "Item.tsx",
 )
 check(
@@ -385,7 +385,7 @@ check(
   page.includes("const subject = series || season || item") &&
     page.includes("const described = episode || (season ? null : subject)") &&
     page.includes("<MetaLine item={subject} />") &&
-    sourceOf("BrowseHero", "EpisodeWatched").includes('<p ref={synopsis} className="overview clamp">') &&
+    sourceOf("BrowseHero", "EpisodeWatched").includes('className={episode ? "overview" : "overview clamp"}') &&
     sourceOf("BrowseHero", "EpisodeWatched").includes("{description}"),
   "Item.tsx",
 )
@@ -398,24 +398,30 @@ check(
 )
 /* The banner on a page that browses a season names the show and says which season is on screen: the
    season's own poster stands in the banner beside the copy, and the copy carries the season line, the
-   show's logo, the show's facts, the show's synopsis and the show's own fact links. The poster is a
-   fixed 2:3 box on the page's content boundary, so the head of the page is the same height at every
-   panel size and the selector and the whole row of stills are on screen under it at 1080p. */
+   show's logo, the show's facts, the episode the remote is on and the show's own fact links. The
+   poster is this page's *featured* artwork, so it is the box a film's own page draws its poster in -
+   the app's shared `.poster-lg`, 320 of the app's own units in the app's 2:3 shape - and it begins on
+   the page's content boundary. The banner is as tall as that artwork, exactly as a film's head is as
+   tall as its poster, and the season selector and the row of stills follow it. */
 /** The season's own poster in the banner: the function drawn just before the show's own page. */
 const seasonPoster = sourceOf("SeasonPoster", "SeriesBody")
 check(
   "the banner carries the season's own poster, from the season's record or from the show's",
   page.includes("poster={<SeasonPoster season={browsed} series={series} />}") &&
     page.includes("function SeasonPoster(") &&
-    page.includes('className="season-poster"') &&
-    seasonPoster.includes("seasonArtSrc(season, series, width)") &&
-    seasonPoster.includes("fallback={series ? primarySrc(series, width) : null}"),
+    page.includes('className="season-poster poster-lg"') &&
+    seasonPoster.includes("seasonArtSrc(season, series, FEATURED_ART_WIDTH)") &&
+    seasonPoster.includes("fallback={series ? primarySrc(series, FEATURED_ART_WIDTH) : null}"),
   "Item.tsx",
 )
 check(
-  "and the poster is drawn as the app's own 2:3 poster box, beginning on the page's content boundary",
-  /\.season-poster\s*\{[^}]*width:\s*240px[^}]*aspect-ratio:\s*2 \/ 3[^}]*margin:\s*0 0 16px var\(--strip-pad\)/.test(css),
-  "styles.css",
+  "and the featured artwork is the box the film's own page draws its poster in, beginning on the page's content boundary",
+  page.includes('className="season-poster poster-lg"') &&
+    /\.poster-lg\s*\{\s*width:\s*320px/.test(css) &&
+    /\.card-art,\s*\.poster-lg,\s*\.episode-art,\s*\.photo-frame,\s*\.still-lg\s*\{[^}]*border-radius:\s*14px[^}]*aspect-ratio:\s*2 \/ 3/.test(css) &&
+    /\.season-poster\s*\{[^}]*margin:\s*0 0 16px var\(--strip-pad\)/.test(css) &&
+    !/\.season-poster\s*\{[^}]*width:/.test(css),
+  "Item.tsx and styles.css",
 )
 /* The episode the remote is on is settled in the band under the block that describes it: the row is
    what chooses the episode, the block under it is what the viewer is reading, and the band under
@@ -481,11 +487,13 @@ check(
   "Item.tsx",
 )
 check(
-  "and its description is the banner's own block, held to the lines the banner reserves and openable in the app's overlay",
+  "and its description is drawn in full where it stands, with no clamp and no control of its own",
   page.includes("const description = described?.Overview || \"\"") &&
-    page.includes("useClamped(synopsis, description)") &&
-    page.includes("<DescriptionPopup title={described.Name || \"Description\"}"),
-  "Item.tsx",
+    page.includes('className={episode ? "overview" : "overview clamp"}') &&
+    page.includes("useClamped(synopsis, description, !episode)") &&
+    page.includes("{!episode && clipped && (") &&
+    flat.includes(".browse-hero .hero-episode-info .overview { display: block; -webkit-line-clamp: none; }"),
+  "Item.tsx and styles.css",
 )
 check(
   "the episode's information sits in the copy beside the poster rather than on a block under the row",
@@ -806,9 +814,13 @@ check(
   "Item.tsx",
 )
 check(
-  "and the season's poster in the banner is that size's artwork too, in its own fixed box",
-  seasonPoster.includes('const width = artWidth("poster", prefs.posterSize)') && seasonPoster.includes("seasonArtSrc(season, series, width)"),
-  "Item.tsx",
+  "and the season's poster in the banner is the film's page's featured artwork, not a card's size",
+  seasonPoster.includes("seasonArtSrc(season, series, FEATURED_ART_WIDTH)") &&
+    !seasonPoster.includes('artWidth("poster", prefs.posterSize)') &&
+    !seasonPoster.includes("usePrefs()") &&
+    readFileSync("src/lib/images.ts", "utf8").includes("export const FEATURED_ART_WIDTH = 900") &&
+    page.includes("const poster = primarySrc(item, FEATURED_ART_WIDTH)"),
+  "Item.tsx and images.ts",
 )
 check(
   "the season posters take the app's own three widths rather than a size of their own",
@@ -849,15 +861,15 @@ check(
   "styles.css",
 )
 check(
-  "the banner keeps the truncated preview it has always drawn",
-  banner.includes('<p ref={synopsis} className="overview clamp">'),
+  "the show's own synopsis on the show's page keeps the truncated preview it has always drawn",
+  banner.includes('className={episode ? "overview" : "overview clamp"}'),
   "Item.tsx",
 )
 check(
   "and offers the rest of a description that does not fit, measured from the preview that is drawn",
   banner.includes('const description = described?.Overview || ""') &&
-    banner.includes("const clipped = useClamped(synopsis, description)") &&
-    /\{clipped && \(/.test(banner) &&
+    banner.includes("const clipped = useClamped(synopsis, description, !episode)") &&
+    /\{!episode && clipped && \(/.test(banner) &&
     /function useClamped\([\s\S]{0,900}?scrollHeight > element\.clientHeight/.test(page),
   "Item.tsx",
 )
@@ -887,7 +899,7 @@ check(
 )
 check(
   "and the ellipsis says what it opens, for a viewer who cannot see the glyph",
-  /aria-label=\{`Read the full description of \$\{described\.Name \|\| \(episode \? "this episode" : "this show"\)\}`\}/.test(banner),
+  /aria-label=\{`Read the full description of \$\{described\.Name \|\| "this show"\}`\}/.test(banner),
   "Item.tsx",
 )
 check(
