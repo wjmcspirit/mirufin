@@ -1,8 +1,5 @@
 import { useEffect, useRef, useState } from "react"
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom"
-import { ActionButton } from "./components/ActionButton"
-import { ActionGroup } from "./components/ActionGroup"
-import { CloseIcon, ServerIcon } from "./components/Icons"
 import { RemoteNav } from "./components/RemoteNav"
 import { Shell } from "./components/Shell"
 import { UpdatePrompt } from "./components/UpdatePrompt"
@@ -143,16 +140,14 @@ function ServerDiscovery() {
       <p className="hint">{suggestion.address}</p>
       <p className="hint">The saved server did not answer. Switch to this one?</p>
       {error && <p className="error">{error}</p>}
-      <ActionGroup>
-        <ActionButton
-          primary
-          label={switching ? "Switching…" : "Switch server"}
-          icon={<ServerIcon size={16} />}
-          onClick={() => void switchServer()}
-          disabled={switching}
-        />
-        <ActionButton label="Not now" icon={<CloseIcon />} onClick={() => setSuggestion(null)} disabled={switching} />
-      </ActionGroup>
+      <div className="actions">
+        <button className="btn btn-primary" type="button" onClick={() => void switchServer()} disabled={switching}>
+          {switching ? "Switching…" : "Switch server"}
+        </button>
+        <button className="btn" type="button" onClick={() => setSuggestion(null)} disabled={switching}>
+          Not now
+        </button>
+      </div>
     </section>
   )
 }

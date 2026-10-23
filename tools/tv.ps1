@@ -33,7 +33,7 @@ param(
 
     # The television. This default is the verified target; a new wireless-debugging port means
     # passing a new value, and the identity check below still has to pass.
-    [string]$Serial = '192.168.0.177:35393',
+    [string]$Serial = '192.168.0.177:33109',
 
     # What the device must identify itself as. A serial that answers with anything else is not
     # the television this script was pointed at, so the script stops.

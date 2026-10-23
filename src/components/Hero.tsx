@@ -1,11 +1,10 @@
 import { useLayoutEffect, useRef, useState } from "react"
+import { Link } from "react-router-dom"
 import * as api from "../lib/api"
 import { episodeCode, progressPct } from "../lib/format"
 import { itemCardHref } from "../lib/seasons"
 import { useSession } from "../session"
 import type { Item } from "../lib/types"
-import { ActionButton } from "./ActionButton"
-import { ActionGroup } from "./ActionGroup"
 import { HeartIcon, InfoIcon, PlayIcon } from "./Icons"
 import { MetaLine } from "./Meta"
 import { TitleLogo } from "./Title"
@@ -166,27 +165,36 @@ function HeroCopy({ face, onTrailer }: { face: HeroFace; onTrailer: (open: boole
           are this one component - says the same thing about the title it features. */}
       <MetaLine item={item} />
       <p className="overview clamp">{item.Overview || ""}</p>
-      <ActionGroup data-nav-flow={flow}>
-        <ActionButton primary label={label} icon={<PlayIcon />} to={href} />
+      <div className="actions" data-nav-flow={flow}>
+        <Link className="btn btn-primary" to={href}>
+          <PlayIcon />
+          {label}
+        </Link>
         {/* Details is offered unless the primary action already opens it: a series' own button
             opens the series, so a second one saying the same thing is one stop too many for the
             remote. */}
         {href !== detailsTo && (
-          <ActionButton label="Details" icon={<InfoIcon size={16} />} to={detailsTo} />
+          <Link className="btn" to={detailsTo}>
+            <InfoIcon size={16} />
+            Details
+          </Link>
         )}
         {/* The same favorite the title's own page offers, so the action the viewer reaches
             for after watching a trailer is here as well. It is a real action, not a stop
             for the remote to cross on the way to something else. */}
         {item.Type !== "Person" && (
-          <ActionButton
-            label={favorited ? "Favorited" : "Favorite"}
-            icon={<HeartIcon size={16} />}
-            pressed={favorited}
+          <button
+            className={`btn icon-btn ${favorited ? "on" : ""}`}
+            type="button"
+            aria-pressed={favorited}
             onClick={() => void toggleFavorite()}
-          />
+          >
+            <HeartIcon size={16} />
+            {favorited ? "Favorited" : "Favorite"}
+          </button>
         )}
         {(item.Type === "Movie" || item.Type === "Series" || episode) && <TrailerButton key={item.Id} item={item} onOpen={onTrailer} />}
-      </ActionGroup>
+      </div>
     </div>
   )
 }
