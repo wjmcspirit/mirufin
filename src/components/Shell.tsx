@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type SyntheticEvent } from "react"
 import { NavLink, Outlet, useLocation } from "react-router-dom"
-import { railLibraries } from "../lib/homeLayout"
+import { isShowLibrary, orderMainRailLibraries, railLibraries } from "../lib/homeLayout"
 import { usePrefs, useSession } from "../session"
 import { ErrorBoundary } from "./ErrorBoundary"
 import { HeartIcon, HomeIcon, LibraryIcon, SearchIcon, SettingsIcon } from "./Icons"
@@ -55,11 +55,30 @@ export function Shell() {
   const rail = useRef<HTMLElement>(null)
   const [clock, setClock] = useState(() => new Date())
   const icon = 22
-  // Home and Favorites are always here, and the libraries a server reports fill the middle - in
-  // the viewer's own order once they have arranged the rail, and in Mirufin's fixed order until
-  // then. Search and Settings are not browsing tabs like these: they sit in the rail's
-  // right-hand group with the clock, which is where the viewer looks for them.
-  const ordered = useMemo(() => railLibraries(libraries, prefs.navItems), [libraries, prefs.navItems])
+  // Home, then TV shows, Movies and Collections, then Favorites. Other libraries follow
+  // Collections in the order the viewer arranged them. Search and Settings are not browsing
+  // tabs like these: they sit in the rail's right-hand group with the clock.
+  const ordered = useMemo(
+    () => orderMainRailLibraries(railLibraries(libraries, prefs.navItems)),
+    [libraries, prefs.navItems],
+  )
+
+  function libraryNavIcon(library: (typeof libraries)[number]) {
+    const kind = (library.CollectionType || "").toLowerCase()
+    const name = (library.Name || "").toLowerCase()
+    if (isShowLibrary(library)) {
+      return (
+        <LibraryIcon type="tvshows" name={library.Name} size={icon} />
+      )
+    }
+    if (kind === "movies" || name === "movies") {
+      return <LibraryIcon type="movies" name={library.Name} size={icon} />
+    }
+    if (kind === "boxsets" || name === "collections" || name === "collection") {
+      return <LibraryIcon type="boxsets" name={library.Name} size={icon} />
+    }
+    return <LibraryIcon type={library.CollectionType} name={library.Name} size={icon} />
+  }
 
   useEffect(() => {
     if (!prefs.showClock) return
@@ -125,14 +144,14 @@ export function Shell() {
           <NavItem to="/" end label="Home">
             <HomeIcon size={icon} />
           </NavItem>
+          {ordered.map((library) => (
+            <NavItem key={library.Id} to={`/library/${library.Id}`} label={library.Name || "Library"}>
+              {libraryNavIcon(library)}
+            </NavItem>
+          ))}
           <NavItem to="/favorites" label="Favorites">
             <HeartIcon size={icon} />
           </NavItem>
-          {ordered.map((library) => (
-            <NavItem key={library.Id} to={`/library/${library.Id}`} label={library.Name || "Library"}>
-              <LibraryIcon type={library.CollectionType} name={library.Name} size={icon} />
-            </NavItem>
-          ))}
         </nav>
         <div className="side-end">
           {/* Search and Settings close the rail on the right, next to the clock: Search · Settings · Time. */}

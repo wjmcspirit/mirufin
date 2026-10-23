@@ -49,7 +49,7 @@ export function latestTitle(view: Item) {
 }
 
 /**
- * Where a library belongs in the navigation rail: Movies, then TV shows, then
+ * Where a library belongs in the navigation rail: TV shows, then Movies, then
  * Collections, then everything else. A server may identify a view by its
  * CollectionType, by its name, or by both, so both are folded the same way the
  * icon picker and the row titles above already fold them.
@@ -57,10 +57,29 @@ export function latestTitle(view: Item) {
 export function libraryRank(view: Item) {
   const type = (view.CollectionType || "").toLowerCase()
   const name = (view.Name || "").toLowerCase()
-  if (type === "movies" || name === "movies") return 0
-  if (isShowLibrary(view)) return 1
+  if (isShowLibrary(view)) return 0
+  if (type === "movies" || name === "movies") return 1
   if (type === "boxsets" || name === "collections" || name === "collection") return 2
   return 3
+}
+
+/**
+ * The main rail's fixed buckets between Home and Favorites. A viewer may reorder
+ * libraries in settings, but TV shows, Movies and Collections always keep these
+ * relative places; everything else follows in the order the viewer gave it.
+ */
+export function mainRailBucket(view: Item) {
+  return libraryRank(view)
+}
+
+export function orderMainRailLibraries(libraries: Item[]) {
+  return libraries
+    .map((library, index) => ({ library, index }))
+    .sort((a, b) => {
+      const bucket = mainRailBucket(a.library) - mainRailBucket(b.library)
+      return bucket || a.index - b.index
+    })
+    .map((entry) => entry.library)
 }
 
 /**

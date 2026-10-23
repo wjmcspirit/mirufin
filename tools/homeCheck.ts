@@ -13,7 +13,7 @@
  */
 import { readFileSync } from "node:fs"
 import { comingUpEpisodes, continueWatching, resumeCardDetail, resumeCardTitle } from "../src/lib/format"
-import { heroDeck, mergeHomeRows, sectionTitle } from "../src/lib/homeLayout"
+import { heroDeck, mergeHomeRows, orderMainRailLibraries, sectionTitle, sortLibraries } from "../src/lib/homeLayout"
 import type { Item } from "../src/lib/types"
 
 let failures = 0
@@ -870,7 +870,67 @@ check(
   "Home.tsx, Library.tsx and Cards.tsx",
 )
 
+// --------------------------------------------------------------------------- main rail order and icons
 
+const movies = { Id: "m1", Name: "Movies", CollectionType: "movies" } satisfies Item
+const shows = { Id: "s1", Name: "TV Shows", CollectionType: "tvshows" } satisfies Item
+const collections = { Id: "c1", Name: "Collections", CollectionType: "boxsets" } satisfies Item
+const music = { Id: "u1", Name: "Music", CollectionType: "music" } satisfies Item
+
+same(
+  "a fresh library list is ordered TV shows, then Movies, then Collections",
+  sortLibraries([movies, collections, shows, music]).map((entry) => entry.Id),
+  ["s1", "m1", "c1", "u1"],
+)
+same(
+  "the main rail keeps that order between Home and Favorites even when the viewer saved another",
+  orderMainRailLibraries([movies, music, shows, collections]).map((entry) => entry.Id),
+  ["s1", "m1", "c1", "u1"],
+)
+
+function mainNavBlock(source: string) {
+  const match = source.match(/className="side-nav"[\s\S]*?<\/nav>/)
+  return match ? match[0] : ""
+}
+
+function mainNavLabels(source: string) {
+  const block = mainNavBlock(source)
+  const labels: string[] = []
+  const re = /label="([^"]+)"/g
+  let hit: RegExpExecArray | null
+  while ((hit = re.exec(block))) labels.push(hit[1])
+  return labels
+}
+
+const mainNav = mainNavBlock(shell)
+const labels = mainNavLabels(shell)
+check("Home is the first main-rail destination", labels[0] === "Home", labels.join(" → "))
+check("Favorites is the last main-rail destination", labels[labels.length - 1] === "Favorites", labels.join(" → "))
+check(
+  "Favorites follows the libraries rather than sitting beside Home",
+  mainNav.indexOf('label="Home"') < mainNav.indexOf("ordered.map") &&
+    mainNav.indexOf("ordered.map") < mainNav.indexOf('label="Favorites"'),
+  "Shell.tsx",
+)
+check(
+  "each main destination uses its own icon component",
+  mainNav.includes("<HomeIcon") &&
+    mainNav.includes("libraryNavIcon(library)") &&
+    mainNav.includes('type="tvshows"') &&
+    mainNav.includes('type="movies"') &&
+    mainNav.includes('type="boxsets"') &&
+    mainNav.includes("<HeartIcon"),
+  "Shell.tsx",
+)
+check(
+  "Search and Settings stay in the rail's right-hand group",
+  !mainNav.includes('label="Search"') &&
+    !mainNav.includes('label="Settings"') &&
+    shell.includes('className="side-end"') &&
+    shell.includes('label="Search"') &&
+    shell.includes('label="Settings"'),
+  "Shell.tsx",
+)
 
 console.log(failures === 0 ? "\nAll home checks passed." : `\n${failures} check(s) failed.`)
 if (failures > 0) throw new Error(`${failures} check(s) failed`)
