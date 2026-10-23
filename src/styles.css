@@ -910,6 +910,7 @@ h1, h2, h3 {
      (`tools/foldCheck.ts` measures it at every panel size). */
   --rail-item: 50px;
   --rail-icon: 22px;
+  --nav-collapsed: 46px;
   --rail-icon-top: calc((var(--rail-item) - var(--rail-icon)) / 2);
   --rail-name-gap: 3px;
   /* What two tabs are spaced with. The icons sat 2 units apart, which read as one object rather than
@@ -951,67 +952,66 @@ h1, h2, h3 {
 }
 .nav {
   position: relative;
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
   flex: 0 0 auto;
-  width: 46px;
+  width: var(--nav-slot, var(--nav-collapsed));
+  min-width: var(--nav-collapsed);
+  max-width: min(100%, 240px);
   height: var(--rail-item);
   padding: 0;
   border: 0;
-  border-radius: 0;
+  border-radius: 999px;
   background: transparent;
   color: rgba(255, 255, 255, 0.74);
-  transition: color 0.12s ease;
+  overflow: hidden;
+  transition: color 0.12s ease, width 0.18s ease;
 }
 .nav svg {
   width: var(--rail-icon);
   height: var(--rail-icon);
   transition: transform 0.12s ease, filter 0.12s ease;
 }
-/* The page the viewer is on: a state, not a control, and not the same thing as where the remote is.
-   A translucent circle sits behind the icon - a flat dark cyan with a hairline of the app's cyan at
-   its edge, and no gradient, so it reads as a mark rather than as a button - and the icon itself is
-   drawn in the app's cyan, with the page's own name under it. All of it is drawn whether or not the
-   remote is on the tab, so leaving the page never takes its mark away. */
+.nav__icon {
+  position: relative;
+  flex: 0 0 var(--nav-collapsed);
+  width: var(--nav-collapsed);
+  height: var(--rail-item);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+/* The page the viewer is on: cyan icon and a translucent circle behind it, whether or not the remote
+   is on the tab. The label stays hidden until the tab is focused. */
 .nav.active { color: var(--accent); }
-.nav::before {
+.nav__icon::before {
   content: "";
   position: absolute;
   left: 50%;
-  top: calc(var(--rail-icon-top) - var(--rail-circle-inset));
+  top: 50%;
   width: var(--rail-circle);
   height: var(--rail-circle);
   border-radius: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   background: rgba(28, 84, 116, 0.62);
   border: 1px solid rgba(62, 200, 255, 0.42);
   opacity: 0;
   transition: opacity 0.12s ease;
   pointer-events: none;
 }
-.nav.active::before { opacity: 1; }
-.nav.active .nav-label {
-  visibility: visible;
-  opacity: 0.82;
-  color: #c9ecff;
-}
-html:not(.remote) .nav:hover {
-  color: #fff;
-}
-/* Where the remote is: the app's own television ring - the light cyan ring every button, poster and
-   profile card in the app is ringed in, with the app's cyan behind it as a halo - drawn around the
-   icon's own circle. It is a ring and not a circle, and it is empty, so a tab the remote is on can
-   never be read as the page the viewer is on however the two of them move. Its halo is what stops
-   short of the name under the tab, so the ring and the name never touch. */
-.nav::after {
+.nav.active .nav__icon::before { opacity: 1; }
+html:not(.remote) .nav:hover { color: #fff; }
+/* Where the remote is: the app's television ring around the icon, distinct from the active circle. */
+.nav__icon::after {
   content: "";
   position: absolute;
   left: 50%;
-  top: calc(var(--rail-icon-top) - var(--rail-circle-inset));
+  top: 50%;
   width: var(--rail-circle);
   height: var(--rail-circle);
   border-radius: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   outline: 3px solid #8ee6ff;
   outline-offset: 2px;
   box-shadow: 0 0 0 6px rgba(62, 200, 255, 0.28);
@@ -1019,15 +1019,11 @@ html:not(.remote) .nav:hover {
   transition: opacity 0.12s ease;
   pointer-events: none;
 }
-.nav:focus::after,
-.nav:focus-visible::after,
-.nav.dpad-focus::after {
+.nav:focus .nav__icon::after,
+.nav:focus-visible .nav__icon::after,
+.nav.dpad-focus .nav__icon::after {
   opacity: 1;
 }
-/* The remote's own place, and it has to be unmistakable from across the room: the icon comes up to
-   full white and a size larger under the ring, with the name at full white under it - the one label
-   the rail draws loud. The page the viewer is on keeps the app's cyan even then: that colour is the
-   page's own, and the remote does not get to change it. */
 .nav:focus,
 .nav:focus-visible,
 .nav.dpad-focus {
@@ -1041,57 +1037,52 @@ html:not(.remote) .nav:hover {
 .nav:focus svg,
 .nav:focus-visible svg,
 .nav.dpad-focus svg {
-  transform: scale(1.16);
-  /* A dark shadow rather than the cyan glow this used to draw: the glow is what the ring is for, and
-     the icon has to read over whatever artwork is behind the rail. */
+  transform: scale(1.08);
   filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.55));
 }
 .nav-label {
-  position: absolute;
-  /* Under the tab's own box, and clear of both marks: the circle the page the viewer is on is drawn
-     with ends 4 units above it, and the ring's halo ends just above that, so neither ever crosses
-     the name. */
-  top: calc(100% + var(--rail-name-gap));
-  left: 50%;
-  z-index: 6;
+  flex: 0 0 auto;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  margin-left: 0;
   padding: 0;
   border: 0;
-  border-radius: 0;
   background: none;
-  box-shadow: none;
   color: #fff;
   font-size: 15px;
   font-weight: 600;
   letter-spacing: 0.01em;
   line-height: 1;
   white-space: nowrap;
+  text-overflow: ellipsis;
   pointer-events: none;
-  opacity: 0;
-  visibility: hidden;
-  transform: translateX(-50%);
-  text-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.95),
-    0 0 14px rgba(0, 0, 0, 0.85);
-  transition: opacity 0.12s ease, visibility 0s linear 0.12s;
+  transition: max-width 0.18s ease, opacity 0.14s ease, margin-left 0.18s ease;
 }
 .nav:focus .nav-label,
 .nav:focus-visible .nav-label,
 .nav.dpad-focus .nav-label,
 html:not(.remote) .nav:hover .nav-label {
+  max-width: min(180px, calc(var(--nav-slot, 180px) - var(--nav-collapsed) - 8px));
   opacity: 1;
-  visibility: visible;
+  margin-left: 6px;
   color: #fff;
-  transition: opacity 0.12s ease;
 }
-/* One name at a time. A tab the remote is on names itself - loud, which is what makes it
-   unmistakable from across the room - and the active page's quiet name steps aside while that is
-   another tab: two names on tabs a few units apart land on top of each other, and the page the
-   viewer is on is still marked either way, by its cyan icon and the circle behind it. The rail is
-   told which of the two it is drawing by `Shell`, which sets this class while another tab holds the
-   remote or the pointer. */
-.side-nav.rail-named .nav.active .nav-label {
-  opacity: 0;
-  visibility: hidden;
+.nav.active:focus .nav-label,
+.nav.active:focus-visible .nav-label,
+.nav.active.dpad-focus .nav-label {
+  color: #fff;
+}
+.nav--measure .nav-label {
+  max-width: 180px;
+  opacity: 1;
+  margin-left: 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav,
+  .nav-label {
+    transition-duration: 0.01ms !important;
+  }
 }
 .account {
   display: flex;

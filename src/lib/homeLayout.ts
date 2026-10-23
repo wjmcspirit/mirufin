@@ -57,10 +57,34 @@ export function latestTitle(view: Item) {
 export function libraryRank(view: Item) {
   const type = (view.CollectionType || "").toLowerCase()
   const name = (view.Name || "").toLowerCase()
-  if (type === "movies" || name === "movies") return 0
-  if (isShowLibrary(view)) return 1
+  if (isShowLibrary(view)) return 0
+  if (type === "movies" || name === "movies") return 1
   if (type === "boxsets" || name === "collections" || name === "collection") return 2
   return 3
+}
+
+/** The name a library tab carries in the top navigation. */
+export function navLabel(library: Item) {
+  const rank = libraryRank(library)
+  if (rank === 0) return "TV Shows"
+  if (rank === 1) return "Movies"
+  if (rank === 2) return "Collections"
+  return library.Name || "Library"
+}
+
+/**
+ * The three library destinations the main rail draws, in TV Shows · Movies · Collections order.
+ * Everything else the server reports stays out of the main group so the rail matches the app's
+ * fixed navigation order.
+ */
+export function primaryRailLibraries(libraries: Item[], saved: NavItemSetting[]) {
+  const visible = railLibraries(libraries, saved)
+  const slots: Item[] = []
+  for (const rank of [0, 1, 2]) {
+    const match = visible.find((library) => libraryRank(library) === rank)
+    if (match) slots.push(match)
+  }
+  return slots
 }
 
 /**

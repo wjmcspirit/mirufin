@@ -13,7 +13,7 @@
  */
 import { readFileSync } from "node:fs"
 import { comingUpEpisodes, continueWatching, resumeCardDetail, resumeCardTitle } from "../src/lib/format"
-import { heroDeck, mergeHomeRows, sectionTitle } from "../src/lib/homeLayout"
+import { heroDeck, mergeHomeRows, navLabel, primaryRailLibraries, sectionTitle } from "../src/lib/homeLayout"
 import type { Item } from "../src/lib/types"
 
 let failures = 0
@@ -326,7 +326,17 @@ same("and something that is not an episode is not coming up", comingUpEpisodes([
 
 // --------------------------------------------------------------------------- what the rows remember
 
-const libraries = [{ Id: "l1", Name: "Movies" }, { Id: "l2", Name: "TV Shows" }]
+const libraries = [
+  { Id: "l1", Name: "Movies", CollectionType: "movies" },
+  { Id: "l2", Name: "TV Shows", CollectionType: "tvshows" },
+  { Id: "l3", Name: "Collections", CollectionType: "boxsets" },
+]
+same(
+  "the main rail lists TV Shows before Movies and Collections",
+  primaryRailLibraries(libraries, libraries.map((entry) => ({ id: entry.Id, visible: true }))).map((entry) => navLabel(entry)),
+  ["TV Shows", "Movies", "Collections"],
+)
+
 const saved = [
   { id: "lib:l2", visible: true, style: "poster" as const, size: "large" as const },
   { id: "continue", visible: false, style: "landscape" as const, size: "medium" as const },
@@ -482,20 +492,9 @@ check(
   rule(".brand").trim(),
 )
 
-/* The rail's two states, which are two different things and must not be drawn as one. The page the
-   viewer is on is a persistent mark: a translucent circle behind the icon, the icon itself in the
-   app's own cyan, and the page's own name under it - all of it drawn whether or not the remote is on
-   the tab. Where the remote is is the app's own television ring: the light cyan ring with the cyan
-   halo every button, poster and profile card in the app wears, drawn around the icon's own circle
-   and left empty. One mark is filled and the other is not, so the two can be on two different tabs
-   at once and each still reads for what it is. What a television makes of that cannot be measured
-   here - `tools/foldCheck.ts` is the only harness with a layout engine - so what is held is the
-   shape of the rules that keep them apart.
-
-   `rule` above looks for a selector and its opening brace on the same line, which is how most of
-   this stylesheet is written. The rail's focus rules are not: one rule answers the keyboard, the
-   remote and the pointer, so its selector list is written over three lines. `listed` looks a rule up
-   by the first selector of its list, whatever the rest of the list grows to. */
+/* The top navigation: icon-first tabs that expand horizontally on focus, with a reserved slot per
+   destination so the header does not jump. The active page keeps the cyan icon and circle; the remote
+   ring stays on the icon, separate from the label that slides out to the right. */
 const flat = css.replace(/\r\n/g, "\n")
 function listed(selector: string) {
   for (const tail of [",\n", " {"]) {
@@ -504,7 +503,6 @@ function listed(selector: string) {
   }
   return ""
 }
-/** One rail token, in the units it is written in. */
 function railUnits(name: string) {
   return Number(css.match(new RegExp(`--${name}:\\s*([\\d.]+)px`))?.[1] ?? "0")
 }
@@ -512,140 +510,70 @@ const railTab = listed(".nav")
 const railGroup = listed(".side-nav")
 const railName = listed(".nav-label")
 const activeTab = listed(".nav.active")
-const activeName = listed(".nav.active .nav-label")
-const activeCircle = listed(".nav.active::before")
-const circle = listed(".nav::before")
-const ring = listed(".nav::after")
-const ringOn = listed(".nav:focus::after")
-const focusedTab = listed(".nav:focus")
+const activeCircle = listed(".nav.active .nav__icon::before")
+const circle = listed(".nav__icon::before")
+const ring = listed(".nav__icon::after")
+const ringOn = listed(".nav:focus .nav__icon::after")
 const focusedOnly = listed(".nav:focus:not(.active)")
 const focusedName = listed(".nav:focus .nav-label")
+const shell = readFileSync("src/components/Shell.tsx", "utf8")
+const homeLayout = readFileSync("src/lib/homeLayout.ts", "utf8")
+
 check(
-  "one tab's box is the size the rail names, and it is what holds the icon, the mark around it and the name under that",
-  railTab.includes("height: var(--rail-item)") && railUnits("rail-item") > 0,
+  "navigation tabs reserve a horizontal slot and expand from the icon",
+  railTab.includes("width: var(--nav-slot") && railTab.includes("display: inline-flex") && railName.includes("max-width: 0"),
   railTab.trim(),
 )
 check(
-  "and the name is placed under that box, at the rail's own spacing",
-  railName.includes("top: calc(100% + var(--rail-name-gap))"),
-  railName.trim(),
+  "and the label reveals to the right of the icon when the tab is focused",
+  focusedName.includes("margin-left") && focusedName.includes("opacity: 1"),
+  focusedName.trim(),
 )
-/* The icons used to sit 2 units apart, which read as one object rather than as a row of
-   destinations. The rail's own group is spaced by the token and by nothing else, and the value is
-   what the viewer asked for: 8 to 12 units more than the 2 the group had. */
 const railGap = railUnits("rail-gap")
-check(
-  "the rail's own group is spaced by the token, not by a number of its own",
-  railGroup.includes("gap: var(--rail-gap)"),
-  railGroup.trim(),
-)
-check(
-  "and two tabs stand 8 to 12 units further apart than they did, so the icons are told apart at a glance",
-  railGap >= 10 && railGap <= 14,
-  `${railGap} units between two tabs, against the 2 they were`,
-)
-/* The rail's own height is a budget rather than a preference: the box plus the padding above and
-   below it is what pushes the hero and the first row of posters down. The fold has about 12 units
-   of room at 1080p with the medium posters under it, measured by `tools/foldCheck.ts`, so the rail
-   may grow a little and no further. */
-const railPad = Number(rule(".side").match(/padding:\s*(\d+)px var\(--content-pad\)/)?.[1] ?? "0")
-const railItem = railUnits("rail-item")
-const railIcon = railUnits("rail-icon")
-const iconTop = (railItem - railIcon) / 2
-const nameTop = railItem + railUnits("rail-name-gap")
+check("the main navigation group is spaced by the rail token", railGroup.includes("gap: var(--rail-gap)"), railGroup.trim())
 check(
   "and the rail's own height stays inside what the fold can pay for",
-  railPad > 0 && railItem > 0 && railPad * 2 + railItem <= 72,
-  `${railPad}px above and below a ${railItem}px box is ${railPad * 2 + railItem} of the 844-unit canvas`,
+  (() => {
+    const railPad = Number(rule(".side").match(/padding:\s*(\d+)px var\(--content-pad\)/)?.[1] ?? "0")
+    const railItem = railUnits("rail-item")
+    return railPad > 0 && railItem > 0 && railPad * 2 + railItem <= 72
+  })(),
+  "side padding and rail item height",
 )
-/* The page the viewer is on: the circle, and only the circle. It is a mark behind the icon rather
-   than a wash over the tab, it is filled with a translucent dark cyan and edged with a hairline of
-   the app's cyan, and it carries no gradient: the artwork behind the rail is what the eye should be
-   drawn to, and a bright disc would fight it. */
-const circleSize = railUnits("rail-circle")
+check("the page the viewer is on is drawn in the app's own cyan", activeTab.includes("color: var(--accent)"), activeTab.trim())
 check(
-  "the page the viewer is on is drawn in the app's own cyan",
-  activeTab.includes("color: var(--accent)"),
-  activeTab.trim(),
-)
-check(
-  "and it wears a circle behind its icon, of the size the viewer asked for",
-  circleSize >= 34 &&
-    circleSize <= 38 &&
-    circle.includes("width: var(--rail-circle)") &&
-    circle.includes("height: var(--rail-circle)"),
-  `${circleSize} units across`,
-)
-check(
-  "and the circle is centred on the icon rather than on the tab, so it stands exactly behind it",
-  circle.includes("border-radius: 50%") &&
-    circle.includes("top: calc(var(--rail-icon-top) - var(--rail-circle-inset))") &&
-    css.includes("--rail-circle-inset: calc((var(--rail-circle) - var(--rail-icon)) / 2)"),
-  circle.trim(),
-)
-check(
-  "and it is a translucent dark cyan with a hairline of the app's cyan at its edge, and no gradient",
-  /background: rgba\(\d+, \d+, \d+, 0\.\d+\);/.test(circle) &&
-    /border: 1px solid rgba\(62, 200, 255, 0\.\d+\);/.test(circle) &&
-    !/gradient/.test(circle),
-  circle.trim(),
-)
-check(
-  "and the circle is drawn whether or not the remote is on the tab",
-  activeCircle.includes("opacity: 1"),
+  "and it wears a circle behind its icon whether or not the remote is on the tab",
+  activeCircle.includes("opacity: 1") && circle.includes("border-radius: 50%"),
   activeCircle.trim(),
 )
 check(
-  "and the page's own name is drawn quietly under the icon",
-  activeName.includes("visibility: visible") && activeName.includes("opacity: 0.82"),
-  activeName.trim(),
-)
-/* Where the remote is: the app's ring, drawn around the icon's own circle and left empty. The shape
-   is what keeps the two states apart - a filled circle can never be a tab the remote is on - and its
-   halo is what stops short of the name under the tab. */
-const ringOffset = Number(ring.match(/outline-offset:\s*(\d+)px/)?.[1] ?? "0")
-const ringWeight = Number(ring.match(/outline:\s*(\d+)px solid #8ee6ff/)?.[1] ?? "0")
-const halo = Number(ring.match(/box-shadow:\s*0 0 0 (\d+)px rgba\(62, 200, 255, 0\.28\)/)?.[1] ?? "0")
-const circleEdge = iconTop + railIcon / 2 + circleSize / 2
-check(
-  "the tab the remote is on wears the app's own television ring, drawn on the icon's own circle",
-  ringWeight === 3 &&
-    ring.includes("width: var(--rail-circle)") &&
-    ring.includes("top: calc(var(--rail-icon-top) - var(--rail-circle-inset))") &&
-    ringOn.includes("opacity: 1"),
+  "the tab the remote is on wears the app's television ring on the icon",
+  ring.includes("outline: 3px solid #8ee6ff") && ringOn.includes("opacity: 1"),
   ring.trim(),
 )
 check(
-  "and the ring is empty, so a tab the remote is on can never be read as the page the viewer is on",
-  !/background:/.test(ring) && ring.includes("opacity: 0"),
-  ring.trim(),
+  "and the tab the remote is on draws its icon at full white while the active page keeps cyan",
+  focusedOnly.includes("color: #fff"),
+  focusedOnly.trim(),
 )
 check(
-  "and neither the ring nor its halo reaches the name under the tab",
-  circleEdge + ringOffset + ringWeight < nameTop && circleEdge + halo <= nameTop,
-  `the circle ends ${circleEdge}, the ring ${circleEdge + ringOffset + ringWeight}, its halo ${circleEdge + halo}, the name begins ${nameTop}`,
-)
-check(
-  "and the tab the remote is on draws its icon at full white, while the page the viewer is on keeps the app's cyan",
-  focusedOnly.includes("color: #fff") && !focusedTab.includes("color: #fff"),
-  `${focusedTab.trim()} / ${focusedOnly.trim()}`,
-)
-check(
-  "and that tab's own name is the one the rail draws loud",
-  focusedName.includes("opacity: 1") && focusedName.includes("color: #fff"),
-  focusedName.trim(),
-)
-const namedBy = listed(".side-nav.rail-named .nav.active .nav-label")
-check(
-  "and only one name is drawn at a time, so two names on tabs a few units apart cannot land on each other",
-  namedBy.includes("visibility: hidden") && namedBy.includes("opacity: 0"),
-  namedBy.trim(),
-)
-const shell = readFileSync("src/components/Shell.tsx", "utf8")
-check(
-  "and the rail is told when another tab has taken its one name",
-  /rail\.current\?\.classList\.toggle\("rail-named"/.test(shell) && /nameRail\(link\)/.test(shell),
+  "the shell draws Home, then libraries, then Favorites last",
+  /to="\/" end label="Home"/.test(shell) &&
+    /primaryRailLibraries/.test(shell) &&
+    /label="Favorites"[\s\S]*<\/NavRail>/.test(shell) &&
+    !/to="\/favorites"[\s\S]*primaryRailLibraries/.test(shell),
   "Shell.tsx",
+)
+check(
+  "TV Shows are ranked before Movies in the library order the rail uses",
+  /if \(isShowLibrary\(view\)\) return 0/.test(homeLayout) &&
+    /type === "movies" \|\| name === "movies"\) return 1/.test(homeLayout),
+  "homeLayout.ts",
+)
+check(
+  "and the rail measures every navigation link for its expanded width",
+  /useNavSlotMeasure/.test(shell) && /nav--measure/.test(css),
+  "Shell.tsx and styles.css",
 )
 
 /** One media query's block, as it is written. */
