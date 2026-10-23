@@ -251,8 +251,8 @@ export function SearchPage() {
           <div className="keypad" aria-label="On-screen keyboard">
             {KEY_ROWS.map((row) => (
               <div key={row} className="key-row">
-                {[...row].map((key, index) => (
-                  <button key={key} className="key" type="button" autoFocus={!initial && row === KEY_ROWS[0] && index === 0} onClick={() => setText((value) => `${value}${key}`)}>
+                {[...row].map((key) => (
+                  <button key={key} className="key" type="button" onClick={() => setText((value) => `${value}${key}`)}>
                     {key}
                   </button>
                 ))}

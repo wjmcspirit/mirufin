@@ -1825,6 +1825,11 @@ html:not(.remote) .nav:hover .nav-label {
   color: inherit;
   transition: transform 0.18s ease;
 }
+/* The focus engine scrolls strips by offset and reads geometry every press: snap correction and a
+   scaling transition on the card the remote just left fight that work on a WebView and read as a
+   lurch or a late ring. Remote control turns both off; mouse browsing keeps them. */
+html.remote .scroller { scroll-snap-type: none; }
+html.remote .card { transition: none; }
 /* One focus state for every card, in the same language as the rest of the app: the artwork
    lifts a little and takes a thin cyan ring. No halo, no second outline, no badge - the ring
    is the only thing that changes, so a row of posters still reads as a row of posters and

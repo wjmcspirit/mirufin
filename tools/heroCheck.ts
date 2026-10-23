@@ -573,7 +573,7 @@ check(
 )
 check(
   "and every collection card opens that collection",
-  /href=\{`\/item\/\$\{entry\.Id\}`\}/.test(library) && /<PosterCard\s+key=\{entry\.Id\}\s+item=\{entry\}\s+layout=\{layout\}/.test(library),
+  /href=\{itemCardHref\(entry\)\}/.test(library) && /<PosterCard\s+key=\{entry\.Id\}\s+item=\{entry\}\s+layout=\{layout\}/.test(library),
   "Library.tsx",
 )
 

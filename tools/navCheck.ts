@@ -881,6 +881,58 @@ function testLibraryGrid() {
   cancel()
 }
 
+/** Search console bands: the on-screen keyboard, voice row and library shortcuts. */
+function testSearchConsole() {
+  clearSeats()
+  resetFocusState()
+  const { main } = shell()
+  const voice = new El("div", "search-voice-row")
+  const mic = new El("button", "search-voice")
+  mic.place(200, 120, 118, 48)
+  const field = new InputEl("input", "")
+  field.place(330, 120, 500, 48)
+  voice.add(mic, field)
+  const row1 = new El("div", "key-row")
+  const keyA = new El("button", "key")
+  keyA.place(200, 200, 100, 44)
+  const keyB = new El("button", "key")
+  keyB.place(310, 200, 100, 44)
+  row1.add(keyA, keyB)
+  const row2 = new El("div", "key-row")
+  const keyD = new El("button", "key")
+  keyD.place(200, 250, 100, 44)
+  row2.add(keyD)
+  const browse = new El("nav", "search-browse")
+  const movies = new El("a", "").attr("href", "/library/M1")
+  movies.place(200, 320, 120, 40)
+  const shows = new El("a", "").attr("href", "/library/T1")
+  shows.place(330, 320, 100, 40)
+  browse.add(movies, shows)
+  main.add(voice, row1, row2, browse)
+  noteRoute("/search")
+
+  placeFocus(keyA)
+  moveFocus("ArrowDown")
+  check("Down moves from one keyboard row to the next", active === keyD, label(active))
+
+  placeFocus(mic)
+  moveFocus("ArrowDown")
+  check("Down from the voice row enters the keyboard", active === keyA, label(active))
+
+  const remote = readFileSync("src/lib/remote.ts", "utf8")
+  const css = readFileSync("src/styles.css", "utf8")
+  check(
+    "the search console's bands are registered with the focus engine",
+    remote.includes(".key-row") && remote.includes(".search-voice-row") && remote.includes(".search-browse"),
+    "src/lib/remote.ts",
+  )
+  check(
+    "remote control turns off strip snap and card transitions that fight the focus engine",
+    /html\.remote \.scroller\s*\{\s*scroll-snap-type:\s*none/.test(css) && /html\.remote \.card\s*\{\s*transition:\s*none/.test(css),
+    "src/styles.css",
+  )
+}
+
 /** Search result -> details -> Back, query and all. */
 function testSearchResult() {
   clearSeats()
@@ -3632,6 +3684,7 @@ testHomeRow()
 testHeroAndFirstRow()
 testActorCarousel()
 testLibraryGrid()
+testSearchConsole()
 testSearchResult()
 testNestedBack()
 testDelayedList()

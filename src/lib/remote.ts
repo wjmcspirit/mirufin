@@ -551,7 +551,7 @@ function stepList(current: FocusItem, items: FocusItem[], key: "ArrowUp" | "Arro
 }
 
 const BAND =
-  ".scroller, .grid, .card-board, .episodes, .library-icons, .letter-row, .filter-row, .actions, .meta-links, .settings-head, .settings-menu, .settings-row, .choice, .seconds, .search-picks, .search-hits"
+  ".scroller, .grid, .card-board, .episodes, .library-icons, .letter-row, .filter-row, .actions, .meta-links, .settings-head, .settings-menu, .settings-row, .choice, .seconds, .search-picks, .search-hits, .search-browse, .search-voice-row, .key-row"
 
 function containerOf(node: HTMLElement) {
   return node.closest<HTMLElement>(BAND)
@@ -565,11 +565,15 @@ function kind(band: HTMLElement): "strip" | "grid" | "list" {
     // Search results and the library strip are wrapping rows of cards, so they navigate
     // as a grid: sideways along a row, and a whole row at a time up and down.
     band.classList.contains("search-picks") ||
-    band.classList.contains("search-hits")
+    band.classList.contains("search-hits") ||
+    band.classList.contains("search-browse")
   ) {
     return "grid"
   }
   if (
+    band.classList.contains("search-voice-row") ||
+    // One row of keys is walked sideways like any other strip, not as a wrapping grid.
+    band.classList.contains("key-row") ||
     band.classList.contains("scroller") ||
     band.classList.contains("actions") ||
     band.classList.contains("filter-row") ||
