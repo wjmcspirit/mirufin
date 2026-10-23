@@ -677,7 +677,7 @@ check("a logo is capped to the same box", rule(".hero.stage-copy .hero-title .lo
 check("the eyebrow is held to one line", rule(".hero.stage-copy .eyebrow").includes("-webkit-line-clamp: 1"))
 check("the episode's own name keeps its place", rule(".hero.stage-copy .hero-episode").includes("min-height: 1.45em"))
 check("the facts keep theirs, over two lines at most", rule(".hero.stage-copy .kicker").includes("min-height: 2.9em"))
-check("and so does the synopsis", rule(".hero.stage-copy .overview").includes("min-height: 2.9em"))
+check("and so does the synopsis, over three lines at most", rule(".hero.stage-copy .overview").includes("min-height: 4.35em"))
 check("the actions stay on one row, whatever their labels are", rule(".hero.stage-copy .actions").includes("flex-wrap: nowrap"))
 
 /* The hero is one component - `Hero` - and it draws itself as `.hero.stage-copy` wherever it is
@@ -703,31 +703,25 @@ check(
   !rule(".library-hero").includes("min-height"),
   rule(".library-hero").trim(),
 )
-/* A library's featured title is read, not skimmed. The description under its facts is drawn in full
-   where it stands: the hero is a floor rather than a height, so a title the server describes in a line
-   or two draws the page the viewer already knows and a longer one makes the hero taller, and the
-   application's own clamp - which Home's rotating hero keeps, because that hero is a fixed share of the
-   screen with the first row of posters under it - is lifted for this one. `tools/foldCheck.ts` measures
-   both: the share for the usual description, and the whole of the longest one. */
+/* A library's featured title uses the same three-line preview and overlay as Home's rotating hero.
+   The slot is still a floor at the hero share so a short description does not shrink the block, but a
+   long one no longer grows the hero - the clamp holds the copy to three lines. */
 const libraryHero = listed(".library-hero > .hero.stage-copy")
-const libraryOverview = listed(".library-hero > .hero.stage-copy .overview")
 check(
-  "a library's hero is a floor rather than a height, so it grows with the description it carries",
+  "a library's hero keeps the hero share as a floor without growing for a long description",
   libraryHero.includes("height: auto") && libraryHero.includes("min-height: calc(var(--app-height, 100dvh) * 0.42)"),
   libraryHero.trim(),
 )
 check(
-  "and the description under its facts is drawn in full, with the application's own clamp lifted",
-  libraryOverview.includes("display: block") &&
-    libraryOverview.includes("-webkit-line-clamp: none") &&
-    libraryOverview.includes("overflow: visible"),
-  libraryOverview.trim(),
+  "and its description uses the same three-line clamp as every other hero",
+  rule(".hero.stage-copy .overview").includes("-webkit-line-clamp: 3") &&
+    rule(".hero.stage-copy .overview").includes("min-height: 4.35em"),
+  rule(".hero.stage-copy .overview").trim(),
 )
 check(
-  "and Home's rotating hero keeps the clamp and the share it stands at, because the first row of posters is on the screen with it",
-  rule(".hero.stage-copy").includes("height: calc(var(--app-height, 100dvh) * 0.42)") &&
-    rule(".hero.stage-copy .overview").includes("-webkit-line-clamp: 2"),
-  `${rule(".hero.stage-copy").trim()} / ${rule(".hero.stage-copy .overview").trim()}`,
+  "and Home's rotating hero keeps that fixed share, because the first row of posters is on the screen with it",
+  rule(".hero.stage-copy").includes("height: calc(var(--app-height, 100dvh) * 0.45)"),
+  rule(".hero.stage-copy").trim(),
 )
 
 /* A library's rotating hero: the same behaviour Home's hero has, over the films a library holds.

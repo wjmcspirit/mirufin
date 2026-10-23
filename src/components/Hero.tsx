@@ -8,6 +8,7 @@ import type { Item } from "../lib/types"
 import { HeartIcon, InfoIcon, PlayIcon } from "./Icons"
 import { MetaLine } from "./Meta"
 import { TitleLogo } from "./Title"
+import { Synopsis } from "./Synopsis"
 import { TrailerButton } from "./TrailerButton"
 
 interface HeroFace {
@@ -164,7 +165,7 @@ function HeroCopy({ face, onTrailer }: { face: HeroFace; onTrailer: (open: boole
           carries the title's own facts and every hero - Home's and a library's alike, because they
           are this one component - says the same thing about the title it features. */}
       <MetaLine item={item} />
-      <p className="overview clamp">{item.Overview || ""}</p>
+      <Synopsis text={item.Overview || ""} title={item.Name || "Description"} />
       <div className="actions" data-nav-flow={flow}>
         <Link className="btn btn-primary" to={href}>
           <PlayIcon />

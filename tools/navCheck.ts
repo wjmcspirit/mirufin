@@ -3627,25 +3627,19 @@ function testLandingPolicy() {
 }
 
 /**
- * The show's description, which the banner draws in full where it stands.
- *
- * There is no truncated preview and no control under the description that opens the rest of it: the
- * whole of the synopsis is drawn in the banner, so there is nothing to reveal and nothing to press.
- * What is asserted here is that the description is not a control - the remote has nothing to land on
- * in it, so a press that misses the genre chips under it does nothing - and that the banner's copy
- * holds no reveal control at all. It is never where a page lands (see `testLandingPolicy`) either,
- * because there is nothing there to land on.
+ * A truncated description preview is a control the remote can land on; a short one is not.
  */
-function testSynopsisIsNotAControl() {
+function testSynopsisControl() {
   clearSeats()
   resetFocusState()
   const { main } = shell()
   const hero = new El("header", "hero stage-copy browse-hero")
   hero.place(60, 0, 1920, 300)
   const synopsis = new El("div", "hero-synopsis")
-  const written = new El("p", "overview")
-  written.text = "The whole of a description, drawn where it stands, however many lines it takes."
-  written.place(120, 240, 720, 60)
+  const written = new El("button", "overview clamp synopsis-control")
+  written.text =
+    "A description long enough to be cut short in the preview. It keeps going so the clamp has something to hold back, and the remote can press OK to read the rest in the overlay."
+  written.place(120, 200, 720, 72)
   synopsis.add(written)
   const links = new El("p", "meta-links genre-pills")
   const chips = ["/library/L1?genre=Drama", "/library/L1?genre=Crime"].map((href, index) => {
@@ -3657,24 +3651,20 @@ function testSynopsisIsNotAControl() {
   })
   hero.add(synopsis, links)
   main.add(hero)
-  episodeRow(main, 12)
   noteRoute("/item/SERIES")
 
   check(
-    "the description the banner draws is not a control, so the remote has nothing to land on in it",
-    !focusables().includes(written as unknown as HTMLElement),
+    "a truncated description preview is a control the remote can land on",
+    focusables().includes(written as unknown as HTMLElement),
     label(active),
   )
   check(
-    "and the banner's copy holds no control that opens the rest of a description",
+    "and the banner's copy holds no separate read-more link under it",
     hero.querySelectorAll(".hero-more, .more-link").length === 0,
     label(active),
   )
-  placeFocus(chips[0])
-  moveFocus("ArrowUp")
-  check("and Up from the genre chips never lands on the description", active !== written, label(active))
-  moveFocus("ArrowDown")
-  check("and Down comes back to the chips", active === chips[0], label(active))
+  placeFocus(written as unknown as HTMLElement)
+  check("and the remote can rest on the description preview without opening anything", active === written, label(active))
 }
 
 installDom()
@@ -3692,7 +3682,7 @@ testMissingTarget()
 testRailIsNotASeat()
 testSeasonWalk()
 testSeasonPageWalk()
-testSynopsisIsNotAControl()
+testSynopsisControl()
 testRailEntry()
 testLibraryToolbar()
 testLibraryToolbarShapes()

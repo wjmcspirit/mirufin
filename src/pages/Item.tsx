@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react"
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { MediaImage, PosterCard } from "../components/Cards"
 import { CheckIcon, HeartIcon, InfoIcon, PlayIcon, SeasonIcon } from "../components/Icons"
@@ -9,6 +9,7 @@ import { Row } from "../components/Row"
 import { Loading, Problem } from "../components/Status"
 import { useCollectionStage, useFilmographyStage, usePinnedArt, useStage } from "../components/Stage"
 import { useThemeSong } from "../components/Theme"
+import { Synopsis } from "../components/Synopsis"
 import { TitleLogo } from "../components/Title"
 import * as api from "../lib/api"
 import { collectionSizeLabel, collectionStageItem, collectionsLibrary, loadCollections } from "../lib/collections"
@@ -268,13 +269,7 @@ export function ItemPage() {
                 </p>
               )}
               {item.Taglines?.[0] && <p className="tagline">{item.Taglines[0]}</p>}
-              {/* A title's description is read in full where it stands. It is the plain `.overview`
-                  and never the `.clamp` the app's heroes and a person's biography hold their text
-                  to, so it wraps over as many lines as the server's own words need, nothing is cut
-                  off it, and no control on the page opens the rest of it anywhere else - there is
-                  no rest. The rule is stated in the stylesheet as well as by the class this page
-                  does not add, so no engine and no shared rule can clamp it. */}
-              {item.Overview && (item.Type === "Person" ? <Bio text={item.Overview} /> : <p className="overview">{item.Overview}</p>)}
+              {item.Overview && <Synopsis text={item.Overview} title={item.Name || "Description"} />}
               {/* A title's genre and studio links are drawn in its head, as they are on every other
                   page: the head is the page's own controls, and the sections follow them. They used
                   to sit under a row, where they came between it and the cast - so a press of Down
@@ -300,55 +295,6 @@ export function ItemPage() {
         onChildren={setBodyItems}
       />
     </article>
-  )
-}
-
-/**
- * Whether a block of text is longer than the lines its own clamp shows.
- *
- * Read from the element that is drawn rather than guessed from the length of the string: the clamp
- * is a rule of the stylesheet, and how much of a synopsis fits in the lines a page holds for it
- * depends on the width of the copy column and the size of the type - both of which change with the
- * panel. A block that fits says so, so a page can leave its own "the rest of this" control out
- * instead of drawing one that reveals nothing.
- *
- * `measure` is false while a block is expanded: the viewer is already reading the whole of it, and
- * the caller keeps the answer it had rather than watching the control it drew disappear. The height
- * is read again when the panel changes size, because the television canvas is a share of the screen.
- */
-function useClamped(node: RefObject<HTMLElement | null>, text: string, measure = true) {
-  const [clamped, setClamped] = useState(false)
-  useEffect(() => {
-    const element = node.current
-    if (!element || !measure) return
-    const read = () => setClamped(element.scrollHeight > element.clientHeight + 1)
-    read()
-    window.addEventListener("resize", read)
-    return () => window.removeEventListener("resize", read)
-  }, [measure, node, text])
-  return clamped
-}
-
-function Bio({ text }: { text: string }) {
-  const copy = useRef<HTMLParagraphElement>(null)
-  const [open, setOpen] = useState(false)
-  const overflows = useClamped(copy, text, !open)
-
-  useEffect(() => {
-    setOpen(false)
-  }, [text])
-
-  return (
-    <>
-      <p ref={copy} className={open ? "overview" : "overview clamp"}>
-        {text}
-      </p>
-      {(overflows || open) && (
-        <button className="more-link" type="button" onClick={() => setOpen((value) => !value)}>
-          {open ? "Show less" : "Read more"}
-        </button>
-      )}
-    </>
   )
 }
 
@@ -1316,7 +1262,7 @@ function BrowseHero({
   const synopsisBlock =
     described && description ? (
       <div className="hero-synopsis">
-        <p className="overview">{description}</p>
+        <Synopsis text={description} title={described?.Name || series?.Name || "Description"} />
       </div>
     ) : null
   return (

@@ -390,7 +390,7 @@ check(
   page.includes('<div className="hero-copy">') &&
     page.includes('<div className="hero-title">') &&
     page.includes("<MetaLine item={subject} />") &&
-    page.includes('<p className="overview">{description}</p>'),
+    page.includes("<Synopsis text={description}"),
   "Item.tsx",
 )
 check(
@@ -398,7 +398,7 @@ check(
   page.includes("const subject = series || season || item") &&
     page.includes("const described = episode || (season ? null : subject)") &&
     page.includes("<MetaLine item={subject} />") &&
-    sourceOf("BrowseHero", "EpisodeWatched").includes('<p className="overview">{description}</p>'),
+    sourceOf("BrowseHero", "EpisodeWatched").includes("<Synopsis text={description}"),
   "Item.tsx",
 )
 check(
@@ -499,13 +499,11 @@ check(
   "Item.tsx",
 )
 check(
-  "and its description is drawn in full where it stands, with no clamp of its own and no control under it",
+  "and its description uses the shared three-line Synopsis preview",
   page.includes("const description = described?.Overview || \"\"") &&
-    page.includes('<p className="overview">{description}</p>') &&
-    !sourceOf("BrowseHero", "EpisodeWatched").includes("overview clamp") &&
-    !sourceOf("BrowseHero", "EpisodeWatched").includes("useClamped") &&
-    flat.includes(".browse-hero .hero-synopsis .overview { display: block; -webkit-line-clamp: none; overflow: visible; }"),
-  "Item.tsx and styles.css",
+    page.includes("<Synopsis text={description}") &&
+    sourceOf("BrowseHero", "EpisodeWatched").includes("Synopsis"),
+  "Item.tsx",
 )
 check(
   "the episode's information sits in the copy beside the poster rather than on a block under the row",
@@ -814,16 +812,10 @@ check(
   page.includes('<p className="meta-links studio-pills scroller">') && page.includes("studioName="),
   "Item.tsx",
 )
-/* A title's own page is where the whole of its description is read. It is the plain `.overview` and
-   never the `.clamp` the app's heroes and a person's biography hold their text to, and the stylesheet
-   states the same thing about the copy's own description, so no engine and no shared rule can cut it
-   off and nothing on the page opens the rest of it anywhere else. */
 check(
-  "a title's own description is drawn in full where it stands, with no clamp of its own and no control that opens the rest",
-  page.includes('<p className="overview">{item.Overview}</p>') &&
-    !page.includes('className="overview clamp">{item.Overview}') &&
-    flat.includes(".detail-copy .overview { display: block; -webkit-line-clamp: none; overflow: visible; }"),
-  "Item.tsx and styles.css",
+  "a title's own description uses the shared Synopsis preview and overlay",
+  page.includes("<Synopsis text={item.Overview}") && readFileSync("src/components/Synopsis.tsx", "utf8").includes("description-pop"),
+  "Item.tsx and Synopsis.tsx",
 )
 /* A studio is the same door a genre is, one size down and a step back in colour: the genres keep the
    app's primary chip and the accent's cyan outline, while the studios take the app's own muted colour
@@ -936,30 +928,16 @@ check(
   "styles.css",
 )
 check(
-  "the show's own synopsis on the show's page is drawn in full where it stands",
-  banner.includes('<p className="overview">{description}</p>') && !banner.includes("overview clamp"),
+  "the show's own synopsis on the show's page uses the shared Synopsis preview",
+  banner.includes("<Synopsis text={description}"),
   "Item.tsx",
 )
 check(
-  "and nothing under it opens the rest of it - no ellipsis, no overlay and no other control",
-  !banner.includes("hero-more") &&
-    !banner.includes("DescriptionPopup") &&
-    !page.includes("DescriptionPopup") &&
-    !/more-link/.test(banner) &&
-    !css.includes(".hero-more") &&
-    !css.includes(".description-sheet") &&
-    !css.includes(".description-text"),
-  "Item.tsx and styles.css",
-)
-check(
-  "and the description itself is not a control, so a press that lands on the text does nothing",
-  !/<p className="overview"[\s\S]{0,140}?onClick/.test(banner),
-  "Item.tsx",
-)
-check(
-  "and the whole of it is drawn at the banner's own reading size, in the copy rather than on a sheet",
-  /\.browse-hero \.hero-synopsis \.overview\s*\{[^}]*display:\s*block[^}]*-webkit-line-clamp:\s*none[^}]*overflow:\s*visible/.test(css),
-  "styles.css",
+  "and the full text opens in the shared overlay rather than inline or through a separate read-more link",
+  readFileSync("src/components/Synopsis.tsx", "utf8").includes("description-pop") &&
+    !banner.includes("more-link") &&
+    !css.includes(".hero-more"),
+  "Synopsis.tsx",
 )
 
 console.log(failures === 0 ? "\nAll season checks passed." : `\n${failures} check(s) failed.`)

@@ -184,22 +184,20 @@ check(
 )
 check(
   "and every size the hero's composition reserves is the one it reserved before",
-  /\.hero\.stage-copy \.overview \{[\s\S]{0,240}min-height: 2\.9em/.test(css) &&
+  /\.hero\.stage-copy \.overview \{[\s\S]{0,240}min-height: 4\.35em/.test(css) &&
+    /\.hero\.stage-copy \.overview \{[\s\S]{0,240}-webkit-line-clamp: 3/.test(css) &&
     /\.hero\.stage-copy \.kicker \{[\s\S]{0,240}min-height: 2\.9em/.test(css) &&
     /\.hero\.stage-copy \.hero-title \{[\s\S]{0,200}height: 92px/.test(css) &&
-    /\.hero\.stage-copy \{\s*\n\s*height: calc\(var\(--app-height, 100dvh\) \* 0\.42\)/.test(css),
+    /\.hero\.stage-copy \{\s*\n\s*height: calc\(var\(--app-height, 100dvh\) \* 0\.45\)/.test(css),
   "styles.css",
 )
-/* A title's own page and a season's banner are where a description is read in full: the treatment
-   must not be paid for by clamping them. */
-const flat = css.replace(/\r\n/g, "\n")
 check(
-  "a description that is read in full stays unclamped",
-  /\.detail-copy \.overview \{\n(?:[^\n]*\n){0,4}\s*-webkit-line-clamp: none/.test(flat) &&
-    /\.browse-hero \.hero-synopsis \.overview \{\n(?:[^\n]*\n){0,4}\s*-webkit-line-clamp: none/.test(flat),
-  "styles.css",
+  "every surface draws descriptions through the shared Synopsis component",
+  hero.includes("<Synopsis text={item.Overview") &&
+    readFileSync("src/pages/Item.tsx", "utf8").includes("<Synopsis text={item.Overview"),
+  "Hero.tsx and Item.tsx",
 )
-check("the shared hero still draws the description it always drew", /className="overview clamp"/.test(hero), "Hero.tsx")
+check("the shared clamp stays at three lines", /\.clamp\s*\{[^}]*-webkit-line-clamp:\s*3/.test(css), "styles.css")
 
 console.log(failures === 0 ? "\nAll look checks passed." : `\n${failures} check(s) failed.`)
 if (failures > 0) throw new Error(`${failures} check(s) failed`)

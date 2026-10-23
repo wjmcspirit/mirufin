@@ -214,10 +214,12 @@
     copy.appendChild(title)
     copy.appendChild(factsLine)
     var synopsisBlock = element("div", "hero-synopsis", "hero-synopsis")
-    showSynopsis = element("p", "overview", "hero-show-overview")
+    showSynopsis = element("button", "overview clamp synopsis-control", "hero-show-overview")
+    showSynopsis.type = "button"
     showSynopsis.textContent = longSynopsis
       ? LONG_SYNOPSIS
       : "A description of the sort a server actually sends, read in full where it stands."
+    if (!longSynopsis) showSynopsis.disabled = true
     synopsisBlock.appendChild(showSynopsis)
     copy.appendChild(synopsisBlock)
   } else {
@@ -506,7 +508,7 @@
           lines: synopsisLine > 0 ? Math.round((synopsisBox.height / synopsisLine) * 10) / 10 : 0,
           clamped: synopsisStyle.webkitLineClamp,
           clipped: showSynopsis.scrollHeight > showSynopsis.clientHeight + 1,
-          reveal: banner.querySelectorAll(".hero-more, .more-link").length,
+          reveal: banner.querySelectorAll(".synopsis-control:not([disabled]), .hero-more, .more-link").length,
         },
         actions: { top: design(actionsBox.top), bottom: design(actionsBox.bottom) },
         seasonRow: { top: design(seasonStrip.getBoundingClientRect().top) },

@@ -237,10 +237,7 @@
                 <div class="hero-title"><h1>Underworld Awakening</h1></div>
                 <p class="hero-episode"></p>
                 <p class="kicker">2012  ·  1h 28m  ·  R  ·  6.3 <span class="star" aria-hidden="true">★</span>  ·  Action, Fantasy, Horror</p>
-                <!-- The film's own description, read in full where it stands: as many lines as the
-                     server's own words need, nothing clamped off it, and no control under it that
-                     opens the rest anywhere else - there is no rest. -->
-                <p class="overview">When human forces discover the existence of the Vampire and Lycan clans, a war erupts between the two species, and Selene - a death dealer who has spent six centuries hunting the Lycans - must escape both the pack that has turned on her and the humans who would put an end to every one of them, before the truth about her own bloodline is buried along with the last of the coven that made her.</p>
+                <button type="button" class="overview clamp synopsis-control">When human forces discover the existence of the Vampire and Lycan clans, a war erupts between the two species, and Selene - a death dealer who has spent six centuries hunting the Lycans - must escape both the pack that has turned on her and the humans who would put an end to every one of them, before the truth about her own bloodline is buried along with the last of the coven that made her.</button>
                 <!-- What the film is, as doors, in the app's own hierarchy: the genres as the page's
                      primary chips, and the studios as the quieter, smaller group under them - one
                      line that scrolls sideways rather than a block, so both the single row and the
@@ -665,7 +662,7 @@
               clipped: description.scrollHeight > description.clientHeight + 1,
               // Any control under the description that opens the rest of it. A title's own page
               // draws none: the whole of the text is already there.
-              reveal: copy.querySelectorAll(".more-link, button.more-link").length,
+              reveal: copy.querySelectorAll(".synopsis-control:not([disabled]), .more-link, button.more-link").length,
               description: box(description),
               copy: box(copy),
               head: box(detailShell.querySelector(".detail-hero")),

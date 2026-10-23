@@ -301,7 +301,7 @@ function menuOptions(pop: HTMLElement) {
 
 function focusNode(node: HTMLElement, column = true) {
   markFocus(node)
-  if (place(node) === "main" && !node.closest(".tool-pop, .trailer-pop")) returnMain = node
+  if (place(node) === "main" && !node.closest(".tool-pop, .trailer-pop, .description-pop")) returnMain = node
   rememberSeat(node)
   node.focus({ preventScroll: true })
   if (node.closest(".side")) {
@@ -324,7 +324,7 @@ function focusNode(node: HTMLElement, column = true) {
 let revealToken = 0
 
 function reveal(node: HTMLElement, column = true) {
-  if (node.closest(".tool-pop, .trailer-pop")) return
+  if (node.closest(".tool-pop, .trailer-pop, .description-pop")) return
   const token = ++revealToken
   const run = () => {
     if (token !== revealToken || !node.isConnected) return
@@ -842,7 +842,7 @@ function rememberSeat(node: HTMLElement | null) {
   if (!node || !seatRoute) return
   // The rail is navigation rather than a place in a page, and an option in an open menu is
   // not a place in a page either: neither is what Back should return to.
-  if (node.closest(".side, .tool-pop, .trailer-pop")) return
+  if (node.closest(".side, .tool-pop, .trailer-pop, .description-pop")) return
   const seat = captureSeat(node)
   if (!seat) return
   seats.delete(seatRoute)
@@ -1236,7 +1236,7 @@ function sidewaysScope(key: string, active: HTMLElement | null) {
   // A control that is no longer in the page has no band on screen to be measured, which is also how
   // the press below treats one.
   if (!active || !active.isConnected) return undefined
-  if (active.closest(".side, .tool-pop, .trailer-pop")) return undefined
+  if (active.closest(".side, .tool-pop, .trailer-pop, .description-pop")) return undefined
   const band = containerOf(active)
   if (!band) return undefined
   const sort = kind(band)
@@ -1284,7 +1284,7 @@ export function moveFocus(key: string) {
     if (nav && key !== "ArrowDown") focusNode(nav.node)
     return
   }
-  const trap = current.node.closest(".tool-pop, .trailer-pop")
+  const trap = current.node.closest(".tool-pop, .trailer-pop, .description-pop")
   if (trap instanceof HTMLElement) {
     const inside = items.filter((item) => trap.contains(item.node))
     let next: FocusItem | null = null

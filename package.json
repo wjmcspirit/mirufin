@@ -21,6 +21,7 @@
     "voicecheck": "esbuild tools/voiceCheck.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.mirufin/voiceCheck.mjs && node node_modules/.mirufin/voiceCheck.mjs",
     "metacheck": "esbuild tools/metaCheck.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.mirufin/metaCheck.mjs && node node_modules/.mirufin/metaCheck.mjs",
     "foldcheck": "esbuild tools/foldCheck.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.mirufin/foldCheck.mjs && node node_modules/.mirufin/foldCheck.mjs",
+    "synopsischeck": "esbuild tools/synopsisCheck.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.mirufin/synopsisCheck.mjs && node node_modules/.mirufin/synopsisCheck.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

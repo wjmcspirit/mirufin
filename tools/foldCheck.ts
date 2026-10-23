@@ -720,10 +720,8 @@ for (const { panel, report } of await measureAll(browser, probe, PANELS)) {
      from `.hero`'s own 520px floor could not do: on the 844-unit canvas that floor is 62% of the
      screen, and the heading, the count and the whole first row sat below the bottom edge.
 
-     The share is a floor rather than a height, because a library's description is read in full where
-     it stands: a description that needs more room than the two lines the composition reserves makes
-     the hero taller, and the copy is then what sets its height. The law is asserted rather than one
-     measurement of it, so it holds for a description of any length - `?synopsis=long` below measures
+     The share is a floor rather than a height, but the description is held to three lines like every
+     other hero, so a long synopsis no longer grows the block. `?synopsis=long` below still measures
      the longest one a server sends. */
   const library = report.library
   const share = report.fold * 0.42
@@ -734,8 +732,8 @@ for (const { panel, report } of await measureAll(browser, probe, PANELS)) {
       `     grid starts ${library.gridTop}  art ${library.art.top}..${library.art.bottom}  caption ends ${library.caption.bottom}`,
   )
   check(
-    `${panel.name} (${report.row}): a library's hero stands at Home's own share of the screen, and the copy it carries is what makes it taller`,
-    Math.abs(library.hero.height - Math.max(share, library.copy.box)) <= 1 && library.copyInside,
+    `${panel.name} (${report.row}): a library's hero stands at Home's own share of the screen, and a long description does not grow it`,
+    library.hero.height <= share + 16 && library.copyInside,
     `hero ${library.hero.height}, the share ${Math.round(share * 10) / 10}, the copy's box ${library.copy.box}`,
   )
   check(
@@ -853,8 +851,8 @@ for (const { panel, report } of await measureAll(browser, probe, PANELS)) {
       `genres ${film.genres.fill} within ${film.genres.outline}, studios ${film.studios.text} within ${film.studios.outline}`,
   )
   check(
-    `${panel.name} (${report.row}): a film's description is drawn in full, with nothing clamped off it and no control that opens the rest`,
-    film.lines > 2 && film.clipped === false && film.clamped === "none" && film.reveal === 0,
+    `${panel.name} (${report.row}): a film's description is held to three lines, with the shared preview opening the rest`,
+    film.lines <= 4 && film.clipped === true && film.clamped === "3" && film.reveal >= 1,
     `lines ${film.lines}, clamped ${film.clamped}, clipped ${film.clipped}, reveal ${film.reveal}`,
   )
   check(
@@ -926,13 +924,8 @@ for (const { panel, report } of await measureAll(browser, probe, PANELS)) {
   console.log("")
 }
 
-/* The same library page with the longest description a server sends. A library's hero is a floor
-   rather than a height - the description under its facts is read in full where it stands, so the hero
-   grows with the text - and what has to hold instead is that the whole of the description is drawn,
-   that the copy stays inside the hero, and that the heading, the count, the tools and the grid follow
-   the hero rather than being run over by it. The page as it loads without `?synopsis=long` carries the
-   usual description - the line or two the composition's two-line reserve is for, which is the short
-   end of the same range - so the two ends are both measured, at every panel size. */
+/* The same library page with the longest description a server sends. The preview stays at three
+   lines and the hero keeps the share it reserves; the heading, count, tools and grid still follow it. */
 console.log("\nThe library page with a description several times the length of the usual one\n")
 for (const { panel, report } of await measureAll(browser, probe, PANELS, "?synopsis=long")) {
   const library = report.library
@@ -947,13 +940,13 @@ for (const { panel, report } of await measureAll(browser, probe, PANELS, "?synop
       `art ${library.art.top}..${library.art.bottom} of ${report.fold}`,
   )
   check(
-    `${panel.name} (long description): the whole of the library's description is drawn, with nothing clamped off it`,
-    written.clipped === false && written.lines > 2,
+    `${panel.name} (long description): the library's description is held to three lines in the preview`,
+    written.clipped === true && written.clamped === "3",
     `${written.lines} lines ${written.top}..${written.bottom}, clipped ${written.clipped}`,
   )
   check(
-    `${panel.name} (long description): and the hero grows to hold the copy it carries`,
-    library.copyInside && library.hero.height > report.fold * 0.42 + 1,
+    `${panel.name} (long description): and the hero keeps the share it reserves rather than growing with the text`,
+    library.copyInside && library.hero.height <= report.fold * 0.42 + 6,
     `hero ${library.hero.height} of ${report.fold}, copy ${library.copy.top}..${library.copy.bottom} inside ${library.hero.top}..${library.hero.bottom}`,
   )
   check(
@@ -1206,18 +1199,15 @@ for (const { panel, report } of await measureSeason(browser, seasonProbe, PANELS
     shape.episode.top >= shape.logo.bottom - 0.5 && shape.episode.bottom <= shape.banner.bottom + 0.5,
     `episode ${shape.episode.top}..${shape.episode.bottom}, logo ends at ${shape.logo.bottom}, banner ${shape.banner.top}..${shape.banner.bottom}`,
   )
-  /* The episode's description is drawn in full where it stands: nothing is clamped off it, nothing is
-     hidden, and no control is drawn under it - the banner holds the whole of the text and the season
-     selector and the row of stills follow the banner it grows into. */
+  /* The episode's description uses the same three-line preview as every other surface. */
   const written = shape.description
   check(
-    `${panel.name}: the episode's own description is drawn in full, with nothing cut off it and no control under it`,
+    `${panel.name}: the episode's own description is held to three lines in the banner preview`,
     written !== null &&
-      written.clipped === false &&
-      written.lines >= 2 &&
+      written.clipped === true &&
+      written.clamped === "3" &&
       written.top >= shape.episode.top - 0.5 &&
-      written.bottom <= shape.banner.bottom + 0.5 &&
-      shape.reveal === null,
+      written.bottom <= shape.banner.bottom + 0.5,
     `description ${written ? `${written.lines} lines ${written.top}..${written.bottom}, clamped ${written.clamped}, clipped ${written.clipped}` : "none"}, reveal ${shape.reveal ? "drawn" : "none"}, banner ${shape.banner.top}..${shape.banner.bottom}`,
   )
   check(
@@ -1332,17 +1322,13 @@ for (const { panel, report } of await measureSeason(browser, seasonProbe, PANELS
     shape.copy.top >= shape.banner.top - 0.5 && shape.copy.bottom <= shape.banner.bottom + 0.5,
     `copy ${shape.copy.top}..${shape.copy.bottom} inside banner ${shape.banner.top}..${shape.banner.bottom}`,
   )
-  /* The whole of the description is drawn, however long it is: the banner gives it as many lines as
-     it needs, nothing is cut off it, and the page draws no control to reveal the rest - there is no
-     rest. */
   check(
-    `${panel.name} (long copy): the whole of the episode's description is drawn in the banner, with nothing cut off it and no control to press`,
+    `${panel.name} (long copy): the episode's description stays clamped in the banner preview`,
     written !== null &&
-      written.clipped === false &&
-      written.lines > 2 &&
+      written.clipped === true &&
+      written.clamped === "3" &&
       written.top >= shape.episode.top - 0.5 &&
-      written.bottom <= shape.banner.bottom + 0.5 &&
-      shape.reveal === null,
+      written.bottom <= shape.banner.bottom + 0.5,
     `description ${written ? `${written.lines} lines ${written.top}..${written.bottom}, clamped ${written.clamped}, clipped ${written.clipped}` : "none"}, reveal ${shape.reveal ? "drawn" : "none"}, banner ${shape.banner.top}..${shape.banner.bottom}`,
   )
   /* And the page below the banner follows it: the season selector, the row of stills and the band
@@ -1966,17 +1952,8 @@ for (const { size, card, fits } of SEASON_SIZES) {
   }
 }
 
-/* The show's own page carries the whole of the show's description in its banner.
- *
- * A library's hero and a season's banner were both fixed for the same defect - a synopsis cut to a
- * couple of lines with a control under it that opened the rest - and the show's own page kept it: the
- * description was drawn through the shared hero composition's own two-line clamp, and an ellipsis
- * under it opened the whole text on a sheet. The show's page draws the whole of it where it stands
- * instead, so this measures the page as it is drawn with the longest description a server sends: the
- * whole of it is in the banner, nothing is clamped off it, no control under it opens anything, and the
- * band of the show's own actions and the row of seasons follow the banner rather than being overlapped
- * by it. */
-console.log("\nThe show's own page with the whole of its description drawn in the banner\n")
+/* The show's own page uses the same three-line preview as every other surface. */
+console.log("\nThe show's own page with a long description in the banner preview\n")
 for (const { panel, report } of await measurePage<SeasonWalkReport>(browser, seasonWalkProbe, PANELS, "?shape=series&synopsis=long")) {
   const head = report.showHead
   console.log(
@@ -1988,14 +1965,14 @@ for (const { panel, report } of await measurePage<SeasonWalkReport>(browser, sea
       `seasons row begins ${head ? head.seasonRow.top : -1} of ${head ? head.fold : -1}`,
   )
   check(
-    `${panel.name} (show, long description): the whole of the show's description is drawn in the banner, with nothing clamped off it`,
-    head !== null && head.synopsis.clipped === false && head.synopsis.clamped === "none" && head.synopsis.lines > 2,
+    `${panel.name} (show, long description): the show's description is held to three lines in the banner preview`,
+    head !== null && head.synopsis.clipped === true && head.synopsis.clamped === "3",
     head ? `${head.synopsis.lines} lines, clamped ${head.synopsis.clamped}, clipped ${head.synopsis.clipped}` : "no banner",
   )
   check(
-    `${panel.name} (show, long description): and no control under it opens the rest of it, because there is no rest`,
-    head !== null && head.synopsis.reveal === 0,
-    head ? `${head.synopsis.reveal} control(s) under the description` : "no banner",
+    `${panel.name} (show, long description): and the preview is a control the remote can open for the full text`,
+    head !== null && head.synopsis.reveal >= 1,
+    head ? `${head.synopsis.reveal} synopsis control(s)` : "no banner",
   )
   check(
     `${panel.name} (show, long description): and the copy the banner carries fits inside the banner rather than being clipped by it`,

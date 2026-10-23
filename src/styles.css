@@ -1136,7 +1136,7 @@ html:not(.remote) .nav:hover .nav-label {
    so the composition is the same for a film with a logo, a series named in type and an episode
    whose name is a paragraph long. */
 .hero.stage-copy {
-  height: calc(var(--app-height, 100dvh) * 0.42);
+  height: calc(var(--app-height, 100dvh) * 0.45);
   /* Never less than the copy itself needs - the title's box, the facts and the synopsis at two
      lines each, and one row of actions. On a 16:9 panel the share above is already taller than
      this; it is here for a panel wider than that, where the copy would otherwise be crushed
@@ -1215,15 +1215,13 @@ html:not(.remote) .nav:hover .nav-label {
   overflow: hidden;
 }
 /* The description, read over the artwork: one step heavier and one step brighter than a paragraph
-   on a flat page, and never clamped on the pages whose whole point is to read it - see the browse
-   hero and a title's own page below, which state `line-clamp: none`. What is held to two lines here
-   is the rotating hero's own composition, which reserves the height of those two lines. */
+   on a flat page. Three lines at most, with the rest in the overlay the shared Synopsis opens. */
 .hero.stage-copy .overview {
   font-size: 17px;
   font-weight: 500;
   color: #dbe2ee;
-  -webkit-line-clamp: 2;
-  min-height: 2.9em;
+  -webkit-line-clamp: 3;
+  min-height: 4.35em;
 }
 /* The description is the last of the copy's lines and the row of actions is what the viewer came
    for, so the buttons stand a deliberate step below it rather than on the copy's own 6px rhythm. The
@@ -1386,17 +1384,9 @@ html:not(.remote) .nav:hover .nav-label {
   font-weight: 500;
   text-shadow: 0 1px 10px rgba(0, 0, 0, 0.6);
 }
-/* A title's own page is where the whole of its description is read. The app's heroes and a person's
-   biography hold their text to a clamp and offer the rest through the control beside it; here the
-   text is free to wrap over as many lines as the server's own words need, and nothing on the page
-   opens it anywhere else - there is nothing left to open. `line-clamp` is stated as none here as
-   well as by the class this page does not add, so no engine and no shared rule can cut this text
-   off, and the fact links and the action band below it follow the text rather than being overlapped
-   by it. The same guard the browse hero's episode description carries, for the same reason. */
-.detail-copy .overview {
-  display: block;
-  -webkit-line-clamp: none;
-  overflow: visible;
+/* A title's own page uses the same three-line preview and overlay as every other surface. */
+.detail-copy .overview.clamp {
+  display: -webkit-box;
 }
 .hero-copy .hero-episode {
   color: #f4f7ff;
@@ -1532,7 +1522,8 @@ html:not(.remote) .nav:hover .nav-label {
   color: #fff;
 }
 .trailer-pop,
-.info-pop {
+.info-pop,
+.description-pop {
   position: fixed;
   inset: 0;
   z-index: 100;
@@ -2002,11 +1993,6 @@ html.remote .card { transition: none; }
   height: auto;
   min-height: calc(var(--app-height, 100dvh) * 0.42);
 }
-.library-hero > .hero.stage-copy .overview {
-  display: block;
-  -webkit-line-clamp: none;
-  overflow: visible;
-}
 .library-hero.collapsed {
   grid-template-rows: 0fr;
   opacity: 0;
@@ -2261,6 +2247,39 @@ select {
   border-radius: 8px;
   color: #fff;
 }
+/* The shared description preview: a button only while the text is cut short, so the remote can
+   land on it and press OK for the full text in the overlay. */
+.synopsis-control {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: default;
+  max-width: 62ch;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.synopsis-control:disabled {
+  pointer-events: none;
+}
+.synopsis-control:not(:disabled):focus,
+.synopsis-control:not(:disabled):focus-visible,
+.synopsis-control:not(:disabled).dpad-focus {
+  outline: 3px solid #8ee6ff;
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+.description-full {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  white-space: pre-wrap;
+}
+.description-pop .info-sheet { border: 1px solid rgba(62, 200, 255, 0.22); box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55); }
 .poster-lg { width: 320px; box-shadow: var(--shadow); }
 /* An episode's panel is a 16:9 still, so it takes the room a poster would and
    keeps the copy column wide enough to stay readable on a narrower TV. */
@@ -2393,11 +2412,6 @@ select {
    no rest to reveal. The floor the shared rule sets is kept, so a one-line description does not let
    the show's fact links under it ride up, and `line-clamp` is stated as none here as well as by the
    class the page does not add, so no engine and no shared rule can clamp this text. */
-.browse-hero .hero-synopsis .overview {
-  display: block;
-  -webkit-line-clamp: none;
-  overflow: visible;
-}
 /* The page's own rhythm: the season selector sits close under the banner, the row follows the
    selector, and the band under the row settles the episode the banner describes. */
 .browse-page .detail-body { gap: 18px; }
