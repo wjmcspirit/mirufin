@@ -10,7 +10,7 @@ It works on Windows PowerShell 5.1 and PowerShell 7.
 
 | | |
 | --- | --- |
-| serial | `192.168.0.177:33109` |
+| serial | `192.168.0.177:35393` |
 | model | `Chromecast` |
 | device | `sabrina` |
 | manufacturer | `Google` |

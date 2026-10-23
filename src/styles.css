@@ -558,6 +558,65 @@ h1, h2, h3 {
   color: var(--accent);
 }
 
+/* TV action buttons: icon-first, label expands from the left edge on focus. */
+.action-group { flex-wrap: nowrap; }
+.action-btn {
+  position: relative;
+  flex: 0 0 auto;
+  width: var(--action-slot, 48px);
+  min-width: 48px;
+  max-width: min(100%, 320px);
+  justify-content: flex-start;
+  overflow: hidden;
+  transition: filter 0.16s ease, box-shadow 0.16s ease;
+}
+.action-btn__icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.action-btn__label {
+  flex: 0 0 auto;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  margin-left: 0;
+  transition: max-width 0.2s ease, opacity 0.16s ease, margin-left 0.2s ease;
+}
+.action-btn:focus .action-btn__label,
+.action-btn:focus-visible .action-btn__label,
+.action-btn.dpad-focus .action-btn__label,
+.action-btn:hover .action-btn__label {
+  max-width: min(240px, calc(var(--action-slot, 240px) - 52px));
+  opacity: 1;
+  margin-left: 8px;
+}
+.action-btn--measure .action-btn__label {
+  max-width: 240px;
+  opacity: 1;
+  margin-left: 8px;
+}
+.action-btn:focus,
+.action-btn:focus-visible,
+.action-btn.dpad-focus {
+  transform: scale(1.02);
+  transform-origin: left center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .action-btn,
+  .action-btn__label {
+    transition-duration: 0.01ms !important;
+  }
+  .action-btn:focus,
+  .action-btn:focus-visible,
+  .action-btn.dpad-focus {
+    transform: none;
+  }
+}
+
 .text-link {
   color: var(--muted);
   text-align: center;
@@ -1478,10 +1537,18 @@ html:not(.remote) .nav:hover .nav-label {
 .row.size-large .card.wide { width: 420px; }
 .hero.stage-copy .actions .btn,
 .hero .actions .btn,
-.detail .actions .btn {
+.detail .actions .btn,
+.next-up .actions .btn {
   min-height: 48px;
   padding: 12px 20px;
   border-radius: 14px;
+}
+.hero.stage-copy .actions .action-btn,
+.hero .actions .action-btn,
+.detail .actions .action-btn,
+.next-up .actions .action-btn,
+.episode-actions .action-btn {
+  padding: 12px 14px;
 }
 /* The hero's actions sit on artwork, so focus is a ring with a dark edge beneath it rather
    than a glow: the app's own cyan, one weight, and nothing that competes with the picture
@@ -1495,7 +1562,10 @@ html:not(.remote) .nav:hover .nav-label {
 .hero .actions .btn.dpad-focus,
 .detail .actions .btn:focus,
 .detail .actions .btn:focus-visible,
-.detail .actions .btn.dpad-focus {
+.detail .actions .btn.dpad-focus,
+.next-up .actions .btn:focus,
+.next-up .actions .btn:focus-visible,
+.next-up .actions .btn.dpad-focus {
   outline: 3px solid #8ee6ff;
   outline-offset: 3px;
   box-shadow: 0 14px 30px rgba(0, 0, 0, 0.45);
@@ -1509,7 +1579,10 @@ html:not(.remote) .nav:hover .nav-label {
 .hero .actions .btn-primary.dpad-focus,
 .detail .actions .btn-primary:focus,
 .detail .actions .btn-primary:focus-visible,
-.detail .actions .btn-primary.dpad-focus {
+.detail .actions .btn-primary.dpad-focus,
+.next-up .actions .btn-primary:focus,
+.next-up .actions .btn-primary:focus-visible,
+.next-up .actions .btn-primary.dpad-focus {
   outline-color: #fff;
 }
 .home-editor {

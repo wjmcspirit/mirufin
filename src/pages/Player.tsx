@@ -2,8 +2,10 @@ import { Capacitor } from "@capacitor/core"
 import Hls from "hls.js"
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react"
 import { useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { ActionButton } from "../components/ActionButton"
+import { ActionGroup } from "../components/ActionGroup"
 import { Loading } from "../components/Status"
-import { AudioIcon, CaptionsIcon, ChaptersIcon, ForwardIcon, FullscreenIcon, PauseIcon, PlayIcon, RewindIcon, VolumeIcon } from "../components/Icons"
+import { AudioIcon, CaptionsIcon, ChaptersIcon, CloseIcon, ForwardIcon, FullscreenIcon, PauseIcon, PlayIcon, RewindIcon, VolumeIcon } from "../components/Icons"
 import * as api from "../lib/api"
 import type { PlaybackPlan } from "../lib/api"
 import { episodeCode, formatClock, secondsToTicks, ticksToSeconds } from "../lib/format"
@@ -1124,15 +1126,23 @@ export function PlayerPage() {
             {episodeCode(next) ? `${episodeCode(next)}  ·  ` : ""}
             {next.Name}
           </h2>
-          <div className="actions">
-            <button className="btn btn-primary" type="button" onClick={playNextNow}>
-              <PlayIcon />
-              {countdown != null ? `Play in ${countdown}s` : "Play now"}
-            </button>
-            <button className="btn" type="button" onClick={() => { setNextHold(true); setCountdown(null); setCreditsOpen(false) }}>
-              Cancel
-            </button>
-          </div>
+          <ActionGroup>
+            <ActionButton
+              primary
+              label={countdown != null ? `Play in ${countdown}s` : "Play now"}
+              icon={<PlayIcon />}
+              onClick={playNextNow}
+            />
+            <ActionButton
+              label="Cancel"
+              icon={<CloseIcon />}
+              onClick={() => {
+                setNextHold(true)
+                setCountdown(null)
+                setCreditsOpen(false)
+              }}
+            />
+          </ActionGroup>
         </div>
       )}
       {/*

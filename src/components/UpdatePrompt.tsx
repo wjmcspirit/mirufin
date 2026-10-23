@@ -1,6 +1,9 @@
 import { Capacitor } from "@capacitor/core"
 import { useEffect, useState } from "react"
 import { useLocation } from "react-router-dom"
+import { ActionButton } from "./ActionButton"
+import { ActionGroup } from "./ActionGroup"
+import { CloseIcon, PlayIcon } from "./Icons"
 import { APP_VERSION, installRelease, isNewerVersion, latestRelease } from "../lib/version"
 
 export function UpdatePrompt() {
@@ -44,14 +47,17 @@ export function UpdatePrompt() {
       <p className="hint">You are on {APP_VERSION}. Install the new version here. The TV will ask you to confirm.</p>
       {progress != null && <p className="hint">{progress > 0 ? `Downloading ${progress}%` : "Downloading…"}</p>}
       {error && <p className="error">{error}</p>}
-      <div className="actions">
-        <button className="btn btn-primary" type="button" onClick={() => void install()} disabled={progress != null} autoFocus>
-          {progress != null ? "Downloading…" : "Install update"}
-        </button>
-        <button className="btn" type="button" onClick={() => setHidden(true)} disabled={progress != null}>
-          Not now
-        </button>
-      </div>
+      <ActionGroup>
+        <ActionButton
+          primary
+          label={progress != null ? "Downloading…" : "Install update"}
+          icon={<PlayIcon />}
+          onClick={() => void install()}
+          disabled={progress != null}
+          autoFocus
+        />
+        <ActionButton label="Not now" icon={<CloseIcon />} onClick={() => setHidden(true)} disabled={progress != null} />
+      </ActionGroup>
     </section>
   )
 }

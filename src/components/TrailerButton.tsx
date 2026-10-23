@@ -7,6 +7,7 @@ import { holdBack, isBackKey } from "../lib/remote"
 import { trailerSearch, youtubeEmbed, youtubeThumb } from "../lib/trailer"
 import type { Item } from "../lib/types"
 import { useSession } from "../session"
+import { ActionButton } from "./ActionButton"
 import { PlayIcon, TrailerIcon } from "./Icons"
 import { TrailerPopup } from "./TrailerPopup"
 
@@ -121,9 +122,9 @@ export function TrailerButton({
 
   return (
     <>
-      <button
-        className="btn icon-btn"
-        type="button"
+      <ActionButton
+        label={label}
+        icon={<TrailerIcon size={16} />}
         onClick={() => {
           if (choices.length === 0) openSearch()
           else if (choices.length === 1) play(choices[0])
@@ -132,10 +133,7 @@ export function TrailerButton({
             onOpen?.(true)
           }
         }}
-      >
-        <TrailerIcon size={16} />
-        {label}
-      </button>
+      />
       {picking && <TrailerChoices title={title} choices={choices} onPlay={play} onClose={() => { setPicking(false); onOpen?.(false) }} />}
       {remote?.url && <TrailerPopup url={remote.url} title={remote.name} onClose={closeRemote} />}
     </>

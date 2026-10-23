@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { ActionButton } from "../components/ActionButton"
+import { ActionGroup } from "../components/ActionGroup"
 import { MediaImage, PosterCard } from "../components/Cards"
 import { CheckIcon, HeartIcon, InfoIcon, PlayIcon, SeasonIcon } from "../components/Icons"
 import { TrailerButton } from "../components/TrailerButton"
@@ -183,16 +185,13 @@ export function ItemPage() {
   // film and a series - and by no other page: a season and an episode are parts of a series, and
   // the pages around them are not titles at all. See `canFavorite`.
   const favoriteAction = (
-    <button
-      className={`btn icon-btn ${item.UserData?.IsFavorite ? "on" : ""}`}
-      type="button"
+    <ActionButton
+      label={item.UserData?.IsFavorite ? "Favorited" : "Favorite"}
+      icon={<HeartIcon />}
+      pressed={Boolean(item.UserData?.IsFavorite)}
       onClick={() => void toggleFavorite()}
       disabled={busy === "favorite"}
-      aria-pressed={Boolean(item.UserData?.IsFavorite)}
-    >
-      <HeartIcon />
-      {item.UserData?.IsFavorite ? "Favorited" : "Favorite"}
-    </button>
+    />
   )
   // The actions of the title itself: what plays it, what marks it, what it is. On the pages
   // that browse a season the band belongs under the episode row, where the reference puts
@@ -206,22 +205,16 @@ export function ItemPage() {
       )}
       {canFavorite(item) && favoriteAction}
       {canMarkWatched(item) && (
-        <button
-          className={`btn icon-btn ${watched ? "on" : ""}`}
-          type="button"
+        <ActionButton
+          label={watchedLabel}
+          icon={<CheckIcon size={16} />}
+          pressed={watched}
           onClick={() => void togglePlayed()}
           disabled={busy === "played"}
-          aria-pressed={watched}
-        >
-          <CheckIcon size={16} />
-          {watchedLabel}
-        </button>
+        />
       )}
       {hasMediaInfo(item) && (
-        <button className="btn icon-btn" type="button" onClick={() => setInfoOpen(true)}>
-          <InfoIcon size={16} />
-          Media info
-        </button>
+        <ActionButton label="Media info" icon={<InfoIcon size={16} />} onClick={() => setInfoOpen(true)} />
       )}
     </>
   )
@@ -287,7 +280,9 @@ export function ItemPage() {
           {/* The band under the portrait carries playback and title actions. A person
               page has none of them once Favorite sits with the biography, so the band
               is left out rather than left behind as an empty stop for the remote. */}
-          {(item.Type !== "Person" || hasMediaInfo(item)) && <div className="actions detail-actions">{actionBand}</div>}
+          {(item.Type !== "Person" || hasMediaInfo(item)) && (
+            <ActionGroup className="detail-actions">{actionBand}</ActionGroup>
+          )}
           {error && <p className="error">{error}</p>}
         </header>
       )}
@@ -358,20 +353,21 @@ function PlayActions({ item, progress }: { item: Item; progress: number }) {
   const resume = progress > 1 && progress < 98
   return (
     <>
-      <Link className="btn btn-primary" to={`/play/${item.Id}?resume=${resume ? "1" : "0"}`}>
-        <PlayIcon />
-        {resume ? "Resume" : "Play"}
-      </Link>
+      <ActionButton
+        primary
+        label={resume ? "Resume" : "Play"}
+        icon={<PlayIcon />}
+        to={`/play/${item.Id}?resume=${resume ? "1" : "0"}`}
+      />
       {resume && (
-        <Link className="btn" to={`/play/${item.Id}?resume=0`}>
-          Play from start
-        </Link>
+        <ActionButton label="Play from start" icon={<PlayIcon />} to={`/play/${item.Id}?resume=0`} />
       )}
       {item.Type === "Episode" && (
-        <Link className="btn icon-btn" to={`/play/${item.Id}?resume=${resume ? "1" : "0"}&rest=season`}>
-          <SeasonIcon size={16} />
-          Play season
-        </Link>
+        <ActionButton
+          label="Play season"
+          icon={<SeasonIcon size={16} />}
+          to={`/play/${item.Id}?resume=${resume ? "1" : "0"}&rest=season`}
+        />
       )}
     </>
   )
@@ -417,10 +413,13 @@ function SeriesPlay({ series }: { series: Item }) {
   }
 
   return (
-    <button className="btn btn-primary" type="button" onClick={() => void play()} disabled={pending}>
-      <PlayIcon />
-      {pending ? "Finding episode…" : nextEpisode ? "Resume" : "Play"}
-    </button>
+    <ActionButton
+      primary
+      label={pending ? "Finding episode…" : nextEpisode ? "Resume" : "Play"}
+      icon={<PlayIcon />}
+      onClick={() => void play()}
+      disabled={pending}
+    />
   )
 }
 
@@ -922,7 +921,7 @@ function SeriesBody({
           synopsis, and the show's own actions under it. */}
       <section className="series-head">
         <BrowseHero item={series} series={series} season={null} progress={null} />
-        {actions && <div className="actions episode-actions">{actions}</div>}
+        {actions && <ActionGroup className="episode-actions">{actions}</ActionGroup>}
       </section>
       {/* The row of seasons is this page's browse surface, and the page says it is still being
           read rather than showing nothing where it will be: the remote waits for the row the
@@ -1120,7 +1119,7 @@ function EpisodeList({
         <BrowseHero item={item} series={series} season={season} progress={progress} poster={poster} />
         {tabs}
         <p className="hint">No episodes in this season.</p>
-        {actions && <div className="actions episode-actions">{actions}</div>}
+        {actions && <ActionGroup className="episode-actions">{actions}</ActionGroup>}
       </>
     )
   }
@@ -1206,7 +1205,7 @@ function EpisodeList({
           season's own watched toggle, Media info. Both watched controls the page carries stand here
           together, so a season is settled as a whole and an episode is settled in place without
           leaving the row. */}
-      <div className="actions episode-actions">
+      <ActionGroup className="episode-actions">
         <EpisodeWatched
           episode={spot}
           busy={playedBusy === spot.Id}
@@ -1214,7 +1213,7 @@ function EpisodeList({
           onToggle={() => toggleEpisodePlayed(spot)}
         />
         {actions}
-      </div>
+      </ActionGroup>
     </>
   )
 }
@@ -1409,16 +1408,13 @@ function EpisodeWatched({
 
   return (
     <>
-      <button
-        className={`btn icon-btn ${watched ? "on" : ""}`}
-        type="button"
+      <ActionButton
+        label={watched ? "Mark Unwatched" : "Mark Watched"}
+        icon={<CheckIcon size={16} />}
+        pressed={watched}
         onClick={() => void toggle()}
-        aria-pressed={watched}
         aria-label={`${watched ? "Mark Unwatched" : "Mark Watched"}: ${code || episode.Name || "episode"}`}
-      >
-        <CheckIcon size={16} />
-        {watched ? "Mark Unwatched" : "Mark Watched"}
-      </button>
+      />
       {busy ? <span className="episode-note">Saving…</span> : null}
       {error && <span className="error" role="alert">{error}</span>}
     </>
