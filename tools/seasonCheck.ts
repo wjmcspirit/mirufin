@@ -867,6 +867,11 @@ check(
   /\.detail-hero\.stage-copy \+ \.row\s*\{\s*margin-top:\s*22px;\s*\}/.test(css),
   "styles.css",
 )
+check(
+  "a film's action band under the portrait takes the page's content boundary",
+  /\.detail-actions\s*\{[^}]*padding-inline:\s*var\(--strip-pad\)/.test(css),
+  "styles.css",
+)
 
 check(
   "the seasons are drawn as a strip at the app's one poster size",

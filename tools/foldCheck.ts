@@ -114,7 +114,7 @@ interface ChipGroup {
  * groups of fact links under it and the band of its own actions under those.
  */
 interface DetailPage {
-  lefts: { poster: number; copy: number; heading: number; row: number; grid: number }
+  lefts: { poster: number; copy: number; actions: number; heading: number; row: number; grid: number }
   edges: { logo: number; group: number; row: number; grid: number }
   screen: number
   wide: number
@@ -804,7 +804,7 @@ for (const { panel, report } of await measureAll(browser, probe, PANELS)) {
      the same logo and the same right-hand group the other pages are measured against. */
   const detail = report.detail
   console.log(
-    `     detail: poster ${detail.lefts.poster}  copy ${detail.lefts.copy}  heading ${detail.lefts.heading}  ` +
+    `     detail: poster ${detail.lefts.poster}  copy ${detail.lefts.copy}  actions ${detail.lefts.actions}  heading ${detail.lefts.heading}  ` +
       `row card ${detail.lefts.row}  grid card ${detail.lefts.grid}`,
   )
   check(
@@ -813,6 +813,11 @@ for (const { panel, report } of await measureAll(browser, probe, PANELS)) {
       Math.abs(detail.lefts.heading - detail.lefts.row) <= 1 &&
       Math.abs(detail.lefts.row - detail.lefts.grid) <= 1,
     `poster ${detail.lefts.poster}, heading ${detail.lefts.heading}, row ${detail.lefts.row}, grid ${detail.lefts.grid}`,
+  )
+  check(
+    `${panel.name} (${report.row}): the film's action band begins on the same edge as its poster`,
+    Math.abs(detail.lefts.poster - detail.lefts.actions) <= 1,
+    `poster ${detail.lefts.poster}, actions ${detail.lefts.actions}`,
   )
   check(
     `${panel.name} (${report.row}): and it is the same edge Home's copy begins on`,

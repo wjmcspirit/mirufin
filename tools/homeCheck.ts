@@ -435,6 +435,11 @@ for (const block of [".page-head", ".row-head", ".grid", ".card-board", ".letter
   check(`and a page's ${block} takes it`, boundary.includes(`\n${block},`) || boundary.includes(`\n${block} {`), block)
 }
 check(
+  "a title's action band under its portrait takes the strip inset the layout above it uses",
+  rule(".detail-actions").includes("padding-inline: var(--strip-pad)"),
+  rule(".detail-actions").trim(),
+)
+check(
   "and no page states a horizontal inset of its own any more",
   !/\.home \.row-head[^}]*padding-inline/.test(css) &&
     !/\.home \.row \.scroller[^}]*padding-inline/.test(css) &&

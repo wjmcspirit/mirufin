@@ -2216,8 +2216,10 @@ select {
    sections. The pages that carry a body block of their own - a show, a season, a person, a
    collection - keep that block's spacing and are untouched by this. */
 .detail-hero.stage-copy + .row { margin-top: 22px; }
-/* Wrapping only happens when an episode's full action row cannot fit one line. */
-.detail-actions { flex-wrap: wrap; width: 100%; }
+/* Wrapping only happens when an episode's full action row cannot fit one line. The band sits
+   under the portrait grid rather than inside it, so it takes the strip inset itself - the same
+   edge the poster and the copy column begin on - rather than resting on the page column alone. */
+.detail-actions { flex-wrap: wrap; width: 100%; padding-inline: var(--strip-pad); }
 .detail-layout {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
