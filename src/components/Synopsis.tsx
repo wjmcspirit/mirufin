@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import { createPortal } from "react-dom"
-import { holdBack, isBackKey, ownBack, placeFocus } from "../lib/remote"
+import { holdBack, isBackKey, leaveDescriptionOverlay, ownBack } from "../lib/remote"
 
 /**
  * Whether a block of text is longer than the lines its own clamp shows.
@@ -68,7 +68,6 @@ function DescriptionOverlay({ title, text, onClose }: { title: string; text: str
             Close
           </button>
         </div>
-        <p className="hint">Back to close</p>
         <p className="overview description-full">{text}</p>
       </div>
     </div>,
@@ -90,9 +89,9 @@ export function Synopsis({ text, title = "Description" }: { text: string; title?
   }, [text])
 
   const close = useCallback(() => {
-    setOpen(false)
     const node = preview.current
-    if (node) requestAnimationFrame(() => placeFocus(node))
+    setOpen(false)
+    if (node) requestAnimationFrame(() => leaveDescriptionOverlay(node))
   }, [])
 
   if (!text) return null

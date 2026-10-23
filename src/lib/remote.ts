@@ -261,6 +261,34 @@ export function placeFocus(node: HTMLElement) {
 }
 
 /**
+ * Dismiss the full-description overlay without leaving the remote on the preview that opened it.
+ *
+ * The preview is still a control the viewer can reach, but closing the overlay is not asking to
+ * rest on it again: the next control below in the page's own reading order takes the highlight,
+ * without moving the column the viewer was already reading.
+ */
+export function leaveDescriptionOverlay(preview: HTMLElement) {
+  stopRestore()
+  preview.classList.remove("dpad-focus")
+  if (focusedMark === preview) focusedMark = null
+  preview.blur()
+  if (returnMain === preview) returnMain = null
+  const items = focusSnapshot().filter((item) => place(item.node) === "main")
+  const current = items.find((item) => item.node === preview) || null
+  let target: HTMLElement | null = null
+  if (current) {
+    const next = nearest(current, items, "ArrowDown")
+    if (next && next.node !== preview) target = next.node
+  }
+  if (!target) {
+    const pool = items.filter((item) => item.node !== preview && !item.node.classList.contains("synopsis-control"))
+    target = contentAnchor(pool)
+  }
+  if (!target) return
+  focusNode(target, false)
+}
+
+/**
  * Open a screen at its own top.
  *
  * The page column is one element for the life of the app - `Shell` draws it once and only the

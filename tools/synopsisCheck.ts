@@ -54,8 +54,8 @@ check(
   "Synopsis.tsx",
 )
 check(
-  "closing the overlay restores focus to the preview that opened it",
-  synopsis.includes("placeFocus(node)"),
+  "closing the overlay clears the preview highlight and moves the remote on",
+  synopsis.includes("leaveDescriptionOverlay") && !synopsis.includes("Back to close"),
   "Synopsis.tsx",
 )
 check(

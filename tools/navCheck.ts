@@ -17,6 +17,7 @@ import {
   focusables,
   landingControl,
   landOn,
+  leaveDescriptionOverlay,
   moveFocus,
   noteRoute,
   noteBackKeydown,
@@ -3667,6 +3668,41 @@ function testSynopsisControl() {
   check("and the remote can rest on the description preview without opening anything", active === written, label(active))
 }
 
+/** Closing the full-description overlay leaves the preview unhighlighted and lands below it. */
+function testDescriptionOverlayClose() {
+  clearSeats()
+  resetFocusState()
+  const { main } = shell()
+  const hero = new El("header", "hero stage-copy browse-hero")
+  hero.place(60, 0, 1920, 300)
+  const synopsis = new El("div", "hero-synopsis")
+  const written = new El("button", "overview clamp synopsis-control")
+  written.text = "A long description the preview clamps while the overlay holds the rest."
+  written.place(120, 200, 720, 72)
+  const links = new El("p", "meta-links genre-pills")
+  const chip = new El("a", "").attr("href", "/library/L1?genre=Drama")
+  chip.text = "Drama"
+  chip.place(450, 290, 110, 40)
+  links.add(chip)
+  synopsis.add(written)
+  hero.add(synopsis, links)
+  main.add(hero)
+  noteRoute("/item/SERIES")
+
+  placeFocus(written)
+  leaveDescriptionOverlay(written as unknown as HTMLElement)
+  check(
+    "closing the description overlay leaves the preview without the remote highlight",
+    !written.classes.includes("dpad-focus"),
+    written.className,
+  )
+  check(
+    "and puts the remote on the next control below the preview",
+    active === chip,
+    label(active),
+  )
+}
+
 installDom()
 trackSeats()
 testLandingPolicy()
@@ -3683,6 +3719,7 @@ testRailIsNotASeat()
 testSeasonWalk()
 testSeasonPageWalk()
 testSynopsisControl()
+testDescriptionOverlayClose()
 testRailEntry()
 testLibraryToolbar()
 testLibraryToolbarShapes()
